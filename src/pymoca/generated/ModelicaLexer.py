@@ -1,4 +1,4 @@
-# Generated from pymoca\src\pymoca\Modelica.g4 by ANTLR 4.9.1
+# Generated from c:\Users\rutanwk\source\repos\DynastyModelica\ModelicaParserPython\pymoca\src\pymoca\Modelica.g4 by ANTLR 4.9.1
 from antlr4 import *
 from io import StringIO
 from typing.io import TextIO

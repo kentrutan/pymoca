@@ -79,7 +79,7 @@ composition :
     )*
     ( 'external' language_specification?
         external_function_call?
-        ext_annotation=annotation? ';')?
+        external_annotation=annotation? ';')?
     (comp_annotation=annotation ';')?
     ;
 
@@ -135,7 +135,7 @@ import_list :
 
 // B.2.3.1 ------------------------------------------------
 extends_clause :
-    'extends' component_reference class_modification? annotation?
+    'extends' component_reference class_modification? extends_annotation=annotation?
     ;
 
 // B.2.3.2 ------------------------------------------------
@@ -443,7 +443,7 @@ primary :
     | component_reference                               # primary_component_reference
     | '(' output_expression_list ')'                    # primary_output_expression_list
     | '[' expression_list (';' expression_list)* ']'    # primary_expression_list
-    | '{' function_arguments '}'                        # primary_function_arguments
+    | '{' function_arguments '}'                        # primary_array_arguments
     | 'end'                                             # primary_end
     ;
 
@@ -508,7 +508,7 @@ subscript :
 
 // B.2.7.16 ------------------------------------------------
 comment :
-    string_comment annotation?
+    string_comment comment_annotation=annotation?
     ;
 
 // B.2.7.17 ------------------------------------------------

@@ -506,7 +506,13 @@ class ASTListener(ModelicaListener):
         if len(self.ast[ctx]) == 1:
             self.ast[ctx] = self.ast[ctx][0]
 
-    def exitPrimary_function_arguments(self, ctx: ModelicaParser.Primary_function_argumentsContext):
+    def exitNamed_argument(self, ctx: ModelicaParser.Named_argumentContext):
+        self.ast[ctx] = ast.NamedArgument(
+            name=ctx.IDENT().getText(), 
+            argument=self.ast[ctx.function_argument().expression()]
+        )
+
+    def exitPrimary_array_arguments(self, ctx: ModelicaParser.Primary_array_argumentsContext):
         # TODO: This does not support for generators yet.
         #       Only expressions are supported, e.g. {1.0, 2.0, 3.0}.
         v = [self.ast[x.expression()] for x in ctx.function_arguments().function_argument()]

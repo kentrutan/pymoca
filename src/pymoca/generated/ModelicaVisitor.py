@@ -1,4 +1,4 @@
-# Generated from pymoca\src\pymoca\Modelica.g4 by ANTLR 4.9.1
+# Generated from c:\Users\rutanwk\source\repos\DynastyModelica\ModelicaParserPython\pymoca\src\pymoca\Modelica.g4 by ANTLR 4.9.1
 from antlr4 import *
 if __name__ is not None and "." in __name__:
     from .ModelicaParser import ModelicaParser
@@ -494,8 +494,8 @@ class ModelicaVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by ModelicaParser#primary_function_arguments.
-    def visitPrimary_function_arguments(self, ctx:ModelicaParser.Primary_function_argumentsContext):
+    # Visit a parse tree produced by ModelicaParser#primary_array_arguments.
+    def visitPrimary_array_arguments(self, ctx:ModelicaParser.Primary_array_argumentsContext):
         return self.visitChildren(ctx)
 
 

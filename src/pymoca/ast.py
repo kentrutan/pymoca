@@ -10,8 +10,8 @@ import sys
 import copy
 import json
 from enum import Enum
-from typing import List, Union, Dict
-from collections import OrderedDict
+from typing import List, Union, Dict, Tuple
+from collections import OrderedDict, namedtuple
 
 
 class ClassNotFoundError(Exception):
@@ -382,7 +382,16 @@ class Function(Node):
         return '{}(name={!r}, arguments={!r})'.format(
             type(self).__name__, self.name, self.arguments)
 
+class NamedArgument(Node):
+    def __init__(self, **kwargs):
+        self.name = None # type: str
+        self.argument = None  # type: Union[Expression, Primary, ComponentRef, Array]
+        super().__init__(**kwargs)
 
+    def __repr__(self):
+        return '{}(name={!r}, argument={!r})'.format(
+            type(self).__name__, self.name, self.argument)
+        
 class Symbol(Node):
     """
     A mathematical variable or state of the model
@@ -545,6 +554,8 @@ class ElementReplaceable(Node):
 class ClassModification(Node):
     def __init__(self, **kwargs):
         self.arguments = []  # type: List[ClassModificationArgument]
+        if 'arguments' in kwargs:
+            self.arguments = kwargs['arguments']
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -601,7 +612,7 @@ class Class(Node):
         self.equations = []  # type: List[Union[Equation, ForEquation, ConnectClause]]
         self.initial_statements = []  # type: List[Union[AssignmentStatement, IfStatement, ForStatement]]
         self.statements = []  # type: List[Union[AssignmentStatement, IfStatement, ForStatement]]
-        self.annotation = []  # type: Union[NoneType, ClassModification]
+        self.annotation = None # type: Union[NoneType, ClassModification]
         self.parent = None  # type: Class
 
         super().__init__(**kwargs)
@@ -870,3 +881,167 @@ class Tree(Class):
 
     def __repr__(self):
         return '{}(classes={!r})'.format(type(self).__name__, self.classes)
+
+# Annotations =========================================================================================
+# Later versions of the MLS (e.g. 3.5) define more annotations
+class Annotation(ClassModification):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+class CompositionAnnotation(Annotation):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+class CommentAnnotation(Annotation):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+class ExternalAnnotation(Annotation):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+class ExtendsAnnotation(Annotation):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+# Annotation Data
+class Documentation(Node):
+    def __init__(self, **kwargs):
+        self.info = ''  # type: str
+        self.revision = '' # type: str
+        if 'info' in kwargs:
+            self.info = kwargs['info']
+        if 'revision' in kwargs:
+            self.revision = kwargs['revision']
+
+    def __repr__(self):
+        return f'{type(self).__name__}(info={self.info!r})'
+
+# Graphics
+Point = namedtuple('Point', ['x', 'y']) # Units are mm
+class Extent:
+    '''Defines rectangular area bounded by two points'''
+    def __init__(self, point_1=Point(-100.0, -100.0), point_2=Point(100.0, 100.0)):
+        self.point_1 = point_1
+        self.point_2 = point_2
+
+Color = namedtuple('Color', ['r', 'g', 'b'])
+Black = Color(0, 0, 0)
+LinePattern = Enum('LinePattern', 'NONE SOLID DASH DOT DASHDOT DASHDOTDOT')
+FillPattern = Enum('FillPattern', '''NONE SOLID HORIZONTAL VERTICAL CROSS FORWARD BACKWARD CROSSDIAG
+                                     HORIZONTALCYLINDER VERTICALCYLINDER SPHERE)''')
+BorderPattern = Enum('BorderPattern', 'NONE RAISED SUNKEN ENGRAVED')
+Smooth = Enum('Smooth', 'NONE BEZIER')
+Arrow = Enum('Arrow', 'NONE OPEN FILLED HALF')
+TextStyle = Enum('TextStyle', 'BOLD ITALIC UNDERLINE')
+TextAlignment = Enum('TextAlignment', 'LEFT CENTER RIGHT')
+
+class FilledShape(Node):
+    '''Style attributes for filled shapes'''
+    def __init__(self, **kwargs):
+        self.line_color = Black # type: Color
+        self.fill_color = Black # type: Color
+        self.line_pattern = LinePattern.SOLID # type: LinePattern
+        self.fill_pattern = FillPattern.NONE # type: FillPattern
+        self.line_thickness = 0.25 # type: float
+        super().__init__(**kwargs)
+
+class GraphicItem(Node):
+    '''Common graphical elements'''
+    def __init__(self, **kwargs):
+        self.visible = True # type: bool
+        self.origin = Point(0.0, 0.0) # type: Point
+        self.rotation = 0.0 # type: float
+        super().__init__(**kwargs)
+
+class CoordinateSystem(Node):
+    '''Defines coordinate system data'''
+    def __init__(self, **kwargs):
+        self.extent = Extent() # type: Extent
+        self.preserve_aspect_ratio = True # type: bool
+        self.initial_scale = 0.1 # type: float
+        self.grid = (0.0, 0.0) # type: Tuple[float]
+        super().__init__(**kwargs)
+
+class Graphics(Node):
+    '''Representation of Icon or Diagram'''
+    def __init__(self, **kwargs):
+        self.coordinate_system = CoordinateSystem() # type: CoordinateSystem
+        self.graphics = [] # type: List[GraphicItem]
+        super().__init__(**kwargs)
+
+class Icon(Graphics):
+    '''Represents Icon layer'''
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+    
+class Diagram(Graphics):
+    '''Represents Diagram layer'''
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+class Line(GraphicItem):
+    def __init__(self, **kwargs):
+        self.points = [] # type: List[Point]
+        self.color = Black # type: Color
+        self.pattern = LinePattern.SOLID # type: LinePattern
+        self.thickness = 0.25 # type: float
+        self.arrow = (Arrow.NONE, Arrow.NONE) # type: tuple(Arrow, Arrow)
+        self.arrow_size = 3.0 # type: float
+        self.smooth = Smooth.NONE # type: Smooth
+        super().__init__(**kwargs)
+
+class Polygon(GraphicItem, FilledShape):
+    def __init__(self, **kwargs):
+        self.points = [] # type: List[Point]
+        # Spline outline
+        self.smooth = Smooth.NONE # type: Smooth
+        super().__init__(**kwargs)
+
+class Rectangle(GraphicItem, FilledShape):
+    def __init__(self, **kwargs):
+        self.border_pattern = BorderPattern.NONE # type: BorderPattern
+        self.extent = Extent() # type: Extent
+        # Corner Radius
+        self.radius = 0.0 # type: float
+        super().__init__(**kwargs)
+
+class Ellipse(GraphicItem, FilledShape):
+    def __init__(self, **kwargs):
+        self.extent = Extent() # type: Extent
+        self.start_angle = 0.0 # type: float
+        self.end_angle = 360.0 # type: float
+        super().__init__(**kwargs)
+
+class Text(GraphicItem, FilledShape):
+    def __init__(self, **kwargs):
+        self.extent = Extent() # type: Extent
+        # string can have substitutions: %name, %class, %<parameter>, %%=%
+        self.string = '' # type: str
+        # font units are points
+        self.font_size = 0 # type: int
+        self.font_name = '' # type: str
+        self.style = [] # type: List[TextStyle]
+        # Default text color should be same as line color
+        self.color = Black() # type: Color
+        self.horizontal_alignment = TextAlignment.CENTER # type: TextAlignment
+        super().__init__(**kwargs)
+
+class Bitmap(GraphicItem):
+    def __init__(self, **kwargs):
+        self.extent = Extent() # type: Extent
+        self.file_name = '' # type: str
+        # Base64 representation of bitmap
+        self.image_source = '' # type: str
+        super().__init__(**kwargs)
+
+class GraphicMapping(Node):
+    '''Annotation for extends clause to control graphics inheritance'''
+    def __init__(self, **kwargs):
+        self.extent = Extent() # type: Extent
+        self.primitives_visible = True # type: bool
+        # Base64 representation of bitmap
+        self.image_source = '' # type: str
+        super().__init__(**kwargs)
+
+# TODO: Finish other annotations: CommentAnnotation, ExternalAnnotation, ExtendsAnnotation

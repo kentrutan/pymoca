@@ -1,4 +1,4 @@
-# Generated from pymoca\src\pymoca\Modelica.g4 by ANTLR 4.9.1
+# Generated from c:\Users\rutanwk\source\repos\DynastyModelica\ModelicaParserPython\pymoca\src\pymoca\Modelica.g4 by ANTLR 4.9.1
 from antlr4 import *
 if __name__ is not None and "." in __name__:
     from .ModelicaParser import ModelicaParser
@@ -881,12 +881,12 @@ class ModelicaListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by ModelicaParser#primary_function_arguments.
-    def enterPrimary_function_arguments(self, ctx:ModelicaParser.Primary_function_argumentsContext):
+    # Enter a parse tree produced by ModelicaParser#primary_array_arguments.
+    def enterPrimary_array_arguments(self, ctx:ModelicaParser.Primary_array_argumentsContext):
         pass
 
-    # Exit a parse tree produced by ModelicaParser#primary_function_arguments.
-    def exitPrimary_function_arguments(self, ctx:ModelicaParser.Primary_function_argumentsContext):
+    # Exit a parse tree produced by ModelicaParser#primary_array_arguments.
+    def exitPrimary_array_arguments(self, ctx:ModelicaParser.Primary_array_argumentsContext):
         pass
 
 

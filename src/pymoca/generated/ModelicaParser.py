@@ -1,4 +1,4 @@
-# Generated from pymoca\src\pymoca\Modelica.g4 by ANTLR 4.9.1
+# Generated from c:\Users\rutanwk\source\repos\DynastyModelica\ModelicaParserPython\pymoca\src\pymoca\Modelica.g4 by ANTLR 4.9.1
 # encoding: utf-8
 from antlr4 import *
 from io import StringIO
@@ -1672,7 +1672,7 @@ class ModelicaParser ( Parser ):
             self.epriv = None # Element_listContext
             self.epub = None # Element_listContext
             self.epro = None # Element_listContext
-            self.ext_annotation = None # AnnotationContext
+            self.external_annotation = None # AnnotationContext
             self.comp_annotation = None # AnnotationContext
 
         def element_list(self, i:int=None):
@@ -1803,7 +1803,7 @@ class ModelicaParser ( Parser ):
                 _la = self._input.LA(1)
                 if _la==ModelicaParser.T__78:
                     self.state = 293
-                    localctx.ext_annotation = self.annotation()
+                    localctx.external_annotation = self.annotation()
 
 
                 self.state = 296
@@ -2514,6 +2514,7 @@ class ModelicaParser ( Parser ):
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
             self.parser = parser
+            self.extends_annotation = None # AnnotationContext
 
         def component_reference(self):
             return self.getTypedRuleContext(ModelicaParser.Component_referenceContext,0)
@@ -2571,7 +2572,7 @@ class ModelicaParser ( Parser ):
             _la = self._input.LA(1)
             if _la==ModelicaParser.T__78:
                 self.state = 399
-                self.annotation()
+                localctx.extends_annotation = self.annotation()
 
 
         except RecognitionException as re:
@@ -6555,31 +6556,6 @@ class ModelicaParser ( Parser ):
                 return visitor.visitChildren(self)
 
 
-    class Primary_function_argumentsContext(PrimaryContext):
-
-        def __init__(self, parser, ctx:ParserRuleContext): # actually a ModelicaParser.PrimaryContext
-            super().__init__(parser)
-            self.copyFrom(ctx)
-
-        def function_arguments(self):
-            return self.getTypedRuleContext(ModelicaParser.Function_argumentsContext,0)
-
-
-        def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterPrimary_function_arguments" ):
-                listener.enterPrimary_function_arguments(self)
-
-        def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitPrimary_function_arguments" ):
-                listener.exitPrimary_function_arguments(self)
-
-        def accept(self, visitor:ParseTreeVisitor):
-            if hasattr( visitor, "visitPrimary_function_arguments" ):
-                return visitor.visitPrimary_function_arguments(self)
-            else:
-                return visitor.visitChildren(self)
-
-
     class Primary_falseContext(PrimaryContext):
 
         def __init__(self, parser, ctx:ParserRuleContext): # actually a ModelicaParser.PrimaryContext
@@ -6598,6 +6574,31 @@ class ModelicaParser ( Parser ):
         def accept(self, visitor:ParseTreeVisitor):
             if hasattr( visitor, "visitPrimary_false" ):
                 return visitor.visitPrimary_false(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+    class Primary_array_argumentsContext(PrimaryContext):
+
+        def __init__(self, parser, ctx:ParserRuleContext): # actually a ModelicaParser.PrimaryContext
+            super().__init__(parser)
+            self.copyFrom(ctx)
+
+        def function_arguments(self):
+            return self.getTypedRuleContext(ModelicaParser.Function_argumentsContext,0)
+
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterPrimary_array_arguments" ):
+                listener.enterPrimary_array_arguments(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitPrimary_array_arguments" ):
+                listener.exitPrimary_array_arguments(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitPrimary_array_arguments" ):
+                return visitor.visitPrimary_array_arguments(self)
             else:
                 return visitor.visitChildren(self)
 
@@ -6864,7 +6865,7 @@ class ModelicaParser ( Parser ):
                 pass
 
             elif la_ == 11:
-                localctx = ModelicaParser.Primary_function_argumentsContext(self, localctx)
+                localctx = ModelicaParser.Primary_array_argumentsContext(self, localctx)
                 self.enterOuterAlt(localctx, 11)
                 self.state = 836
                 self.match(ModelicaParser.T__77)
@@ -7752,6 +7753,7 @@ class ModelicaParser ( Parser ):
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
             self.parser = parser
+            self.comment_annotation = None # AnnotationContext
 
         def string_comment(self):
             return self.getTypedRuleContext(ModelicaParser.String_commentContext,0)
@@ -7795,7 +7797,7 @@ class ModelicaParser ( Parser ):
             _la = self._input.LA(1)
             if _la==ModelicaParser.T__78:
                 self.state = 942
-                self.annotation()
+                localctx.comment_annotation = self.annotation()
 
 
         except RecognitionException as re:

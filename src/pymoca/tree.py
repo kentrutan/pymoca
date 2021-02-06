@@ -83,6 +83,8 @@ class TreeListener:
 
     def enterImportClause(self, tree: ast.ImportClause) -> None: pass
 
+    def enterNamedArgument(self, tree: ast.NamedArgument) -> None: pass
+
     def enterPrimary(self, tree: ast.Primary) -> None: pass
 
     def enterSlice(self, tree: ast.Slice) -> None: pass
@@ -136,6 +138,8 @@ class TreeListener:
     def exitIfStatement(self, tree: ast.IfStatement) -> None: pass
 
     def exitImportClause(self, tree: ast.ImportClause) -> None: pass
+
+    def exitNamedArgument(self, tree: ast.NamedArgument) -> None: pass
 
     def exitPrimary(self, tree: ast.Primary) -> None: pass
 
@@ -1097,36 +1101,95 @@ def annotate_states(node: ast.Node) -> None:
     w = TreeWalker()
     w.walk(StateAnnotator(node), node)
 
+class AnnotationTransformer(TreeListener):
+    """Transform a Class's annotation from ClassModification to Annotation
 
-def flatten(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Class:
+    TODO: Define annotation grammar and use ANTLR instead of this
     """
-    This function takes a Tree and flattens it so that all subclasses instances
-    are replaced by the their equations and symbols with name mangling
-    of the instance name passed.
-    :param root: The Tree to flatten
-    :param class_name: The class that we want to create a flat model for
-    :return: flat_class, a Class containing the flattened class
+    def __init__(self, node: ast.Class):
+        self.node = node
+        self.ast = {}
+        self.annotation = ast.CompositionAnnotation()
+        self.in_graphics = False
+        self.in_documentation = False
+        self.in_annotation = False
+        super().__init__()
+    
+    # def enterClassModification(self, tree: ast.ClassModification):
+    #     self.ast[tree] = ast.Annotation
+    #     if tree == self.node.annotation:
+    #         self.in_annotation = True
+    
+    # def enterClassModificationArgument(self, tree: ast.ClassModificationArgument):
+    #     if not self.in_annotation: 
+    #         return
+
+    def enterElementModification(self, tree: ast.ElementModification):
+        if tree.component in ['Icon', 'Diagram']:
+            self.in_graphics = True
+        elif tree.component == 'Documentation':
+            self.in_documentation = True
+
+    def exitClass(self, tree: ast.Class):
+        """Replace ClassModification with CompositionAnnotation we built up"""
+        self.node.annotation = self.annotation
+
+    def exitClassModification(self, tree):
+        self.ast[tree] = ast.CompositionAnnotation(arguments=self.ast[tree.arguments])
+        
+    def exitClassModificationArgument(self, tree: ast.ClassModificationArgument):
+        self.ast[tree] = self.ast[tree.value]
+
+    def exitElementModification(self, tree: ast.ElementModification):
+        if self.in_graphics:
+            if tree.component == 'Icon':
+                graphics = ast.Icon()
+            elif tree.component == 'Diagram':
+                graphics = ast.Diagram()
+            for modification in tree.modifications:
+                for argument in modification.arguments:
+                    if argument.value.component == 'graphics':
+                        graphics.graphics = self.ast[argument.value.modifications]
+                    elif argument.value.component == 'coordinateSystem':
+                        graphics.coordinate_system = self.ast[argument.value.modifications]
+            self.ast[tree] = graphics
+            self.in_graphics = False
+    
+    def exitArray(self, tree: ast.Array):
+        self.ast[tree] = tree
+
+    def exitExpression(self, tree: ast.Expression):
+        # TODO: STOPPED HERE: FILL IN GRAPHIC ATTRIBUTES
+        if self.in_graphics:
+            if tree.operator == 'Line':
+                line = ast.Line()
+                self.ast[tree] = line
+            elif tree.operator == 'Polygon':
+                poly = ast.Polygon()
+                self.ast[tree] = poly
+            elif tree.operator == 'Rectangle':
+                rect = ast.Rectangle()
+                self.ast[tree] = rect
+            elif tree.operator == 'Ellipse':
+                ellipse = ast.Ellipse()
+                self.ast[tree] = ellipse
+            elif tree.operator == 'Text':
+                text = ast.Text()
+                self.ast[tree] = text
+            elif tree.operator == 'Bitmap':
+                bitmap = ast.Bitmap()
+                self.ast[tree] = bitmap
+
+
+def transform_class_annotations(node: ast.Class) -> None:
+    """Transform class annotations into ast.CompositionAnnotation
+
+    :param node: node of tree to walk
+    :return:
     """
-    orig_class = root.find_class(class_name, copy=False)
+    w = TreeWalker()
+    w.walk(AnnotationTransformer(node), node)
 
-    flat_class = flatten_class(orig_class)
-
-    # expand connectors
-    expand_connections(flat_class)
-
-    # add equations for state symbol values
-    add_state_value_equations(flat_class)
-    for func in flat_class.functions.values():
-        add_variable_value_statements(func)
-
-    # annotate states
-    annotate_states(flat_class)
-
-    # Put class in root
-    root = ast.Tree()
-    flat_name = str(orig_class.full_reference())
-    flat_class.name = flat_name
-    root.classes[flat_name] = flat_class
 
 def flatten(root: ast.Tree, class_name: ast.ComponentRef, 
             component: bool = False) -> ast.Class:

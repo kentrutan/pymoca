@@ -76,8 +76,33 @@ class Node:
             self.__dict__[key] = kwargs[key]
 
     def __repr__(self):
+        return f'{self.__dict__!r}'
+
+    @classmethod
+    def trim_tree(cls, tree):
+        '''Remove empty attributes from tree'''
+        if isinstance(tree, dict):
+            for k, v in tree.copy().items():
+                if not v or hasattr(v, 'len') and not len(v):
+                    del tree[k]
+                else:
+                    cls.trim_tree(tree[k])
+                    if not tree[k]:
+                        del tree[k]
+        elif isinstance(tree, list):
+            for i in range(len(tree)-1, -1, -1):
+                if not tree[i]:
+                    del tree[i]
+                else:
+                    cls.trim_tree(tree[i])
+        elif not tree:
+            tree = None
+        return tree
+
+    def __str__(self):
         d = self.to_json(self)
         d['_type'] = self.__class__.__name__
+        d = self.trim_tree(d)
         return json.dumps(d, indent=2, sort_keys=True)
 
     @classmethod
@@ -97,7 +122,6 @@ class Node:
             res = var
         return res
 
-    __str__ = __repr__
 
 
 class Primary(Node):
@@ -105,17 +129,16 @@ class Primary(Node):
         self.value = None  # type: Union[bool, float, int, str, type(None)]
         super().__init__(**kwargs)
 
-    def __str__(self):
-        return '{} value {}'.format(type(self).__name__, self.value)
-
+    def __repr__(self):
+        return f'{type(self).__name__}(value={self.value!r})'
 
 class Array(Node):
     def __init__(self, **kwargs):
         self.values = []  # type: List[Union[Expression, Primary, ComponentRef, Array]]
         super().__init__(**kwargs)
 
-    def __str__(self):
-        return '{} {}'.format(type(self).__name__, self.values)
+    def __repr__(self):
+        return f'{type(self).__name__}(values={self.values!r})'
 
 
 class Slice(Node):
@@ -125,10 +148,8 @@ class Slice(Node):
         self.step = Primary(value=1)  # type: Union[Expression, Primary, ComponentRef]
         super().__init__(**kwargs)
 
-    def __str__(self):
-        return '{} start: {}, stop: {}, step: {}'.format(
-            type(self).__name__, self.start, self.stop, self.step)
-
+    def __repr__(self):
+        return f'{type(self).__name__}(start={self.start!r}, stop={self.stop!r}, step={self.step!r})'
 
 class ComponentRef(Node):
     def __init__(self, **kwargs):
@@ -136,6 +157,13 @@ class ComponentRef(Node):
         self.indices = [[None]]  # type: List[List[Union[Expression, Slice, Primary, ComponentRef]]]
         self.child = []  # type: List[ComponentRef]
         super().__init__(**kwargs)
+
+    def __repr__(self) -> str:
+        # TODO: indices
+        if self.child:
+            return f'{self.name!r}{self.child!r}'
+        else:
+            return f'{self.name!r}'
 
     def __str__(self) -> str:
         return ".".join(self.to_tuple())
@@ -181,21 +209,20 @@ class ComponentRef(Node):
         components = s.split('.')
         return cls.from_tuple(components)
 
-    @classmethod
-    def concatenate(cls, *args: List['ComponentRef']) -> 'ComponentRef':
+    def concatenate(self, arg: 'ComponentRef') -> 'ComponentRef':
         """
         Helper function to append two component references to eachother, e.g.
         a "within" component ref and an "object type" component ref.
         :return: New component reference, with other appended to self.
         """
 
-        a = copy.deepcopy(args[0])
+        a = copy.deepcopy(self)
         n = a
-        for b in args[1:]:
-            while n.child:
-                n = n.child[0]
-            b = copy.deepcopy(b)  # Not strictly necessary
-            n.child = [b]
+        b = arg
+        while n.child:
+            n = n.child[0]
+        b = copy.deepcopy(b)  # Not strictly necessary
+        n.child = [b]
         return a
 
 
@@ -205,12 +232,18 @@ class Expression(Node):
         self.operands = []  # type: List[Union[Expression, Primary, ComponentRef, Array, IfExpression]]
         super().__init__(**kwargs)
 
+    def __repr__(self):
+        return f'{type(self).__name__}(operator={self.operator!r}, operands={self.operands!r})'
+
 
 class IfExpression(Node):
     def __init__(self, **kwargs):
         self.conditions = []  # type: List[Union[Expression, Primary, ComponentRef, Array, IfExpression]]
         self.expressions = []  # type: List[Union[Expression, Primary, ComponentRef, Array, IfExpression]]
         super().__init__(**kwargs)
+
+    def __repr__(self):
+        return f'{type(self).__name__}(conditions={self.conditions!r}, expressions={self.expressions!r})'
 
 
 class Equation(Node):
@@ -220,6 +253,9 @@ class Equation(Node):
         self.comment = ''  # type: str
         super().__init__(**kwargs)
 
+    def __repr__(self):
+        return f'{type(self).__name__}(left={self.left!r}, right={self.right!r})'
+
 
 class IfEquation(Node):
     def __init__(self, **kwargs):
@@ -227,6 +263,9 @@ class IfEquation(Node):
         self.blocks = []  # type: List[List[Union[Expression, ForEquation, ConnectClause, IfEquation]]]
         self.comment = ''  # type: str
         super().__init__(**kwargs)
+
+    def __repr__(self):
+        return f'{type(self).__name__}(conditions={self.conditions!r}, blocks={self.blocks!r})'
 
 
 class WhenEquation(Node):
@@ -236,12 +275,18 @@ class WhenEquation(Node):
         self.comment = ''  # type: str
         super().__init__(**kwargs)
 
+    def __repr__(self):
+        return f'{type(self).__name__}(conditions={self.conditions!r}, blocks={self.blocks!r})'
+
 
 class ForIndex(Node):
     def __init__(self, **kwargs):
         self.name = ''  # type: str
         self.expression = None  # type: Union[Expression, Primary, Slice]
         super().__init__(**kwargs)
+
+    def __repr__(self):
+        return f'{type(self).__name__}(name={self.name!r}, expression={self.expression!r})'
 
 
 class ForEquation(Node):
@@ -251,6 +296,9 @@ class ForEquation(Node):
         self.comment = None  # type: str
         super().__init__(**kwargs)
 
+    def __repr__(self):
+        return f'{type(self).__name__}(indices={self.indices!r}, equations={self.equations!r})'
+
 
 class ConnectClause(Node):
     def __init__(self, **kwargs):
@@ -258,6 +306,9 @@ class ConnectClause(Node):
         self.right = ComponentRef()  # type: ComponentRef
         self.comment = ''  # type: str
         super().__init__(**kwargs)
+
+    def __repr__(self):
+        return f'{type(self).__name__}(left={self.left!r}, right={self.right!r})'
 
 
 class AssignmentStatement(Node):
@@ -267,6 +318,9 @@ class AssignmentStatement(Node):
         self.comment = ''  # type: str
         super().__init__(**kwargs)
 
+    def __repr__(self):
+        return f'{type(self).__name__}(left={self.left!r}, right={self.right!r})'
+
 
 class IfStatement(Node):
     def __init__(self, **kwargs):
@@ -274,6 +328,9 @@ class IfStatement(Node):
         self.blocks = []  # type: List[List[Union[AssignmentStatement, IfStatement, ForStatement]]]
         self.comment = ''  # type: str
         super().__init__(**kwargs)
+
+    def __repr__(self):
+        return f'{type(self).__name__}(conditions={self.conditions!r}, blocks={self.blocks!r})'
 
 
 class WhenStatement(Node):
@@ -283,6 +340,9 @@ class WhenStatement(Node):
         self.comment = ''  # type: str
         super().__init__(**kwargs)
 
+    def __repr__(self):
+        return f'{type(self).__name__}(conditions={self.conditions!r}, blocks={self.blocks!r})'
+
 
 class ForStatement(Node):
     def __init__(self, **kwargs):
@@ -291,6 +351,9 @@ class ForStatement(Node):
         self.comment = ''  # type: str
         super().__init__(**kwargs)
 
+    def __repr__(self):
+        return f'{type(self).__name__}(indices={self.indices!r}, statements={self.statements!r})'
+
 
 class Function(Node):
     def __init__(self, **kwargs):
@@ -298,6 +361,9 @@ class Function(Node):
         self.arguments = []  # type: List[Union[Expression, Primary, ComponentRef, Array]]
         self.comment = ''  # type: str
         super().__init__(**kwargs)
+
+    def __repr__(self):
+        return f'{type(self).__name__}(name={self.name!r}, arguments={self.arguments!r})'
 
 
 class Symbol(Node):
@@ -332,6 +398,9 @@ class Symbol(Node):
     def __str__(self):
         return '{} {}, Type "{}"'.format(type(self).__name__, self.name, self.type)
 
+    def __repr__(self):
+        return f'{type(self).__name__}(name={self.name!r}, type={self.type!r})'
+
 
 class ComponentClause(Node):
     def __init__(self, **kwargs):
@@ -342,12 +411,24 @@ class ComponentClause(Node):
         self.symbol_list = []  # type: List[Symbol]
         super().__init__(**kwargs)
 
+    def __str__(self):
+        pre = ' '.join([str(s) for s in self.prefixes])
+        return f'{pre} {self.type!r} {self.dimensions!r} {self.symbol_list!r}'
+
+    def __repr__(self):
+        return (f'{type(self).__name__}(prefixes={self.prefixes!r}, type={self.type!s}, '
+                f'dimensions={self.dimensions!r}, symbol_list={self.symbol_list!r})'
+                )
+
 
 class EquationSection(Node):
     def __init__(self, **kwargs):
         self.initial = False  # type: bool
         self.equations = []  # type: List[Union[Equation, IfEquation, ForEquation, ConnectClause]]
         super().__init__(**kwargs)
+
+    def __repr__(self):
+        return f'{type(self).__name__}(initial={self.initial!r}, equations={self.equations!r})'
 
 
 class AlgorithmSection(Node):
@@ -356,6 +437,9 @@ class AlgorithmSection(Node):
         self.statements = []  # type: List[Union[AssignmentStatement, IfStatement, ForStatement]]
         super().__init__(**kwargs)
 
+    def __repr__(self):
+        return f'{type(self).__name__}(initial={self.initial!r}, statements={self.statements!r})'
+
 
 class ImportAsClause(Node):
     def __init__(self, **kwargs):
@@ -363,12 +447,11 @@ class ImportAsClause(Node):
         self.name = ''  # type: str
         super().__init__(**kwargs)
 
+    def __repr__(self):
+        return (f'{type(self).__name__}(components={self.components!s}, '
+                f'short_name={self.short_name!r}, unqualfied={self.unqualified!r})'
+        )
 
-class ImportFromClause(Node):
-    def __init__(self, **kwargs):
-        self.component = ComponentRef()  # type: ComponentRef
-        self.symbols = []  # type: List[str]
-        super().__init__(**kwargs)
 
 
 class ElementModification(Node):
@@ -376,6 +459,12 @@ class ElementModification(Node):
         self.component = ComponentRef()  # type: Union[ComponentRef]
         self.modifications = []  # type: List[Union[Primary, Expression, ClassModification, Array, ComponentRef]]
         super().__init__(**kwargs)
+
+    def __str__(self):
+        return f'{self.component!r} = {self.modifications!r}'
+
+    def __repr__(self):
+        return f'{type(self).__name__}(component={self.component!s}, modifications={self.modifications!r})'
 
 
 class ShortClassDefinition(Node):
@@ -386,17 +475,31 @@ class ShortClassDefinition(Node):
         self.class_modification = ClassModification()  # type: ClassModification
         super().__init__(**kwargs)
 
+    def __str__(self):
+        return f'{self.name!r} = {self.component!r}'
+
+    def __repr__(self):
+        return (f'{type(self).__name__}(name={self.name!r}, type={self.type!r}, '
+                f'component={self.component!s}, class_modification={self.class_modification!r})'
+        )
+
 
 class ElementReplaceable(Node):
     def __init__(self, **kwargs):
         # TODO, add fields ?
         super().__init__(**kwargs)
 
+    def __repr__(self):
+        return f'{type(self).__name__}()'
+
 
 class ClassModification(Node):
     def __init__(self, **kwargs):
         self.arguments = []  # type: List[ClassModificationArgument]
         super().__init__(**kwargs)
+
+    def __repr__(self):
+        return f'{type(self).__name__}(arguments={self.arguments!r})'
 
 
 class ClassModificationArgument(Node):
@@ -405,6 +508,9 @@ class ClassModificationArgument(Node):
         self.scope = None  # type: InstanceClass
         self.redeclare = False
         super().__init__(**kwargs)
+
+    def __repr__(self):
+        return f'{type(self).__name__}(value={self.value!r}, scope={self.scope!r}, redeclare={self.redeclare!r})'
 
     def __deepcopy__(self, memo):
         _scope, _deepcp = self.scope, self.__deepcopy__
@@ -422,6 +528,10 @@ class ExtendsClause(Node):
         self.visibility = Visibility.PRIVATE  # type: Visibility
         super().__init__(**kwargs)
 
+    def __repr__(self):
+        return (f'{type(self).__name__}(component={self.component!s}, '
+                f'class_modification={self.class_modification!r}, visibility={self.visibility!r})'
+        )
 
 class Class(Node):
     def __init__(self, **kwargs):
@@ -614,8 +724,8 @@ class Class(Node):
         new.__deepcopy__ = _deepcp
         return new
 
-    def __str__(self):
-        return '{} {}, Type "{}"'.format(type(self).__name__, self.name, self.type)
+    def __repr__(self):
+        return f'{type(self).__name__}(type={self.type!r}, name={self.name!r})'
 
 
 class InstanceClass(Class):
@@ -628,6 +738,10 @@ class InstanceClass(Class):
         super().__init__(*args, **kwargs)
         self.modification_environment = ClassModification()
 
+    def __repr__(self):
+        return (f'{type(self).__name__}(type={self.type!r}, name={self.name!r}, '
+                f'modification_environment={self.modification_environment!r})'
+        )
 
 class Tree(Class):
     """
@@ -644,3 +758,6 @@ class Tree(Class):
 
     def update_parent_refs(self) -> None:
         self._update_parent_refs(self)
+
+    def __repr__(self):
+        return f'{type(self).__name__}(classes={self.classes!r})'

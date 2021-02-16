@@ -2,7 +2,7 @@
 """
 Modelica AST definitions
 """
-from __future__ import print_function, absolute_import, division, print_function, unicode_literals
+from __future__ import print_function, absolute_import, division, unicode_literals
 
 import copy
 import json
@@ -76,7 +76,7 @@ class Node:
             self.__dict__[key] = kwargs[key]
 
     def __repr__(self):
-        return f'{self.__dict__!r}'
+        return '{:r}'.format(self.__dict__)
 
     @classmethod
     def trim_tree(cls, tree):
@@ -130,7 +130,7 @@ class Primary(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(value={self.value!r})'
+        return '{}(value={:r})'.format(type(self).__name__, self.value)
 
 class Array(Node):
     def __init__(self, **kwargs):
@@ -138,7 +138,7 @@ class Array(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(values={self.values!r})'
+        return '{}(values={:r})'.format(type(self).__name__, self.values)
 
 
 class Slice(Node):
@@ -149,7 +149,8 @@ class Slice(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(start={self.start!r}, stop={self.stop!r}, step={self.step!r})'
+        return '{}(start={:r}, stop={:r}, step={:r})'.format(
+            type(self).__name__, self.start, self.stop, self.step)
 
 class ComponentRef(Node):
     def __init__(self, **kwargs):
@@ -161,9 +162,9 @@ class ComponentRef(Node):
     def __repr__(self) -> str:
         # TODO: indices
         if self.child:
-            return f'{self.name!r}{self.child!r}'
+            return '{:r}{:r}'.format(self.name, self.child)
         else:
-            return f'{self.name!r}'
+            return '{:r}'.format(self.name)
 
     def __str__(self) -> str:
         return ".".join(self.to_tuple())
@@ -233,7 +234,7 @@ class Expression(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(operator={self.operator!r}, operands={self.operands!r})'
+        return '{}(operator={:r}, operands={:r})'.format(type(self).__name__, self.operator, self.operands)
 
 
 class IfExpression(Node):
@@ -243,7 +244,8 @@ class IfExpression(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(conditions={self.conditions!r}, expressions={self.expressions!r})'
+        return '{}(conditions={:r}, expressions={:r})'.format(
+            type(self).__name__, self.conditions, self.expressions)
 
 
 class Equation(Node):
@@ -254,7 +256,8 @@ class Equation(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(left={self.left!r}, right={self.right!r})'
+        return '{}(left={:r}, right={:r})'.format(
+            type(self).__name__, self.left, self.right)
 
 
 class IfEquation(Node):
@@ -265,7 +268,8 @@ class IfEquation(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(conditions={self.conditions!r}, blocks={self.blocks!r})'
+        return '{}(conditions={:r}, blocks={:r})'.format(
+            type(self).__name__, self.conditions, self.blocks)
 
 
 class WhenEquation(Node):
@@ -276,7 +280,8 @@ class WhenEquation(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(conditions={self.conditions!r}, blocks={self.blocks!r})'
+        return '{}(conditions={:r}, blocks={:r})'.format(
+            type(self).__name__, self.conditions, self.blocks)
 
 
 class ForIndex(Node):
@@ -286,7 +291,8 @@ class ForIndex(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(name={self.name!r}, expression={self.expression!r})'
+        return '{}(name={:r}, expression={:r})'.format(
+            type(self).__name__, self.name, self.expression)
 
 
 class ForEquation(Node):
@@ -297,7 +303,8 @@ class ForEquation(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(indices={self.indices!r}, equations={self.equations!r})'
+        return '{}(indices={:r}, equations={:r})'.format(
+            type(self).__name__, self.indices, self.equations)
 
 
 class ConnectClause(Node):
@@ -308,7 +315,8 @@ class ConnectClause(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(left={self.left!r}, right={self.right!r})'
+        return '{}(left={:r}, right={:r})'.format(
+            type(self).__name__, self.left, self.right)
 
 
 class AssignmentStatement(Node):
@@ -319,7 +327,8 @@ class AssignmentStatement(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(left={self.left!r}, right={self.right!r})'
+        return '{}(left={:r}, right={:r})'.format(
+            type(self).__name__, self.left, self.right)
 
 
 class IfStatement(Node):
@@ -330,7 +339,8 @@ class IfStatement(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(conditions={self.conditions!r}, blocks={self.blocks!r})'
+        return '{}(conditions={:r}, blocks={:r})'.format(
+            type(self).__name__, self.conditions, self.blocks)
 
 
 class WhenStatement(Node):
@@ -341,7 +351,8 @@ class WhenStatement(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(conditions={self.conditions!r}, blocks={self.blocks!r})'
+        return '{}(conditions={:r}, blocks={:r})'.format(
+            type(self).__name__, self.conditions, self.blocks)
 
 
 class ForStatement(Node):
@@ -352,7 +363,8 @@ class ForStatement(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(indices={self.indices!r}, statements={self.statements!r})'
+        return '{}(indices={:r}, statements={:r})'.format(
+            type(self).__name__, self.indices, self.statements)
 
 
 class Function(Node):
@@ -363,7 +375,8 @@ class Function(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(name={self.name!r}, arguments={self.arguments!r})'
+        return '{}(name={:r}, arguments={:r})'.format(
+            type(self).__name__, self.name, self.arguments)
 
 
 class Symbol(Node):
@@ -399,7 +412,8 @@ class Symbol(Node):
         return '{} {}, Type "{}"'.format(type(self).__name__, self.name, self.type)
 
     def __repr__(self):
-        return f'{type(self).__name__}(name={self.name!r}, type={self.type!r})'
+        return '{}(name={:r}, type={:r})'.format(
+            type(self).__name__, self.name, self.type)
 
 
 class ComponentClause(Node):
@@ -413,12 +427,12 @@ class ComponentClause(Node):
 
     def __str__(self):
         pre = ' '.join([str(s) for s in self.prefixes])
-        return f'{pre} {self.type!r} {self.dimensions!r} {self.symbol_list!r}'
+        return '{} {:r} {:r} {:r}'.format(
+            pre, self.type, self.dimensions, self.symbol_list)
 
     def __repr__(self):
-        return (f'{type(self).__name__}(prefixes={self.prefixes!r}, type={self.type!s}, '
-                f'dimensions={self.dimensions!r}, symbol_list={self.symbol_list!r})'
-                )
+        return '{}(prefixes={:r}, type={}, dimensions={:r}, symbol_list={:r})'.format(
+            type(self).__name__, self.prefixes, self.type, self.dimensions, self.symbol_list)
 
 
 class EquationSection(Node):
@@ -428,7 +442,8 @@ class EquationSection(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(initial={self.initial!r}, equations={self.equations!r})'
+        return '{}(initial={:r}, equations={:r})'.format(
+            type(self).__name__, self.initial, self.equations)
 
 
 class AlgorithmSection(Node):
@@ -438,7 +453,8 @@ class AlgorithmSection(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(initial={self.initial!r}, statements={self.statements!r})'
+        return '{}(initial={:r}, statements={:r})'.format(
+            type(self).__name__, self.initial, self.statements)
 
 
 class ImportAsClause(Node):
@@ -448,9 +464,8 @@ class ImportAsClause(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return (f'{type(self).__name__}(components={self.components!s}, '
-                f'short_name={self.short_name!r}, unqualfied={self.unqualified!r})'
-        )
+        return ('{}(component={}, name={:r})'.format(
+            type(self).__name__, self.component, self.name))
 
 
 
@@ -461,10 +476,11 @@ class ElementModification(Node):
         super().__init__(**kwargs)
 
     def __str__(self):
-        return f'{self.component!r} = {self.modifications!r}'
+        return '{:r} = {:r}'.format(self.component, self.modifications)
 
     def __repr__(self):
-        return f'{type(self).__name__}(component={self.component!s}, modifications={self.modifications!r})'
+        return '{}(component={}, modifications={:r})'.format(
+            type(self).__name__, self.component, self.modifications)
 
 
 class ShortClassDefinition(Node):
@@ -476,13 +492,11 @@ class ShortClassDefinition(Node):
         super().__init__(**kwargs)
 
     def __str__(self):
-        return f'{self.name!r} = {self.component!r}'
+        return '{:r} = {:r}'.format(self.name, self.component)
 
     def __repr__(self):
-        return (f'{type(self).__name__}(name={self.name!r}, type={self.type!r}, '
-                f'component={self.component!s}, class_modification={self.class_modification!r})'
-        )
-
+        return '{}(name={:r}, type={:r}, component={}, class_modification={:r})'.format(
+            type(self).__name__, self.name, self.type, self.component, self.class_modification)
 
 class ElementReplaceable(Node):
     def __init__(self, **kwargs):
@@ -490,7 +504,7 @@ class ElementReplaceable(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}()'
+        return '{}()'.format(type(self).__name__)
 
 
 class ClassModification(Node):
@@ -499,7 +513,7 @@ class ClassModification(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(arguments={self.arguments!r})'
+        return '{}(arguments={:r})'.format(type(self).__name__, self.arguments)
 
 
 class ClassModificationArgument(Node):
@@ -510,7 +524,8 @@ class ClassModificationArgument(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return f'{type(self).__name__}(value={self.value!r}, scope={self.scope!r}, redeclare={self.redeclare!r})'
+        return '{}(value={:r}, scope={:r}, redeclare={:r})'.format(
+            type(self).__name__, self.value, self.scope, self.redeclare)
 
     def __deepcopy__(self, memo):
         _scope, _deepcp = self.scope, self.__deepcopy__
@@ -529,9 +544,8 @@ class ExtendsClause(Node):
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return (f'{type(self).__name__}(component={self.component!s}, '
-                f'class_modification={self.class_modification!r}, visibility={self.visibility!r})'
-        )
+        return '{}(component={}, class_modification={:r}, visibility={:r})'.format(
+            type(self).__name__, self.component, self.class_modification, self.visibility)
 
 class Class(Node):
     def __init__(self, **kwargs):
@@ -725,7 +739,7 @@ class Class(Node):
         return new
 
     def __repr__(self):
-        return f'{type(self).__name__}(type={self.type!r}, name={self.name!r})'
+        return '{}(type={:r}, name={:r})'.format(type(self).__name__, self.type, self.name)
 
 
 class InstanceClass(Class):
@@ -739,9 +753,8 @@ class InstanceClass(Class):
         self.modification_environment = ClassModification()
 
     def __repr__(self):
-        return (f'{type(self).__name__}(type={self.type!r}, name={self.name!r}, '
-                f'modification_environment={self.modification_environment!r})'
-        )
+        return '{}(type={:r}, name={:r}, modification_environment={:r})'.format(
+            type(self).__name__, self.type, self.name, self.modification_environment)
 
 class Tree(Class):
     """
@@ -760,4 +773,4 @@ class Tree(Class):
         self._update_parent_refs(self)
 
     def __repr__(self):
-        return f'{type(self).__name__}(classes={self.classes!r})'
+        return '{}(classes={:r})'.format(type(self).__name__, self.classes)

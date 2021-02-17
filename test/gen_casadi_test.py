@@ -724,7 +724,10 @@ class GenCasadiTest(unittest.TestCase):
             ref_model = Model()
 
             def _array_mx(name, n):
-                return np.array([ca.MX.sym("{}[{}]".format(name, i+1)) for i in range(n)])
+                arr = np.empty(n, dtype=object)
+                for i in range(n):
+                    arr[i] = ca.MX.sym("{}[{}]".format(name, i+1))
+                return arr
 
             x = _array_mx("x", 3)
             y = _array_mx("y", 3)
@@ -1376,7 +1379,7 @@ class GenCasadiTest(unittest.TestCase):
 
         # Compare
         self.assert_model_equivalent_numeric(casadi_model, ref_model)
-        self.assertEquals(casadi_model.alg_states[0].aliases, {'alias'})
+        self.assertEqual(casadi_model.alg_states[0].aliases, {'alias'})
 
     def test_simplify_detect_negative_alias(self):
         # Create model, cache it, and load the cache
@@ -1484,6 +1487,35 @@ class GenCasadiTest(unittest.TestCase):
         p = casadi_model.parameters[0]
         self.assertSetEqual(p.aliases, {'z'})
         self.assertEqual(len(casadi_model.alg_states), 0)
+
+    def test_resolve_parameters(self):
+        txt = """
+            model ResolveParameters
+
+              parameter Real x = 1.0;
+              parameter Real z = x;
+
+            end ResolveParameters;
+        """
+
+        ast_tree = parser.parse(txt)
+        casadi_model = gen_casadi.generate(ast_tree, 'ResolveParameters')
+
+        parameter_names = {p.symbol.name() for p in casadi_model.parameters}
+        self.assertSetEqual(parameter_names, {'x', 'z'})
+        z = next(p for p in casadi_model.parameters if p.symbol.name() == "z")
+        self.assertIsInstance(z.value, ca.MX)
+        self.assertFalse(z.value.is_constant())
+        self.assertEqual(z.value.name(), "x")
+
+        ast_tree = parser.parse(txt)
+        casadi_model = gen_casadi.generate(ast_tree, 'ResolveParameters')
+        casadi_model.simplify({'resolve_parameter_values': True})
+
+        parameter_names = {p.symbol.name() for p in casadi_model.parameters}
+        self.assertSetEqual(parameter_names, {'x', 'z'})
+        z = next(p for p in casadi_model.parameters if p.symbol.name() == "z")
+        self.assertEqual(z.value, 1.0)
 
     def test_deleted_canonical_variable(self):
         txt = """

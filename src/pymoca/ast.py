@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 """
 Modelica AST definitions
+
+TODO: Investigate using __slots__ for memory savings
 """
 from __future__ import print_function, absolute_import, division, unicode_literals
 
+import sys
 import copy
 import json
 from enum import Enum
@@ -70,8 +73,8 @@ class Node:
         self.set_args(**kwargs)
 
     def set_args(self, **kwargs):
-        for key in kwargs.keys():
-            if key not in self.__dict__.keys():
+        for key in kwargs:
+            if key not in self.__dict__:
                 raise KeyError('{:s} not valid arg'.format(key))
             self.__dict__[key] = kwargs[key]
 
@@ -153,6 +156,7 @@ class Slice(Node):
             type(self).__name__, self.start, self.stop, self.step)
 
 class ComponentRef(Node):
+    # TODO: Should this be a tuple-like type?
     def __init__(self, **kwargs):
         self.name = ''  # type: str
         self.indices = [[None]]  # type: List[List[Union[Expression, Slice, Primary, ComponentRef]]]
@@ -383,7 +387,7 @@ class Symbol(Node):
     """
     A mathematical variable or state of the model
     """
-    ATTRIBUTES = ['value', 'min', 'max', 'start', 'fixed', 'nominal', 'unit']
+    ATTRIBUTES = ['value', 'min', 'max', 'start', 'fixed', 'nominal', 'unit', 'quantity']
 
     def __init__(self, **kwargs):
         self.name = ''  # type: str
@@ -402,11 +406,17 @@ class Symbol(Node):
         self.value = Primary(value=None)  # type: Union[Expression, Primary, ComponentRef, Array]
         self.fixed = Primary(value=False)  # type: Primary
         self.unit = Primary(value="")  # type: Primary
+        self.quantity = Primary(value="")  # type: Primary
         self.id = 0  # type: int
         self.order = 0  # type: int
         self.visibility = Visibility.PRIVATE  # type: Visibility
         self.class_modification = None  # type: ClassModification
+        self.connector = None # type: Symbol
         super().__init__(**kwargs)
+
+    def set_attributes(self, sym):
+        for attr in self.ATTRIBUTES:
+            setattr(self, attr, sym.__dict__[attr])
 
     def __str__(self):
         return '{} {}, Type "{}"'.format(type(self).__name__, self.name, self.type)
@@ -437,7 +447,10 @@ class ComponentClause(Node):
 
 class EquationSection(Node):
     def __init__(self, **kwargs):
-        self.initial = False  # type: bool
+        if 'initial' in kwargs:
+            self.initial = kwargs['initial'] # type: bool
+        else:
+            self.initial = False
         self.equations = []  # type: List[Union[Equation, IfEquation, ForEquation, ConnectClause]]
         super().__init__(**kwargs)
 
@@ -448,7 +461,10 @@ class EquationSection(Node):
 
 class AlgorithmSection(Node):
     def __init__(self, **kwargs):
-        self.initial = False  # type: bool
+        if 'initial' in kwargs:
+            self.initial = kwargs['initial'] # type: bool
+        else:
+            self.initial = False
         self.statements = []  # type: List[Union[AssignmentStatement, IfStatement, ForStatement]]
         super().__init__(**kwargs)
 
@@ -457,12 +473,20 @@ class AlgorithmSection(Node):
             type(self).__name__, self.initial, self.statements)
 
 
-class ImportAsClause(Node):
+class ImportClause(Node):
     def __init__(self, **kwargs):
-        self.component = ComponentRef()  # type: ComponentRef
-        self.name = ''  # type: str
+        self.components = []  # type: List[ComponentRef]
+        self.short_name = ''  # type: str
+        self.unqualified = False # type: bool
+        # Comments are rare, so ignore
         super().__init__(**kwargs)
 
+    def __str__(self):
+        star = ''
+        if self.unqualified:
+            star = '.*'
+        return 'import {!r}{!r}{!r}'.format(self.short_name, self.components, star)
+    
     def __repr__(self):
         return ('{}(component={}, name={!r})'.format(
             type(self).__name__, self.component, self.name))
@@ -494,6 +518,7 @@ class ElementModification(Node):
 
 
 class ShortClassDefinition(Node):
+    # TODO: Handle array subscripts and enumeration
     def __init__(self, **kwargs):
         self.name = ''  # type: str
         self.type = ''  # type: str
@@ -558,9 +583,11 @@ class ExtendsClause(Node):
             type(self).__name__, self.component, self.class_modification, self.visibility)
 
 class Class(Node):
+    BUILTIN = ["Real", "Integer", "String", "Boolean"]
     def __init__(self, **kwargs):
         self.name = None  # type: str
-        self.imports = []  # type: List[Union[ImportAsClause, ImportFromClause]]
+        # self.imports = []  # type: List[Union[ImportAsClause, ImportFromClause]]
+        self.imports = OrderedDict()  # type: OrderedDict[str, ImportClause]
         self.extends = []  # type: List[ExtendsClause]
         self.encapsulated = False  # type: bool
         self.partial = False  # type: bool
@@ -579,7 +606,17 @@ class Class(Node):
 
         super().__init__(**kwargs)
 
-    def _find_class(self, component_ref: ComponentRef, search_parent=True) -> 'Class':
+    def _find_class(self, component_ref: ComponentRef, search_parent=True, search_imports=True) -> 'Class':
+        """ Recursively search for component_ref in self and linked classes
+
+        Implement lookup rules per spec chapter 5, see also chapter 13.
+        This is more succinctly outlined in
+        https://mbe.modelica.university/components/packages/lookup/
+        """
+        # TODO: Get rid of exception-based algorithm or make imports have separate exception?
+        # TODO: Move import logic to separate function?
+        # TODO: Implement library path lookup from section 13.2.2 of spec
+        # TODO: Try @functools.lru_cache if profile shows this is hotspot
         try:
             if not component_ref.child:
                 return self.classes[component_ref.name]
@@ -587,18 +624,51 @@ class Class(Node):
                 # Avoid infinite recursion by passing search_parent = False
                 return self.classes[component_ref.name]._find_class(component_ref.child[0], False)
         except (KeyError, ClassNotFoundError):
-            if search_parent and self.parent is not None:
-                return self.parent._find_class(component_ref)
-            else:
-                raise ClassNotFoundError("Could not find class '{}'".format(component_ref))
+            try:
+                if search_imports:
+                    if component_ref.name in self.imports:
+                        # First search qualified imports (most common case)
+                        import_ = self.imports[component_ref.name]
+                        if isinstance(import_, ImportClause):
+                            # Expand short name
+                            if component_ref.child:
+                                import_ = import_.components[0].concatenate(component_ref.child[0])
+                            else:
+                                import_ = import_.components[0]
+                        return self._find_class(import_)
+                    else:
+                        # Next search packages for unqualified imports (slow, but assuming not common)
+                        if '*' in self.imports:
+                            c = None
+                            for package_ref in self.imports['*'].components:
+                                imported_comp_ref = package_ref.concatenate(ComponentRef(name=component_ref.name))
+                                # Search within the package
+                                try:
+                                    # Avoid infinite recursion with search_imports = False
+                                    c = self._find_class(imported_comp_ref, search_imports=False)
+                                except(KeyError, ClassNotFoundError):
+                                    pass
+                            if c is not None:
+                                # Store result for next lookup
+                                self.imports[component_ref.name] = imported_comp_ref
+                                return c
+                            else:
+                                raise ClassNotFoundError
+                        else:
+                            raise ClassNotFoundError
+                else:
+                    raise ClassNotFoundError
+            except (KeyError, ClassNotFoundError):
+                if search_parent and self.parent is not None and not self.encapsulated:
+                    return self.parent._find_class(component_ref)
+                else:
+                    raise ClassNotFoundError("Could not find class '{}'".format(component_ref))
 
-    def find_class(self, component_ref: ComponentRef, copy=True, check_builtin_classes=False) -> 'Class':
-        # TODO: Remove workaround for Modelica / Modelica.SIUnits
-        if component_ref.name in ["Real", "Integer", "String", "Boolean", "Modelica", "SI"]:
+    def find_class(self, component_ref: ComponentRef, copy=True, 
+                   check_builtin_classes=False, search_imports=True) -> 'Class':
+        if component_ref.name in self.BUILTIN:
             if check_builtin_classes:
                 type_ = component_ref.name
-                if component_ref.name in ["Modelica", "SI"]:
-                    type_ = "Real"
 
                 c = Class(name=type_)
                 c.type = "__builtin"
@@ -612,7 +682,7 @@ class Class(Node):
             else:
                 raise FoundElementaryClassError()
 
-        c = self._find_class(component_ref)
+        c = self._find_class(component_ref, search_imports)
 
         if copy:
             c = c.copy_including_children()
@@ -735,6 +805,22 @@ class Class(Node):
         :param e: Equation to remove.
         """
         self.equations.remove(e)
+
+    def add_initial_equation(self, e: Equation) -> None:
+        """
+        Add an initial equation to this class.
+
+        :param e: Equation to add.
+        """
+        self.initial_equations.append(e)
+
+    def remove_initial_equation(self, e: Equation) -> None:
+        """
+        Removes an initial equation from this class.
+
+        :param e: Equation to remove.
+        """
+        self.initial_equations.remove(e)
 
     def __deepcopy__(self, memo):
         # Avoid copying the entire tree

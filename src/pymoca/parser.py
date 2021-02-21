@@ -4,10 +4,12 @@ Modelica parse Tree to AST tree.
 """
 from __future__ import print_function, absolute_import, division, unicode_literals
 
+import sys
 import antlr4
 import antlr4.Parser
-from typing import Dict
-from collections import deque, OrderedDict
+from typing import Dict, Union
+from collections import deque
+from collections import OrderedDict
 import copy
 
 from . import ast
@@ -528,17 +530,42 @@ class ASTListener(ModelicaListener):
     def exitElement(self, ctx: ModelicaParser.ElementContext):
         self.ast[ctx] = self.ast[ctx.getChild(ctx.getAltNumber())]
 
-    def exitImport_list(self, ctx: ModelicaParser.Import_listContext):
-        self.ast[ctx] = [ctx.IDENT()] + self.ast[ctx.import_list()]
-
+    # TODO: Clean this up (inheritance or different import clause classes?)
     def exitImport_clause(self, ctx: ModelicaParser.Import_clauseContext):
-        component = self.ast[ctx.component_reference()]
+        import_clause = ast.ImportClause()
+        self.ast[ctx] = import_clause
+        import_clause.components = [self.ast[ctx.component_reference()]]
         if ctx.IDENT() is not None:
-            self.ast[ctx] = ast.ImportAsClause(component=component, name=ctx.IDENT().getText())
+            import_clause.short_name = ctx.IDENT().getText()
         else:
-            symbols = self.ast[ctx.import_list()]
-            self.ast[ctx] = ast.ImportFromClause(component=component, symbols=symbols)
-        self.class_node.imports += [self.ast[ctx]]
+            import_list = ctx.import_list()
+            if import_list is not None:
+                package_name = import_clause.components.pop()
+                # Append list of names to package_name to get fully qualified name(s)
+                # Skip the comma separators in import_list.children
+                for ident in import_list.children[::2]:
+                    qualified_name = package_name.concatenate(package_name.from_string(ident.getText()))
+                    import_clause.components.append(qualified_name)
+            elif ctx.getChildCount() > 3:
+                import_clause.unqualified = True
+        if import_clause.short_name:
+            # import_clause instead of comp_ref signifies short_name
+            self.class_node.imports[import_clause.short_name] = import_clause
+        elif import_clause.unqualified:
+            # Postpone processing this uncommon case until actually needed
+            # In this case import_clause.components contains list of packages of all unqualified imports
+            if '*' not in self.class_node.imports:
+                self.class_node.imports['*'] = import_clause
+            else:
+                self.class_node.imports['*'].components.append(import_clause.components[0])
+        else:
+            # Simple case, fast lookup          
+            for comp in import_clause.components:
+                name = comp.to_tuple()[-1]
+                # Check for name clashes
+                if name in self.class_node.imports:
+                    raise IOError(name, 'already imported')
+                self.class_node.imports[name] = comp
 
     def enterExtends_clause(self, ctx: ModelicaParser.Extends_clauseContext):
         self.in_extends_clause = True
@@ -740,11 +767,15 @@ class ASTListener(ModelicaListener):
 
 
 # UTILITY FUNCTIONS ========================================================
-def file_to_tree(f: ModelicaFile) -> ast.Tree:
+
+# TODO: Handle package files and MODELICAPATH
+
+def file_to_tree(f: ModelicaFile, root: ast.Tree = None) -> ast.Tree:
     # TODO: We can only insert where classes exist. For example, if we have a
     # within statement, we have to check if the nodes of the within statement
     # are actually in the tree, and if not raise an exception.
-    root = ast.Tree()
+    if not root:
+        root = ast.Tree()
     insert_node = root
     if f.within:
         for p in f.within[0].to_tuple():
@@ -758,15 +789,36 @@ def file_to_tree(f: ModelicaFile) -> ast.Tree:
 
     return root
 
-def parse(text):
+class ModelicaParserErrorListener(antlr4.error.ErrorListener.ErrorListener):
+    def __init__(self):
+        self._error = False
+        super().__init__()
+
+    @property
+    def error(self):
+        return self._error
+
+    def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
+        self._error = True
+        super().syntaxError(recognizer, offendingSymbol, line, column, msg, e)
+
+
+def parse(text: str) -> Union[ast.Tree, None]:
+    """Parse Modelica code given in text"""
     input_stream = antlr4.InputStream(text)
     lexer = ModelicaLexer(input_stream)
     stream = antlr4.CommonTokenStream(lexer)
     parser = ModelicaParser(stream)
     # parser.buildParseTrees = False
+    parse_error = ModelicaParserErrorListener()
+    parser.addErrorListener(parse_error)
     parse_tree = parser.stored_definition()
-    ast_listener = ASTListener()
-    parse_walker = antlr4.ParseTreeWalker()
-    parse_walker.walk(ast_listener, parse_tree)
-    modelica_file = ast_listener.ast_result
-    return file_to_tree(modelica_file)
+    if not parse_error.error:
+        ast_listener = ASTListener()
+        parse_walker = antlr4.ParseTreeWalker()
+        parse_walker.walk(ast_listener, parse_tree)
+        modelica_file = ast_listener.ast_result
+        return file_to_tree(modelica_file)
+    else:
+        return None
+        

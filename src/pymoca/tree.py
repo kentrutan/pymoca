@@ -81,9 +81,7 @@ class TreeListener:
 
     def enterIfStatement(self, tree: ast.IfStatement) -> None: pass
 
-    def enterImportAsClause(self, tree: ast.ImportAsClause) -> None: pass
-
-    def enterImportFromClause(self, tree: ast.ImportFromClause) -> None: pass
+    def enterImportClause(self, tree: ast.ImportClause) -> None: pass
 
     def enterPrimary(self, tree: ast.Primary) -> None: pass
 
@@ -137,9 +135,7 @@ class TreeListener:
 
     def exitIfStatement(self, tree: ast.IfStatement) -> None: pass
 
-    def exitImportAsClause(self, tree: ast.ImportAsClause) -> None: pass
-
-    def exitImportFromClause(self, tree: ast.ImportFromClause) -> None: pass
+    def exitImportClause(self, tree: ast.ImportClause) -> None: pass
 
     def exitPrimary(self, tree: ast.Primary) -> None: pass
 
@@ -152,7 +148,6 @@ class TreeListener:
     def exitWhenEquation(self, tree: ast.WhenEquation) -> None: pass
 
     def exitWhenStatement(self, tree: ast.WhenStatement) -> None: pass
-
 
 class TreeWalker:
     """
@@ -204,13 +199,36 @@ class TreeWalker:
         if isinstance(tree, ast.Node):
             self.walk(listener, tree)
         elif isinstance(tree, dict):
-            for k in tree.keys():
-                self.handle_walk(listener, tree[k])
+            for node in tree.values():
+                self.handle_walk(listener, node)
         elif isinstance(tree, list):
-            for i in range(len(tree)):
-                self.handle_walk(listener, tree[i])
+            for node in tree:
+                self.handle_walk(listener, node)
         else:
             pass
+
+class NameFinder(TreeListener):
+    """
+    Finds all Nodes in tree with given name attribute
+    """
+    def __init__(self, name: str):
+        """Find name in tree starting at node"""
+        self.nodes = []
+        self.name = name
+        super().__init__()
+
+    def exitEvery(self, node: ast.Node):
+        """Add Node to list if name matches"""
+        if hasattr(node, 'name'):
+            if (node.name == self.name):
+                self.nodes.append(node)
+
+
+def find_name(tree: ast.Node, name: str):
+    """Find name (string) in tree"""
+    finder = NameFinder(name)
+    TreeWalker().walk(finder, tree)
+    return finder.nodes
 
 
 def flatten_extends(orig_class: Union[ast.Class, ast.InstanceClass], modification_environment=None,
@@ -218,6 +236,7 @@ def flatten_extends(orig_class: Union[ast.Class, ast.InstanceClass], modificatio
     extended_orig_class = ast.InstanceClass(
         name=orig_class.name,
         type=orig_class.type,
+        comment=orig_class.comment,
         annotation=ast.ClassModification(),
         parent=parent
     )
@@ -239,6 +258,7 @@ def flatten_extends(orig_class: Union[ast.Class, ast.InstanceClass], modificatio
 
         c = flatten_extends(c, extends.class_modification, parent=c.parent)
 
+        extended_orig_class.imports.update(c.imports)
         extended_orig_class.classes.update(c.classes)
         extended_orig_class.symbols.update(c.symbols)
         extended_orig_class.equations += c.equations
@@ -258,6 +278,7 @@ def flatten_extends(orig_class: Union[ast.Class, ast.InstanceClass], modificatio
             if sym.visibility > extends.visibility:
                 sym.visibility = extends.visibility
 
+    extended_orig_class.imports.update(orig_class.imports)
     extended_orig_class.classes.update(orig_class.classes)
     extended_orig_class.symbols.update(orig_class.symbols)
     extended_orig_class.equations += orig_class.equations
@@ -354,8 +375,8 @@ def build_instance_tree(orig_class: Union[ast.Class, ast.InstanceClass], modific
 
     # Check that all symbol modifications to be applied on this class exist
     for arg in extended_orig_class.modification_environment.arguments:
-        if not arg.value.component.name in extended_orig_class.symbols:
-            raise ModificationTargetNotFound("Trying to modify symbol {}, which does not exist in class {}".format(
+        if not arg.value.component.name in extended_orig_class.symbols and not arg.value.component.name in ast.Symbol.ATTRIBUTES:
+            raise ModificationTargetNotFound('Trying to modify symbol "{}", which does not exist in class {}'.format(
                 arg.value.component.name,
                 extended_orig_class.full_reference()
             ))
@@ -372,7 +393,8 @@ def build_instance_tree(orig_class: Union[ast.Class, ast.InstanceClass], modific
         except ast.FoundElementaryClassError:
             # Symbol is elementary type. Check if we need to move any modifications to the symbol.
             sym_arguments = [x for x in extended_orig_class.modification_environment.arguments
-                             if isinstance(x.value, ast.ElementModification) and x.value.component.name == sym_name]
+                             if isinstance(x.value, ast.ElementModification) and x.value.component.name == sym_name
+                             or sym_name == "__value" and x.value.component.name == "value" ]
 
             # Remove from current class's modification environment
             extended_orig_class.modification_environment.arguments = [
@@ -463,7 +485,7 @@ def build_instance_tree(orig_class: Union[ast.Class, ast.InstanceClass], modific
                 sym.type = build_instance_tree(c, sym.class_modification, c.parent)
             except Exception as e:
                 error_sym = str(orig_class.full_reference()) + "." + sym_name
-                raise type(e)('Processing failed for symbol "{}"'.format(error_sym)) from e
+                raise type(e)('Processing failed for symbol "{}":\n{}'.format(error_sym, e)) from e
 
             sym.class_modification = None
 
@@ -476,6 +498,7 @@ def flatten_symbols(class_: ast.InstanceClass, instance_name='') -> ast.Class:
     flat_class = ast.Class(
         name=class_.name,
         type=class_.type,
+        comment=class_.comment,
         annotation=class_.annotation,
     )
 
@@ -504,7 +527,7 @@ def flatten_symbols(class_: ast.InstanceClass, instance_name='') -> ast.Class:
             # Elementary type
             flat_sym.dimensions = flat_sym.dimensions
             flat_class.symbols[flat_sym.name] = flat_sym
-        elif sym.type.type == "__builtin":
+        elif sym.type.type == "__builtin" or sym.type.type == "type" and '__value' in sym.type.symbols and sym.type.symbols['__value'].type.name in ast.Class.BUILTIN:
             # Class inherited from elementary type (e.g. "type Voltage =
             # Real"). No flattening to be done, just copying over all
             # attributes and modifications to the class's "__value" symbol.
@@ -745,10 +768,10 @@ def modify_symbol(sym: ast.Symbol, scope: ast.InstanceClass) -> None:
             "Found redeclaration modification which should already have been handled."
 
         # TODO: Strip all non-symbol stuff.
-        if argument.component.name not in ast.Symbol.ATTRIBUTES:
-            raise Exception("Trying to set unknown symbol property {}".format(argument.component.name))
-
-        setattr(sym, argument.component.name, argument.modifications[0])
+        if argument.component.name in ast.Symbol.ATTRIBUTES:
+            setattr(sym, argument.component.name, argument.modifications[0])
+        else:
+            logger.warning('Ignoring symbol "{}" modification "{}"'.format(sym.name, argument.component.name))
 
     sym.class_modification.arguments = skip_args
 
@@ -871,8 +894,9 @@ def flatten_class(orig_class: ast.Class) -> ast.Class:
     return flat_class
 
 
-def expand_connectors(node: ast.Class) -> None:
+def expand_connections(node: ast.Class, default_flows: bool = True) -> None:
     # keep track of which flow variables have been connected to, and which ones haven't
+    # default_flows = True will set disconnected flow variables to zero
     disconnected_flow_variables = OrderedDict()
     for sym in node.symbols.values():
         if 'flow' in sym.prefixes:
@@ -985,16 +1009,28 @@ def expand_connectors(node: ast.Class) -> None:
             node.equations.append(connect_equation)
             processed.append(connected_variables)
 
-    # disconnected flow variables default to 0
-    for sym in disconnected_flow_variables.values():
-        connect_equation = ast.Equation(left=sym, right=ast.Primary(value=0))
-        node.equations.append(connect_equation)
+    if default_flows:
+        # disconnected flow variables default to 0
+        for sym in disconnected_flow_variables.values():
+            connect_equation = ast.Equation(left=sym, right=ast.Primary(value=0))
+            node.equations.append(connect_equation)
 
-    # strip connector symbols
-    for i, sym in list(node.symbols.items()):
+    # move __connector_type attributes to symbols that originated from connectors
+    # TODO: improve code structure for handling connectors and connections
+    connectors = []
+    for name, sym in node.symbols.items():
         if hasattr(sym, '__connector_type'):
-            del node.symbols[i]
+            connectors.append(sym)
+    # remove from symbol table
+    for sym in connectors:
+        del node.symbols[sym.name]
 
+    # annotate symbols that are in a connector
+    for connector in connectors:
+        for sym_name in node.symbols:
+            if sym_name.split('.')[0] == connector.name:
+                sym = node.symbols[sym_name]
+                sym.connector = connector
 
 def add_state_value_equations(node: ast.Node) -> None:
     # we do this here, instead of in flatten_class, because symbol values
@@ -1005,7 +1041,6 @@ def add_state_value_equations(node: ast.Node) -> None:
             if len(non_state_prefixes & set(sym.prefixes)) == 0:
                 node.equations.append(ast.Equation(left=sym, right=sym.value))
                 sym.value = ast.Primary(value=None)
-
 
 def add_variable_value_statements(node: ast.Node) -> None:
     # we do this here, instead of in flatten_class, because symbol values
@@ -1077,7 +1112,7 @@ def flatten(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Class:
     flat_class = flatten_class(orig_class)
 
     # expand connectors
-    expand_connectors(flat_class)
+    expand_connections(flat_class)
 
     # add equations for state symbol values
     add_state_value_equations(flat_class)
@@ -1089,7 +1124,42 @@ def flatten(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Class:
 
     # Put class in root
     root = ast.Tree()
-    root.classes[orig_class.name] = flat_class
+    flat_name = str(orig_class.full_reference())
+    flat_class.name = flat_name
+    root.classes[flat_name] = flat_class
+
+def flatten(root: ast.Tree, class_name: ast.ComponentRef, 
+            component: bool = False) -> ast.Class:
+    """Flatten given class as described in Modelica spec section 1.2
+
+    All subclass instances are replaced by the their equations and symbols with
+    name mangling of the instance name passed.
+
+    :param root: The Tree containing class somewhere in hierarchy
+    :param class_name: The class that we want to create a flat model for
+    :param component: True to create a flat, but ``connect``-able component
+    :return: flat_class, a Class containing the flattened class
+    """
+    orig_class = root.find_class(class_name, copy=False)
+
+    flat_class = flatten_class(orig_class)
+
+    # expand connectors
+    expand_connections(flat_class, default_flows=not component)
+
+    # add equations for state symbol values
+    add_state_value_equations(flat_class)
+    for func in flat_class.functions.values():
+        add_variable_value_statements(func)
+
+    # annotate states
+    annotate_states(flat_class)
+
+    # Put class in root
+    root = ast.Tree()
+    flat_name = str(orig_class.full_reference())
+    flat_class.name = flat_name
+    root.classes[flat_name] = flat_class
 
     # pull functions to the top level,
     # putting them prior to the model class so that they are visited
@@ -1100,3 +1170,10 @@ def flatten(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Class:
     root.classes = functions_and_classes
 
     return root
+
+def find_dependencies(tree: ast.Tree):
+    """Return all external dependencies in ast.Tree"""
+    # TODO
+    pass
+
+

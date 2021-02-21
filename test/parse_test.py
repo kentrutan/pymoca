@@ -184,11 +184,9 @@ class ParseTest(unittest.TestCase):
 
         flat_tree = tree.flatten(ast_tree, comp_ref)
 
-        # NOTE: We currently do not flatten the component ref in the final
-        # tree's keys, so we use it once again to lookup the flattened class.
-        self.assertIn('elem.tc.i', flat_tree.classes['Test'].symbols.keys())
-        self.assertIn('elem.tc.a', flat_tree.classes['Test'].symbols.keys())
-        self.assertIn('b',         flat_tree.classes['Test'].symbols.keys())
+        self.assertIn('elem.tc.i', flat_tree.classes['Level1.Level2.Level3.Test'].symbols.keys())
+        self.assertIn('elem.tc.a', flat_tree.classes['Level1.Level2.Level3.Test'].symbols.keys())
+        self.assertIn('b',         flat_tree.classes['Level1.Level2.Level3.Test'].symbols.keys())
 
     def test_function_pull(self):
         with open(os.path.join(MODEL_DIR, 'FunctionPull.mo'), 'r') as f:
@@ -207,7 +205,7 @@ class ParseTest(unittest.TestCase):
         self.assertNotIn('Level1.Level2.Level3.TestPackage.not_called', flat_tree.classes)
 
         # Check if the classes in the flattened tree have the right type
-        self.assertEqual(flat_tree.classes['Function5'].type, 'model')
+        self.assertEqual(flat_tree.classes['Level1.Level2.Level3.Function5'].type, 'model')
 
         self.assertEqual(flat_tree.classes['Level1.Level2.Level3.f'].type, 'function')
         self.assertEqual(flat_tree.classes['Level1.Level2.Level3.TestPackage.times2'].type, 'function')
@@ -293,8 +291,8 @@ class ParseTest(unittest.TestCase):
         with open(os.path.join(MODEL_DIR, 'RedeclareNestedClass.mo.fail_parse'), 'r') as f:
             txt = f.read()
 
-        with self.assertRaises(Exception):
-            ast_tree = parser.parse(txt)
+        ast_tree = parser.parse(txt)
+        self.assertIsNone(ast_tree)
 
     def test_extends_order(self):
         with open(os.path.join(MODEL_DIR, 'ExtendsOrder.mo'), 'r') as f:
@@ -306,7 +304,7 @@ class ParseTest(unittest.TestCase):
 
         flat_tree = tree.flatten(ast_tree, comp_ref)
 
-        self.assertEqual(flat_tree.classes['M'].symbols['at.m'].value.value, 0.0)
+        self.assertEqual(flat_tree.classes['P.M'].symbols['at.m'].value.value, 0.0)
 
     def test_constant_references(self):
         with open(os.path.join(MODEL_DIR, 'ConstantReferences.mo'), 'r') as f:

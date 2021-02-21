@@ -74,7 +74,7 @@ class AntlrBuildCommand(Command):
 def call_antlr4(arg):
     "calls antlr4 on grammar file"
     # pylint: disable=unused-argument, unused-variable
-    antlr_path = os.path.join(ROOT_DIR, "java", "antlr-4.7-complete.jar")
+    antlr_path = os.path.join(ROOT_DIR, "java", "antlr-4.9.1-complete.jar")
     classpath = os.pathsep.join([".", "{:s}".format(antlr_path), "$CLASSPATH"])
     generated = os.path.join(ROOT_DIR, 'src', 'pymoca', 'generated')
     cmd = "java -Xmx500M -cp \"{classpath:s}\" org.antlr.v4.Tool {arg:s}" \
@@ -94,7 +94,7 @@ def setup_package():
     extras_require = {
         # Backends
         'casadi': ['casadi >= 3.4.0'],
-        'lxml': [
+        'xml': [
             'lxml >= 3.5.0',
             'scipy >= 0.13.3',
         ],
@@ -130,7 +130,7 @@ def setup_package():
         classifiers=[_f for _f in CLASSIFIERS.split('\n') if _f],
         platforms=["Windows", "Linux", "Solaris", "Mac OS-X", "Unix"],
         install_requires=[
-            "antlr4-python3-runtime == 4.7.*",
+            "antlr4-python3-runtime >= 4.7",
             "numpy >= 1.8.2",
         ],
         tests_require=['coverage >= 3.7.1', 'pytest', 'pytest-runner'],

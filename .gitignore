@@ -75,3 +75,8 @@ Untitled.ipynb
 jit_tmp.c
 tmp*.o
 *.orig
+
+# pymoca or backend files
+*.exp
+*.lib
+*.pymoca_cache

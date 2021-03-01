@@ -488,20 +488,8 @@ class ImportClause(Node):
         return 'import {!r}{!r}{!r}'.format(self.short_name, self.components, star)
     
     def __repr__(self):
-        return ('{}(component={}, name={!r})'.format(
-            type(self).__name__, self.component, self.name))
-
-
-class ImportFromClause(Node):
-    def __init__(self, **kwargs):
-        self.component = ComponentRef()  # type: ComponentRef
-        self.symbols = []  # type: List[str]
-        super().__init__(**kwargs)
-
-    def __repr__(self):
-        return ('{}(component={}, symbols={!r})'.format(
-            type(self).__name__, self.component, self.symbols))
-
+        return '{}(components={}, short_name={!r}), unqualfied={!r}'.format(
+            type(self).__name__, self.components, self.short_name, self.unqualified)
 
 class ElementModification(Node):
     def __init__(self, **kwargs):

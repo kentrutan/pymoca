@@ -1,4 +1,4 @@
-# Generated from pymoca\src\pymoca\Modelica.g4 by ANTLR 4.9.1
+# Generated from /Users/rutanwk/modelica/pymoca/src/pymoca/Modelica.g4 by ANTLR 4.9.1
 # encoding: utf-8
 from antlr4 import *
 from io import StringIO

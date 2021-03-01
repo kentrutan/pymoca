@@ -1,4 +1,4 @@
-# Generated from pymoca\src\pymoca\Modelica.g4 by ANTLR 4.9.1
+# Generated from /Users/rutanwk/modelica/pymoca/src/pymoca/Modelica.g4 by ANTLR 4.9.1
 from antlr4 import *
 if __name__ is not None and "." in __name__:
     from .ModelicaParser import ModelicaParser

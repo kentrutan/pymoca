@@ -12,11 +12,20 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Flatten Aircraft",
+            "name": "compiler.py -f Aircraft.mo",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/tools/compiler.py",
             "args": ["-f", "test/models", "Aircraft"],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "motr.py Aircraft.mo",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/tools/motr.py",
+            "args": ["-v", "-m", "RigidBody", "-m", "Aircraft", "test/models/Aircraft.mo"],
+            //"args": ["-h", "test/models/Aircraft.mo"],
             "console": "integratedTerminal"
         },
     ]

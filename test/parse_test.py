@@ -17,8 +17,8 @@ from pymoca import ast
 MY_DIR = os.path.dirname(os.path.realpath(__file__))
 MODEL_DIR = os.path.join(MY_DIR, 'models')
 COMPLIANCE_DIR = os.path.join(MY_DIR, 'libraries', 'Modelica-Compliance', 'ModelicaCompliance')
-IMPORTS_DIR = os.path.join(COMPLIANCE_DIR, 'Scoping', 'NameLookup', 'Imports')
-
+MSL3_DIR = os.path.join(MY_DIR, 'libraries', 'MSL-3.2.3')
+MSL4_DIR = os.path.join(MY_DIR, 'libraries', 'MSL-4.0.x')
 
 class ParseTest(unittest.TestCase):
     """
@@ -414,11 +414,17 @@ class ParseTest(unittest.TestCase):
             txt = mo_file.read()
         return parser.parse(txt)
 
-    def parse_model_files(self, *pathnames):
-        'Parse given files from MODEL_DIR and return parsed ast.Tree'
+    def parse_dir_files(self, directory, *pathnames):
+        """Parse given file paths relative to dir and return parsed ast.Tree
+
+        Dir is os-specific and paths are unix-style but are transformed to os specific.
+        """
         tree = None
-        for path in pathnames:
-            file_tree = self.parse_file(os.path.join(MODEL_DIR, path))
+        for pathname in pathnames:
+            split_path = pathname.split('/')
+            full_path = os.path.join(directory, *split_path)
+            file_tree = self.parse_file(full_path)
+            self.assertIsNotNone(file_tree, 'Parse failed: ' + full_path)
             if tree:
                 tree.extend(file_tree)
             else:
@@ -426,7 +432,7 @@ class ParseTest(unittest.TestCase):
         return tree
 
     def test_import(self):
-        library_tree = self.parse_model_files('TreeLookup.mo', 'Import.mo')
+        library_tree = self.parse_dir_files(MODEL_DIR, 'TreeLookup.mo', 'Import.mo')
 
         comp_ref = ast.ComponentRef.from_string('A')
         flat_tree = tree.flatten(library_tree, comp_ref)
@@ -446,22 +452,15 @@ class ParseTest(unittest.TestCase):
                 self.assertEqual(eqn.right.value, 3)
 
     # Import tests from the Modelica Compliance library (only the shouldPass=true cases)
-    def parse_imports_file(self, pathname):
-        'Parse given path relative to IMPORTS_DIR and return parsed ast.Tree'
-        arg_ast = self.parse_file(os.path.join(IMPORTS_DIR, pathname))
-        icon_ast = self.parse_file(os.path.join(COMPLIANCE_DIR, 'Icons.mo'))
-        icon_ast.extend(arg_ast)
-        return icon_ast
-
     def test_import_encapsulated(self):
-        library_ast = self.parse_imports_file('EncapsulatedImport.mo')
+        library_ast = self.parse_dir_files(COMPLIANCE_DIR, 'Icons.mo', 'Scoping/NameLookup/Imports/EncapsulatedImport.mo')
         model_name = 'ModelicaCompliance.Scoping.NameLookup.Imports.EncapsulatedImport'
         flat_class = ast.ComponentRef.from_string(model_name)
         flat_ast = tree.flatten(library_ast, flat_class)
         self.assertIn('a.m.x', flat_ast.classes[model_name].symbols)
 
     def test_import_scope_type(self):
-        library_ast = self.parse_imports_file('ImportScopeType.mo')
+        library_ast = self.parse_dir_files(COMPLIANCE_DIR, 'Icons.mo', 'Scoping/NameLookup/Imports/ImportScopeType.mo')
         model_name = 'ModelicaCompliance.Scoping.NameLookup.Imports.ImportScopeType'
         flat_class = ast.ComponentRef.from_string(model_name)
         flat_ast = tree.flatten(library_ast, flat_class)
@@ -470,47 +469,116 @@ class ParseTest(unittest.TestCase):
         self.assertIn('m.y', flat_ast.classes[model_name].symbols)
 
     def test_import_qualified(self):
-        library_ast = self.parse_imports_file('QualifiedImport.mo')
+        library_ast = self.parse_dir_files(COMPLIANCE_DIR, 'Icons.mo', 'Scoping/NameLookup/Imports/QualifiedImport.mo')
         model_name = 'ModelicaCompliance.Scoping.NameLookup.Imports.QualifiedImport'
         flat_class = ast.ComponentRef.from_string(model_name)
         flat_ast = tree.flatten(library_ast, flat_class)
         self.assertIn('b.a.x', flat_ast.classes[model_name].symbols)
 
     def test_import_renaming(self):
-        library_ast = self.parse_imports_file('RenamingImport.mo')
+        library_ast = self.parse_dir_files(COMPLIANCE_DIR, 'Icons.mo', 'Scoping/NameLookup/Imports/RenamingImport.mo')
         model_name = 'ModelicaCompliance.Scoping.NameLookup.Imports.RenamingImport'
         flat_class = ast.ComponentRef.from_string(model_name)
         flat_ast = tree.flatten(library_ast, flat_class)
         self.assertIn('b.a.x', flat_ast.classes[model_name].symbols)
 
     def test_import_renaming_single_definition(self):
-        library_ast = self.parse_imports_file('RenamingSingleDefinitionImport.mo')
+        library_ast = self.parse_dir_files(COMPLIANCE_DIR, 'Icons.mo', 'Scoping/NameLookup/Imports/RenamingSingleDefinitionImport.mo')
         model_name = 'ModelicaCompliance.Scoping.NameLookup.Imports.RenamingSingleDefinitionImport'
         flat_class = ast.ComponentRef.from_string(model_name)
         flat_ast = tree.flatten(library_ast, flat_class)
         self.assertIn('b.a.x', flat_ast.classes[model_name].symbols)
 
     def test_import_single_definition(self):
-        library_ast = self.parse_imports_file('SingleDefinitionImport.mo')
+        library_ast = self.parse_dir_files(COMPLIANCE_DIR, 'Icons.mo', 'Scoping/NameLookup/Imports/SingleDefinitionImport.mo')
         model_name = 'ModelicaCompliance.Scoping.NameLookup.Imports.SingleDefinitionImport'
         flat_class = ast.ComponentRef.from_string(model_name)
         flat_ast = tree.flatten(library_ast, flat_class)
         self.assertIn('b.a.x', flat_ast.classes[model_name].symbols)
 
     def test_import_unqualified(self):
-        library_ast = self.parse_imports_file('UnqualifiedImport.mo')
+        library_ast = self.parse_dir_files(COMPLIANCE_DIR, 'Icons.mo', 'Scoping/NameLookup/Imports/UnqualifiedImport.mo')
         model_name = 'ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImport'
         flat_class = ast.ComponentRef.from_string(model_name)
         flat_ast = tree.flatten(library_ast, flat_class)
         self.assertIn('b.a.x', flat_ast.classes[model_name].symbols)
 
     def test_import_unqualified_nonconflict(self):
-        library_ast = self.parse_imports_file('UnqualifiedImportNonConflict.mo')
+        library_ast = self.parse_dir_files(COMPLIANCE_DIR, 'Icons.mo', 'Scoping/NameLookup/Imports/UnqualifiedImportNonConflict.mo')
         model_name = 'ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImportNonConflict'
         flat_class = ast.ComponentRef.from_string(model_name)
         flat_ast = tree.flatten(library_ast, flat_class)
         self.assertIn('a.y', flat_ast.classes[model_name].symbols)
 
+    # Tests using the Modelica Standard Library
+    def test_msl_opamp_units(self):
+        """Test import from Modelica Standard Library 4.0.0 using SI.Units
+
+        This is the simplest case found that works around current pymoca issues
+        flattening MSL examples.
+        """
+        library_tree = self.parse_dir_files(MSL4_DIR,
+            'Modelica/Icons.mo',
+            'Modelica/Units.mo',
+            'Modelica/Electrical/package.mo', # to pick up SI import
+            'Modelica/Electrical/Analog/Interfaces/PositivePin.mo',
+            'Modelica/Electrical/Analog/Interfaces/NegativePin.mo',
+            'Modelica/Electrical/Analog/Basic/OpAmp.mo',
+        )
+        model_name = 'Modelica.Electrical.Analog.Basic.OpAmp'
+        flat_class = ast.ComponentRef.from_string(model_name)
+        flat_tree = tree.flatten(library_tree, flat_class)
+        symbols = flat_tree.classes[model_name].symbols
+        self.assertIn('in_p.i', symbols)
+        self.assertEqual(symbols['in_p.i'].unit.value, 'A')
+        self.assertEqual(symbols['in_p.i'].quantity.value, 'ElectricCurrent')
+        self.assertIn('vin', symbols)
+        self.assertEqual(symbols['vin'].unit.value, 'V')
+        self.assertEqual(symbols['vin'].quantity.value, 'ElectricPotential')
+
+    def test_msl3_twopin_units(self):
+        """Test import from Modelica Standard Library 3.2.3 using SIunits
+
+        This is a simple case that works around current pymoca issues
+        flattening MSL examples.
+        """
+        library_tree = self.parse_dir_files(MSL3_DIR,
+            'Modelica/Icons.mo',
+            'Modelica/SIunits.mo',
+            'Modelica/Electrical/Analog/package.mo', # to pick up SI import
+            'Modelica/Electrical/Analog/Interfaces.mo',
+        )
+        model_name = 'Modelica.Electrical.Analog.Interfaces.TwoPort'
+        flat_class = ast.ComponentRef.from_string(model_name)
+        flat_tree = tree.flatten(library_tree, flat_class)
+        symbols = flat_tree.classes[model_name].symbols
+        self.assertIn('p1.i', symbols)
+        self.assertEqual(symbols['p1.i'].unit.value, 'A')
+        self.assertEqual(symbols['p1.i'].quantity.value, 'ElectricCurrent')
+        self.assertIn('v1', symbols)
+        self.assertEqual(symbols['v1'].unit.value, 'V')
+        self.assertEqual(symbols['v1'].quantity.value, 'ElectricPotential')
+
+    def test_msl_flange_units(self):
+        """Test displayUnit attribute imported from MSL 4.0.0 SI.Units
+
+        """
+        library_tree = self.parse_dir_files(MSL4_DIR,
+            'Modelica/Icons.mo',
+            'Modelica/Units.mo',
+            'Modelica/Mechanics/package.mo', # to pick up SI import
+            'Modelica/Mechanics/Rotational/Interfaces/Flange.mo',
+            'Modelica/Mechanics/Rotational/Interfaces/Flange_a.mo',
+            'Modelica/Mechanics/Rotational/Interfaces/PartialAbsoluteSensor.mo',
+        )
+        model_name = 'Modelica.Mechanics.Rotational.Interfaces.PartialAbsoluteSensor'
+        flat_class = ast.ComponentRef.from_string(model_name)
+        flat_tree = tree.flatten(library_tree, flat_class)
+        symbols = flat_tree.classes[model_name].symbols
+        self.assertIn('flange.phi', symbols)
+        self.assertEqual(symbols['flange.phi'].unit.value, 'rad')
+        self.assertEqual(symbols['flange.phi'].displayUnit.value, 'deg')
+        self.assertEqual(symbols['flange.phi'].quantity.value, 'Angle')
 
 if __name__ == "__main__":
     unittest.main()

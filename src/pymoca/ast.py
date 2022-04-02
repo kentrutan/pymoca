@@ -430,7 +430,7 @@ class ComponentClause(Node):
 
 class EquationSection(Node):
     def __init__(self, **kwargs):
-        self.initial = False  # type: bool
+        self.initial = False
         self.equations = []  # type: List[Union[Equation, IfEquation, ForEquation, ConnectClause]]
         super().__init__(**kwargs)
 
@@ -441,7 +441,7 @@ class EquationSection(Node):
 
 class AlgorithmSection(Node):
     def __init__(self, **kwargs):
-        self.initial = False  # type: bool
+        self.initial = False
         self.statements = []  # type: List[Union[AssignmentStatement, IfStatement, ForStatement]]
         super().__init__(**kwargs)
 
@@ -772,6 +772,22 @@ class Class(Node):
         :param e: Equation to remove.
         """
         self.equations.remove(e)
+
+    def add_initial_equation(self, e: Equation) -> None:
+        """
+        Add an initial equation to this class.
+
+        :param e: Equation to add.
+        """
+        self.initial_equations.append(e)
+
+    def remove_initial_equation(self, e: Equation) -> None:
+        """
+        Removes an initial equation from this class.
+
+        :param e: Equation to remove.
+        """
+        self.initial_equations.remove(e)
 
     def __deepcopy__(self, memo):
         # Avoid copying the entire tree

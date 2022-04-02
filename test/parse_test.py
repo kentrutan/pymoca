@@ -510,6 +510,29 @@ class ParseTest(unittest.TestCase):
         flat_ast = tree.flatten(library_ast, flat_class)
         self.assertIn('a.y', flat_ast.classes[model_name].symbols)
 
+    def test_initial_equations(self):
+        """Test initial equation and initial algorithm are set correctly"""
+        library_ast = self.parse_dir_files(COMPLIANCE_DIR, 'Icons.mo', 'Classes/Declarations/Long/ClassSections.mo')
+        model_name = 'ModelicaCompliance.Classes.Declarations.Long.ClassSections'
+        flat_class_name = ast.ComponentRef.from_string(model_name)
+        flat_ast = tree.flatten(library_ast, flat_class_name)
+        flat_class = flat_ast.classes[model_name]
+        self.assertEqual(len(flat_class.initial_equations), 1)
+
+        eqn = flat_class.initial_equations[0]
+        self.assertEqual(eqn.left.name, 'x')
+        self.assertAlmostEqual(eqn.right.value, 1.0)
+        self.assertEqual(len(flat_class.initial_statements), 1)
+        stmt = flat_class.initial_statements[0]
+        self.assertEqual(stmt.left[0].name, 'y')
+        self.assertAlmostEqual(stmt.right.value, 1.0)
+        new_eqn = ast.Equation()
+        flat_class.add_initial_equation(new_eqn)
+        self.assertEqual(len(flat_ast.classes[model_name].initial_equations), 2)
+        flat_class.remove_initial_equation(new_eqn)
+        self.assertEqual(len(flat_ast.classes[model_name].initial_equations), 1)
+
+
     # Tests using the Modelica Standard Library
     def test_msl_opamp_units(self):
         """Test import from Modelica Standard Library 4.0.0 using SI.Units

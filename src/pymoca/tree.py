@@ -352,8 +352,8 @@ def build_instance_tree(orig_class: Union[ast.Class, ast.InstanceClass], modific
 
     # Check that all symbol modifications to be applied on this class exist
     for arg in extended_orig_class.modification_environment.arguments:
-        if not arg.value.component.name in extended_orig_class.symbols:
-            raise ModificationTargetNotFound("Trying to modify symbol {}, which does not exist in class {}".format(
+        if not arg.value.component.name in extended_orig_class.symbols and not arg.value.component.name in ast.Symbol.ATTRIBUTES:
+            raise ModificationTargetNotFound('Trying to modify symbol "{}", which does not exist in class {}'.format(
                 arg.value.component.name,
                 extended_orig_class.full_reference()
             ))
@@ -370,7 +370,8 @@ def build_instance_tree(orig_class: Union[ast.Class, ast.InstanceClass], modific
         except ast.FoundElementaryClassError:
             # Symbol is elementary type. Check if we need to move any modifications to the symbol.
             sym_arguments = [x for x in extended_orig_class.modification_environment.arguments
-                             if isinstance(x.value, ast.ElementModification) and x.value.component.name == sym_name]
+                             if isinstance(x.value, ast.ElementModification) and x.value.component.name == sym_name
+                             or sym_name == "__value" and x.value.component.name == "value" ]
 
             # Remove from current class's modification environment
             extended_orig_class.modification_environment.arguments = [
@@ -461,7 +462,7 @@ def build_instance_tree(orig_class: Union[ast.Class, ast.InstanceClass], modific
                 sym.type = build_instance_tree(c, sym.class_modification, c.parent)
             except Exception as e:
                 error_sym = str(orig_class.full_reference()) + "." + sym_name
-                raise type(e)('Processing failed for symbol "{}"'.format(error_sym)) from e
+                raise type(e)('Processing failed for symbol "{}":\n{}'.format(error_sym, e)) from e
 
             sym.class_modification = None
 

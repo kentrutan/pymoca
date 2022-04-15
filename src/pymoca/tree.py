@@ -875,8 +875,9 @@ def flatten_class(orig_class: ast.Class) -> ast.Class:
     return flat_class
 
 
-def expand_connectors(node: ast.Class) -> None:
+def expand_connections(node: ast.Class, default_flows: bool = True) -> None:
     # keep track of which flow variables have been connected to, and which ones haven't
+    # default_flows = True will set disconnected flow variables to zero
     disconnected_flow_variables = OrderedDict()
     for sym in node.symbols.values():
         if 'flow' in sym.prefixes:
@@ -989,15 +990,27 @@ def expand_connectors(node: ast.Class) -> None:
             node.equations.append(connect_equation)
             processed.append(connected_variables)
 
-    # disconnected flow variables default to 0
-    for sym in disconnected_flow_variables.values():
-        connect_equation = ast.Equation(left=sym, right=ast.Primary(value=0))
-        node.equations.append(connect_equation)
+    if default_flows:
+        # disconnected flow variables default to 0
+        for sym in disconnected_flow_variables.values():
+            connect_equation = ast.Equation(left=sym, right=ast.Primary(value=0))
+            node.equations.append(connect_equation)
 
-    # strip connector symbols
-    for i, sym in list(node.symbols.items()):
+    # move __connector_type attributes to symbols that originated from connectors
+    connectors = []
+    for name, sym in node.symbols.items():
         if hasattr(sym, '__connector_type'):
-            del node.symbols[i]
+            connectors.append(sym)
+    # remove from symbol table
+    for sym in connectors:
+        del node.symbols[sym.name]
+
+    # annotate symbols that are in a connector
+    for connector in connectors:
+        for sym_name in node.symbols:
+            if sym_name.split('.')[0] == connector.name:
+                sym = node.symbols[sym_name]
+                sym.connector = connector
 
 
 def add_state_value_equations(node: ast.Node) -> None:
@@ -1067,13 +1080,16 @@ def annotate_states(node: ast.Node) -> None:
     w.walk(StateAnnotator(node), node)
 
 
-def flatten(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Class:
-    """
-    This function takes a Tree and flattens it so that all subclasses instances
-    are replaced by the their equations and symbols with name mangling
-    of the instance name passed.
-    :param root: The Tree to flatten
+def flatten(root: ast.Tree, class_name: ast.ComponentRef,
+            component: bool = False) -> ast.Class:
+    """Flatten given class per Modelica spec section 1.2 and chapter 5
+
+    All subclass instances are replaced by the their equations and symbols with
+    name mangling of the instance name passed.
+
+    :param root: The Tree containing class somewhere in hierarchy
     :param class_name: The class that we want to create a flat model for
+    :param component: True to create a flat, but ``connect``-able component
     :return: flat_class, a Class containing the flattened class
     """
     orig_class = root.find_class(class_name, copy=False)
@@ -1081,7 +1097,7 @@ def flatten(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Class:
     flat_class = flatten_class(orig_class)
 
     # expand connectors
-    expand_connectors(flat_class)
+    expand_connections(flat_class, default_flows=not component)
 
     # add equations for state symbol values
     add_state_value_equations(flat_class)

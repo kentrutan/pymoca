@@ -603,5 +603,24 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(symbols['flange.phi'].displayUnit.value, 'deg')
         self.assertEqual(symbols['flange.phi'].quantity.value, 'Angle')
 
+    def test_msl_opamp_keep_connectors(self):
+        """Test flattening opamp component, keeping connectors"""
+        library_tree = self.parse_dir_files(MSL4_DIR,
+            'Modelica/Icons.mo',
+            'Modelica/Units.mo',
+            'Modelica/Electrical/package.mo',
+            'Modelica/Electrical/Analog/Interfaces/PositivePin.mo',
+            'Modelica/Electrical/Analog/Interfaces/NegativePin.mo',
+            'Modelica/Electrical/Analog/Basic/OpAmp.mo',
+        )
+        model_name = 'Modelica.Electrical.Analog.Basic.OpAmp'
+        flat_class = ast.ComponentRef.from_string(model_name)
+        flat_tree = tree.flatten(library_tree, flat_class, component=True)
+        symbols = flat_tree.classes[model_name].symbols
+        connectors = {sym.connector.name for sym in symbols.values() if sym.connector}
+        self.assertEqual(connectors, {'in_p', 'in_n', 'VMin', 'VMax', 'out'})
+        types = {sym.connector.type for sym in symbols.values() if sym.connector}
+        self.assertEqual(types, {'PositivePin', 'NegativePin'})
+
 if __name__ == "__main__":
     unittest.main()

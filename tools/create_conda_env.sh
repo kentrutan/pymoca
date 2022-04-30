@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 set -eu
-if [ "$#" -eq 1 ]; then
-    config=$1
-else
-    echo "usage: $0 CONFIG"
-    echo "         possible configs (basic, notebook, develop, all)"
-    exit 1
-fi
-basic="antlr4-python3-runtime==4.7 casadi sympy scipy jinja2 lxml matplotlib"
-develop="coverage pytest pytest-cov pytest-xdist pylint flake8 mypy tox"
+env_name="pymoca"
+case "$#" in
+    1)  config=$1;;
+    2)  config=$1; env_name=$2;;
+    *)  echo "usage: $0 CONFIG [ENV_NAME]"
+        echo "         CONFIG is one of (basic, notebook, develop, all)"
+        echo "         ENV_NAME is environment name (default pymoca)"
+        exit 1;;
+esac
+basic="antlr4-python3-runtime==4.9.* casadi sympy scipy jinja2 lxml matplotlib"
+develop="speedy-antlr-tool==1.3.* coverage pytest pytest-cov pytest-xdist pylint flake8 mypy tox"
 notebook="jupyterlab pydotplus control slycot"
 case "$config" in
     basic)      packages="$basic";;
@@ -25,6 +27,6 @@ conda update -q conda
 # conda config --append channels conda-forge
 # Useful for debugging any issues with conda
 conda info -a
-conda create -n pymoca python=3.9 || echo "environment already created"
-source activate pymoca
+conda create -n $env_name python=3.9 || echo "environment already created"
+source activate $env_name
 python -m pip install $packages

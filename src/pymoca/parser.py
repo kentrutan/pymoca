@@ -891,13 +891,14 @@ class ModelicaParserErrorListener(sa_modelica.SA_ErrorListener):
 
     def syntaxError(self, input_stream, offendingSymbol, char_index, line, column, msg):
         self._error = True
-        print("Syntax Error:")
-        print("    input_stream:", repr(input_stream))
-        print("    offendingSymbol:", offendingSymbol, type(offendingSymbol))
-        print("    char_index:", char_index)
-        print("    line:", line)
-        print("    column:", column)
-        print("    msg:", msg)
+        line_text = input_stream.strdata.split('\n')[line-1]
+        print(f"Syntax Error:{line}:{column}:{msg}, Line: '{line_text}'")
+        # print("    input_stream:", repr(input_stream))
+        # print("    offendingSymbol:", offendingSymbol, type(offendingSymbol))
+        # print("    char_index:", char_index)
+        # print("    line:", line)
+        # print("    column:", column)
+        # print("    msg:", msg)
 
 def parse(text: str) -> Optional[Root]:
     """Parse Modelica code given in text"""

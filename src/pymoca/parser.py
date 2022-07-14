@@ -19,6 +19,7 @@ from .generated.ModelicaLexer import ModelicaLexer
 from .generated.ModelicaListener import ModelicaListener
 # noinspection PyUnresolvedReferences,PyUnresolvedReferences
 from .generated.ModelicaParser import ModelicaParser
+from .generated import sa_modelica
 
 
 # TODO
@@ -878,7 +879,8 @@ def file_to_tree(f: ModelicaFile) -> Root:
 
     return root
 
-class ModelicaParserErrorListener(antlr4.error.ErrorListener.ErrorListener):
+class ModelicaParserErrorListener(sa_modelica.SA_ErrorListener):
+    """Catch parser syntax errors and print error message"""
     def __init__(self):
         self._error = False
         super().__init__()
@@ -887,22 +889,34 @@ class ModelicaParserErrorListener(antlr4.error.ErrorListener.ErrorListener):
     def error(self):
         return self._error
 
-    def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
+    def syntaxError(self, input_stream, offendingSymbol, char_index, line, column, msg):
         self._error = True
-        super().syntaxError(recognizer, offendingSymbol, line, column, msg, e)
-
+        print("Syntax Error:")
+        print("    input_stream:", repr(input_stream))
+        print("    offendingSymbol:", offendingSymbol, type(offendingSymbol))
+        print("    char_index:", char_index)
+        print("    line:", line)
+        print("    column:", column)
+        print("    msg:", msg)
 
 def parse(text: str) -> Optional[Root]:
     """Parse Modelica code given in text"""
+    if sa_modelica.USE_CPP_IMPLEMENTATION:
+        print("Using C++ implementation of parser")
+    else:
+        print("Using Python implementation of parser")
+
     input_stream = antlr4.InputStream(text)
-    lexer = ModelicaLexer(input_stream)
-    stream = antlr4.CommonTokenStream(lexer)
-    parser = ModelicaParser(stream)
-    # parser.buildParseTrees = False
-    listener = ModelicaParserErrorListener()
-    parser.addErrorListener(listener)
-    parse_tree = parser.stored_definition()
-    if listener.error:
+    error_listener = ModelicaParserErrorListener()
+
+    # lexer = ModelicaLexer(input_stream)
+    # stream = antlr4.CommonTokenStream(lexer)
+    # parser = ModelicaParser(stream)
+    # # parser.buildParseTrees = False
+    # listener = ModelicaParserErrorListener()
+    # parser.addErrorListener(listener)
+    parse_tree = sa_modelica.parse(input_stream, 'stored_definition', error_listener)
+    if error_listener.error:
         return None
     ast_listener = ASTListener()
     parse_walker = antlr4.ParseTreeWalker()

@@ -9,10 +9,15 @@ and enables interacting with Modelica easily in Python.
 from __future__ import print_function
 
 import os
+import fnmatch
 import subprocess
+import platform
 import sys
 
-from setuptools import Command, find_packages, setup
+from distutils.errors import CCompilerError, DistutilsExecError, DistutilsPlatformError
+from setuptools import Command, Extension, find_packages, setup
+
+from setuptools.command.build_ext import build_ext
 
 import versioneer
 
@@ -56,7 +61,7 @@ if PYTHON_VERSION < PYTHON_VERSION_REQUIRED:
 class AntlrBuildCommand(Command):
     """Customized setuptools build command."""
 
-    user_options = []
+    user_options = [] # type: list
 
     def initialize_options(self):
         """initialize options"""
@@ -77,19 +82,105 @@ def call_antlr4(arg):
     antlr_path = os.path.join(ROOT_DIR, "java", "antlr-4.9.3-complete.jar")
     classpath = os.pathsep.join([".", "{:s}".format(antlr_path), "$CLASSPATH"])
     generated = os.path.join(ROOT_DIR, 'src', 'pymoca', 'generated')
+    generated_cpp = os.path.join(generated, 'cpp_src')
     cmd = "java -Xmx500M -cp \"{classpath:s}\" org.antlr.v4.Tool {arg:s}" \
-          " -o {generated:s} -visitor -Dlanguage=Python3".format(**locals())
+          " -o {generated:s} -no-visitor -no-listener -Dlanguage=Python3".format(**locals())
     print(cmd)
     proc = subprocess.Popen(cmd.split(), cwd=os.path.join(ROOT_DIR, 'src', 'pymoca'))
     proc.communicate()
+    # Generate and patch C++ using speedy-antlr-tool
+    cmd = "java -Xmx500M -cp \"{classpath:s}\" org.antlr.v4.Tool {arg:s}" \
+          " -o {generated_cpp:s} -visitor -no-listener -Dlanguage=Cpp".format(**locals())
+    print(cmd)
+    proc = subprocess.Popen(cmd.split(), cwd=os.path.join(ROOT_DIR, 'src', 'pymoca'))
+    proc.communicate()
+    print('Running speedy-antlr-tool...')
+    from speedy_antlr_tool import generate
+    generate(
+        py_parser_path=os.path.join(generated, "ModelicaParser.py"),
+        cpp_output_dir=os.path.join(generated, "cpp_src"),
+        entry_rule_names=["stored_definition"],
+    )
+
     with open(os.path.join(generated, '__init__.py'), 'w') as fid:
         fid.write('')
 
 
-def setup_package():
+def get_files(path, pattern):
+    """
+    Recursive file search that is compatible with python3.4 and older
+    """
+    matches = []
+    for root, _, filenames in os.walk(path):
+        for filename in fnmatch.filter(filenames, pattern):
+            matches.append(os.path.join(root, filename))
+    return matches
+
+
+class BuildFailed(Exception):
+    pass
+
+
+class ve_build_ext(build_ext):
+    """
+    This class extends setuptools to fail with a common BuildFailed exception
+    if a build fails
+    """
+    def run(self):
+        try:
+            build_ext.run(self)
+        except DistutilsPlatformError:
+            raise BuildFailed()
+
+    def build_extension(self, ext):
+        try:
+            build_ext.build_extension(self, ext)
+        except (CCompilerError, DistutilsExecError, DistutilsPlatformError):
+            raise BuildFailed()
+        except ValueError:
+            # this can happen on Windows 64 bit, see Python issue 7511
+            if "'path'" in str(sys.exc_info()[1]):  # works with Python 2 and 3
+                raise BuildFailed()
+            raise
+
+
+def setup_package(with_binary):
     """
     Setup the package.
     """
+
+    if with_binary:
+
+        target = platform.system().lower()
+        platforms = {'windows', 'linux', 'darwin', 'cygwin'}
+        for known in platforms:
+            if target.startswith(known):
+                target = known
+
+        extra_compile_args = {
+            'windows': ['/DANTLR4CPP_STATIC', '/Zc:__cplusplus'],
+            'linux': ['-std=c++11'],
+            'darwin': ['-std=c++11'],
+            'cygwin': ['-std=c++11'],
+        }
+
+        # Define an Extension object that describes the Antlr accelerator
+        parser_ext = Extension(
+            # Extension name shall be at the same level as the sa_mygrammar_parser.py module
+            name='pymoca.generated.sa_modelica_cpp_parser',
+
+            # Add the Antlr runtime source directory to the include search path
+            include_dirs=["src/pymoca/generated/cpp_src/antlr4-cpp-runtime"],
+
+            # Rather than listing each C++ file (Antlr has a lot!), discover them automatically
+            sources=get_files("src/pymoca/generated/cpp_src", "*.cpp"),
+            depends=get_files("src/pymoca/generated/cpp_src", "*.h"),
+
+            extra_compile_args=extra_compile_args.get(target, [])
+        )
+        ext_modules = [parser_ext]
+    else:
+        ext_modules = []
 
     extras_require = {
         # Backends
@@ -114,6 +205,7 @@ def setup_package():
 
     cmdclass_ = {'antlr': AntlrBuildCommand}
     cmdclass_.update(versioneer.get_cmdclass())
+    cmdclass_.update({'build_ext': ve_build_ext})
 
     setup(
         version=versioneer.get_version(),
@@ -139,9 +231,28 @@ def setup_package():
         packages=find_packages("src"),
         package_dir={"": "src"},
         include_package_data=True,
+        ext_modules=ext_modules,
         cmdclass=cmdclass_
     )
 
 
 if __name__ == '__main__':
-    setup_package()
+    # Detect if an alternate interpreter is being used
+    is_jython = "java" in sys.platform
+    is_pypy = hasattr(sys, "pypy_version_info")
+
+    # Force using fallback if using an alternate interpreter
+    using_fallback = is_jython or is_pypy
+
+    if not using_fallback:
+        try:
+            setup_package(with_binary=True)
+        except BuildFailed:
+            if 'SPAM_EXAMPLE_REQUIRE_CI_BINARY_BUILD' in os.environ:
+                # Require build to pass if running in travis-ci
+                raise
+            else:
+                using_fallback = True
+
+    if using_fallback:
+        setup_package(with_binary=False)

@@ -20,7 +20,7 @@ def run_compiler(args, check_errors=True):
     'Run compiler with all arguments given as a string'
     exitval = tools.compiler.main(args.split())
     if check_errors:
-        assert exitval, 'Error calling tools.compiler ' + args
+        assert exitval == 0, 'Error calling tools.compiler ' + args
     return exitval
 
 def run_compiler_add_model_dir(options, model='Spring', filename='Spring.mo'):

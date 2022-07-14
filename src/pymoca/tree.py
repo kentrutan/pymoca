@@ -690,7 +690,7 @@ class FunctionExpander(TreeListener):
     Listener to extract functions
     """
 
-    def __init__(self, node: ast.Tree, function_set: OrderedDict):
+    def __init__(self, node: ast.Class, function_set: OrderedDict):
         self.node = node
         self.function_set = function_set
         super().__init__()
@@ -710,7 +710,7 @@ class FunctionExpander(TreeListener):
 
 
 # noinspection PyUnusedLocal
-def fully_scope_function_calls(node: ast.Tree, expression: ast.Expression, function_set: OrderedDict) -> ast.Expression:
+def fully_scope_function_calls(node: ast.Class, expression: ast.Expression, function_set: OrderedDict) -> ast.Expression:
     """
     Turns the function references in this expression into fully scoped
     references (e.g. relative to absolute). The component references of all

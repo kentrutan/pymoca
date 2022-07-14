@@ -9,6 +9,7 @@ import sys
 import time
 import unittest
 import threading
+from pathlib import Path
 
 from pymoca import parser
 from pymoca import tree
@@ -671,6 +672,46 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(aircraft.symbols['accel.a_x'].comment, 'true acceleration')
         self.assertEqual(aircraft.symbols['accel.ma_x'].comment, 'measured acceleration')
         self.assertEqual(aircraft.symbols['body.g'].comment, '')
+
+    def test_modelicapathnode(self):
+        mp = parser.ModelicaPathNode(Path(MSL4_DIR))
+        self.assertEqual(mp.child.keys(), {'Modelica', 'ModelicaReference', 'ModelicaServices',
+                                           'ModelicaTest'})
+        self.assertEqual(mp.files.keys(), {'ObsoleteModelica4', 'ModelicaTestConversion4',
+                                           'ModelicaTestOverdetermined', 'Complex'})
+        # self.assertEqual(children, {'Blocks', 'Magnetic', 'Electrical', 'Resources',
+        #                             'Thermal', 'Mechanics', 'Fluid', 'Math', 'Utilities',
+        #                             'Clocked', 'ComplexBlocks', 'Media'})
+        # Package directory
+        cref = ast.ComponentRef.from_string('Modelica')
+        paths = mp.lookup(cref)
+        self.assertEqual(paths[0].name, 'package.mo')
+        # Package file
+        cref = ast.ComponentRef.from_string('Modelica.Blocks.Continuous')
+        paths = mp.lookup(cref)
+        self.assertEqual(paths[2].name, 'Continuous.mo')
+        # Class within a package file
+        cref = ast.ComponentRef.from_string('Modelica.Icons.Information')
+        paths= mp.lookup(cref)
+        self.assertEqual(paths[1].name, 'Icons.mo')
+
+    def test_modelicapath(self):
+        mp = parser.ModelicaPathNode(Path(MSL4_DIR))
+        modelicapath = [mp]
+        mp = parser.ModelicaPathNode(Path(COMPLIANCE_DIR))
+        modelicapath.append(mp)
+        library_tree = parser.Root(name='ModelicaTree', modelicapath=modelicapath)
+
+        model_name = 'Modelica.Electrical.Analog.Basic.OpAmp'
+        flat_class = ast.ComponentRef.from_string(model_name)
+        flat_tree = tree.flatten(library_tree, flat_class, component=True)
+        symbols = flat_tree.classes[model_name].symbols
+        connectors = {sym.connector.name for sym in symbols.values() if sym.connector}
+        self.assertEqual(connectors, {'in_p', 'in_n', 'VMin', 'VMax', 'out'})
+        types = {sym.connector.type for sym in symbols.values() if sym.connector}
+        self.assertEqual(types, {'PositivePin', 'NegativePin'})
+
+
 
 if __name__ == "__main__":
     unittest.main()

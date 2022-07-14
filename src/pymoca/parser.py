@@ -4,11 +4,13 @@ Modelica parse Tree to AST tree.
 """
 from __future__ import print_function, absolute_import, division, unicode_literals
 
-import antlr4
-import antlr4.Parser
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Set
 from collections import deque, OrderedDict
 import copy
+from pathlib import Path
+
+import antlr4
+import antlr4.Parser
 
 from . import ast
 # noinspection PyUnresolvedReferences,PyUnresolvedReferences
@@ -28,6 +30,86 @@ class ModelicaFile:
         self.within = []  # type: List[ast.ComponentRef]
         self.classes = OrderedDict()  # type: OrderedDict[str, ast.Class]
         super().__init__(**kwargs)
+
+class ModelicaPathNode:
+    """A node to cache contents of one directory tree in MODELICAPATH"""
+    def __init__(self, dir_: Path):
+        self.name = dir_.parts[-1] if dir_.parts else ''  # parts returns empty tuple for "."
+        self.child = OrderedDict() # type: OrderedDict[str, ModelicaPathNode]
+        self.files = OrderedDict() # type: OrderedDict[str, Path]
+        for path in dir_.iterdir():
+            if path.is_dir():
+                # Modelica spec says directories must contain package.mo.
+                if list(path.glob('package.mo')):
+                    self.child[path.parts[-1]] = ModelicaPathNode(path)
+            elif path.suffix == '.mo':
+                self.files[path.stem] = path
+
+    def lookup(self, cref: ast.ComponentRef,
+                     paths: List[Optional[Path]] = None) -> List[Path]:
+        """Lookup component ref in this ModelicaPathNode, return list of paths to be parsed
+
+        :param cref: ast.ComponentRef to lookup
+        :param paths: path list to eventually be returned, should be None in top-level call
+        :return: list of patlib.Path that need to be parsed to resolve lookup (empty if not found)
+
+        All package.mo files in directory tree need to be added to list to be parsed since they
+        may contain definitions that are needed.
+        """
+        if paths is None:
+            paths = []
+        node = self.child.get(cref.name, None)
+        if node is not None:
+            # Found a sub-node
+            paths.append(node.files.get('package', None))
+            if cref.child:
+                # Lookup next part of ComponentRef
+                return node.lookup(cref.child[0], paths)
+        else:
+            # No sub-node, lookup file
+            paths.append(self.files.get(cref.name, None))
+        # If any part of lookup failed, empty the list
+        if None in paths:
+            paths = []
+        return paths # type: ignore[return-value]
+
+    def __repr__(self):
+        return '{}("{}")'.format(type(self).__name__, self.name)
+
+class Root(ast.Tree):
+    """
+    The unnamed root of the AST tree
+    """
+    def __init__(self, *args, **kwargs):
+        self.modelicapath = [] # type: List[ModelicaPathNode]
+        self.parsed_files = set() # type: Set[Path]
+        super().__init__(*args, **kwargs)
+
+    def find_class_in_modelicapath(self, cref: ast.ComponentRef,
+                                   search_parent: bool, search_imports: bool) -> ast.Class:
+        """Search for cref in modelicapath, return Class if found, raise ClassNotFoundError if not
+
+        This method signature mirrors ast.Class.find_class_resursively, since it is called from
+        that method and in turn may call ast.Class.find_class_resursively again."""
+        for node in self.modelicapath:
+            # Modelica spec says only search the first tree where top-level name is found
+            if cref.name in list(node.child.keys()) + list(node.files.keys()):
+                paths = node.lookup(cref)
+                if not paths:
+                    raise ast.ClassNotFoundError('Class "{}" not found in MODELICAPATH'.format(cref))
+                # Keep a local tree to make find_class faster than searching self
+                tree = ast.Tree()
+                for path in paths:
+                    if path not in self.parsed_files:
+                        txt = path.read_text(encoding='utf-8')
+                        subtree = parse(txt)
+                        if subtree is None:
+                            raise ast.ClassNotFoundError('Error parsing "{}"'.format(path))
+                        tree.extend(subtree)
+                        self.parsed_files.add(path)
+                self.extend(tree)
+                return tree.find_class_recursively(cref, search_parent=search_parent, search_imports=search_imports)
+        raise ast.ClassNotFoundError('Class "{}" not found in MODELICAPATH'.format(cref))
 
 
 # noinspection PyPep8Naming
@@ -758,11 +840,11 @@ class ASTListener(ModelicaListener):
 
 
 # UTILITY FUNCTIONS ========================================================
-def file_to_tree(f: ModelicaFile) -> ast.Tree:
+def file_to_tree(f: ModelicaFile) -> Root:
     # TODO: We can only insert where classes exist. For example, if we have a
     # within statement, we have to check if the nodes of the within statement
     # are actually in the tree, and if not raise an exception.
-    root = ast.Tree()
+    root = Root()
     insert_node = root
     if f.within:
         for p in f.within[0].to_tuple():
@@ -790,7 +872,7 @@ class ModelicaParserErrorListener(antlr4.error.ErrorListener.ErrorListener):
         super().syntaxError(recognizer, offendingSymbol, line, column, msg, e)
 
 
-def parse(text: str) -> Union[ast.Tree, None]:
+def parse(text: str) -> Optional[Root]:
     """Parse Modelica code given in text"""
     input_stream = antlr4.InputStream(text)
     lexer = ModelicaLexer(input_stream)

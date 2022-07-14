@@ -1,4 +1,4 @@
-<modelica xmlns:py="http://codespeak.net/lxml/objectify/pytype" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" format="1.0">
+<modelica xmlns:py="http://codespeak.net/lxml/objectify/pytype" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" format="1.0">
   <declarations>
     <classDefinition name="Noise">
       <class kind="model">
@@ -12,7 +12,11 @@
         </component>
         <component name="t_last" variability="discrete">
           <builtin name="Real"/>
-          <modifier/>
+          <modifier>
+            <item name="start">
+              <real value="0"/>
+            </item>
+          </modifier>
         </component>
         <component name="y" variability="discrete">
           <builtin name="Real"/>
@@ -23,7 +27,7 @@
             <operator name="der">
               <local name="x"/>
             </operator>
-            <real value="1.0"/>
+            <real value="1"/>
           </equal>
           <equal>
             <local name="dt"/>
@@ -50,7 +54,7 @@
                   <apply builtin="+">
                     <local name="x"/>
                     <apply builtin="noise_gaussian">
-                      <real value="0.0"/>
+                      <real value="0"/>
                       <real value="0.1"/>
                     </apply>
                   </apply>

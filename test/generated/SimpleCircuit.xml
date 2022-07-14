@@ -1,4 +1,4 @@
-<modelica xmlns:py="http://codespeak.net/lxml/objectify/pytype" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" format="1.0">
+<modelica xmlns:py="http://codespeak.net/lxml/objectify/pytype" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" format="1.0">
   <declarations>
     <classDefinition name="SimpleCircuit">
       <class kind="model">
@@ -34,7 +34,7 @@
           <builtin name="Real"/>
           <modifier>
             <item name="value">
-              <real value="10.0"/>
+              <real value="10"/>
             </item>
           </modifier>
         </component>
@@ -98,7 +98,7 @@
           <builtin name="Real"/>
           <modifier>
             <item name="value">
-              <real value="100.0"/>
+              <real value="100"/>
             </item>
           </modifier>
         </component>
@@ -162,7 +162,7 @@
           <builtin name="Real"/>
           <modifier>
             <item name="value">
-              <real value="220.0"/>
+              <real value="220"/>
             </item>
           </modifier>
         </component>
@@ -170,7 +170,7 @@
           <builtin name="Real"/>
           <modifier>
             <item name="value">
-              <real value="50.0"/>
+              <real value="50"/>
             </item>
           </modifier>
         </component>
@@ -199,7 +199,7 @@
             </apply>
           </equal>
           <equal>
-            <real value="0.0"/>
+            <real value="0"/>
             <apply builtin="+">
               <local name="R1.p.i"/>
               <local name="R1.n.i"/>
@@ -224,7 +224,7 @@
             </apply>
           </equal>
           <equal>
-            <real value="0.0"/>
+            <real value="0"/>
             <apply builtin="+">
               <local name="C.p.i"/>
               <local name="C.n.i"/>
@@ -251,7 +251,7 @@
             </apply>
           </equal>
           <equal>
-            <real value="0.0"/>
+            <real value="0"/>
             <apply builtin="+">
               <local name="R2.p.i"/>
               <local name="R2.n.i"/>
@@ -276,7 +276,7 @@
             </apply>
           </equal>
           <equal>
-            <real value="0.0"/>
+            <real value="0"/>
             <apply builtin="+">
               <local name="L.p.i"/>
               <local name="L.n.i"/>
@@ -303,7 +303,7 @@
             </apply>
           </equal>
           <equal>
-            <real value="0.0"/>
+            <real value="0"/>
             <apply builtin="+">
               <local name="AC.p.i"/>
               <local name="AC.n.i"/>
@@ -321,7 +321,7 @@
                 <apply builtin="*">
                   <apply builtin="*">
                     <apply builtin="*">
-                      <real value="2.0"/>
+                      <real value="2"/>
                       <local name="AC.PI"/>
                     </apply>
                     <local name="AC.f"/>
@@ -333,7 +333,7 @@
           </equal>
           <equal>
             <local name="G.p.v"/>
-            <real value="0.0"/>
+            <real value="0"/>
           </equal>
           <equal>
             <local name="i"/>

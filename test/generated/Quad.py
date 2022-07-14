@@ -18,18 +18,18 @@ class Quad(OdeModel):
         phi, theta, psi_, P, Q, R, x, y, z, U, V, W = mech.dynamicsymbols('phi, theta, psi_, P, Q, R, x, y, z, U, V, W')
         self.x = sympy.Matrix([phi, theta, psi_, P, Q, R, x, y, z, U, V, W])
         self.x0 = {
-            phi : 0,
-            theta : 0,
-            psi_ : 0,
-            P : 0,
-            Q : 0,
-            R : 0,
-            x : 0,
-            y : 0,
-            z : 0,
-            U : 0,
-            V : 0,
-            W : 0,
+            phi : 0.0,
+            theta : 0.0,
+            psi_ : 0.0,
+            P : 0.0,
+            Q : 0.0,
+            R : 0.0,
+            x : 0.0,
+            y : 0.0,
+            z : 0.0,
+            U : 0.0,
+            V : 0.0,
+            W : 0.0,
             }
 
         # variables
@@ -45,10 +45,10 @@ class Quad(OdeModel):
         J_x, J_y, J_z, m = sympy.symbols('J_x, J_y, J_z, m')
         self.p = sympy.Matrix([J_x, J_y, J_z, m])
         self.p0 = {
-            J_x : 1.0,
-            J_y : 1.0,
-            J_z : 1.0,
-            m : 1.0,
+            J_x : 1,
+            J_y : 1,
+            J_z : 1,
+            m : 1,
             }
 
         # inputs

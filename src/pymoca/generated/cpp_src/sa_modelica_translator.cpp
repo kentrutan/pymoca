@@ -536,8 +536,8 @@ antlrcpp::Any SA_ModelicaTranslator::visitStatement(ModelicaParser::StatementCon
 
 antlrcpp::Any SA_ModelicaTranslator::visitIf_equation(ModelicaParser::If_equationContext *ctx){
     speedy_antlr::LabelMap labels[] = {
-        {"_expression", static_cast<void*>(ctx->_expression)},
-        {"_equation_block", static_cast<void*>(ctx->_equation_block)}
+        {"conditions", static_cast<void*>(&(ctx->conditions))},
+        {"blocks", static_cast<void*>(&(ctx->blocks))}
     };
     if(!If_equationContext_cls) If_equationContext_cls = PyObject_GetAttrString(translator->parser_cls, "If_equationContext");
     PyObject *py_ctx = translator->convert_ctx(this, ctx, If_equationContext_cls, labels, 2);
@@ -546,8 +546,8 @@ antlrcpp::Any SA_ModelicaTranslator::visitIf_equation(ModelicaParser::If_equatio
 
 antlrcpp::Any SA_ModelicaTranslator::visitIf_statement(ModelicaParser::If_statementContext *ctx){
     speedy_antlr::LabelMap labels[] = {
-        {"_expression", static_cast<void*>(ctx->_expression)},
-        {"_statement_block", static_cast<void*>(ctx->_statement_block)}
+        {"conditions", static_cast<void*>(&(ctx->conditions))},
+        {"blocks", static_cast<void*>(&(ctx->blocks))}
     };
     if(!If_statementContext_cls) If_statementContext_cls = PyObject_GetAttrString(translator->parser_cls, "If_statementContext");
     PyObject *py_ctx = translator->convert_ctx(this, ctx, If_statementContext_cls, labels, 2);
@@ -598,8 +598,8 @@ antlrcpp::Any SA_ModelicaTranslator::visitWhile_statement(ModelicaParser::While_
 
 antlrcpp::Any SA_ModelicaTranslator::visitWhen_equation(ModelicaParser::When_equationContext *ctx){
     speedy_antlr::LabelMap labels[] = {
-        {"_expression", static_cast<void*>(ctx->_expression)},
-        {"_equation_block", static_cast<void*>(ctx->_equation_block)}
+        {"conditions", static_cast<void*>(&(ctx->conditions))},
+        {"blocks", static_cast<void*>(&(ctx->blocks))}
     };
     if(!When_equationContext_cls) When_equationContext_cls = PyObject_GetAttrString(translator->parser_cls, "When_equationContext");
     PyObject *py_ctx = translator->convert_ctx(this, ctx, When_equationContext_cls, labels, 2);
@@ -608,8 +608,8 @@ antlrcpp::Any SA_ModelicaTranslator::visitWhen_equation(ModelicaParser::When_equ
 
 antlrcpp::Any SA_ModelicaTranslator::visitWhen_statement(ModelicaParser::When_statementContext *ctx){
     speedy_antlr::LabelMap labels[] = {
-        {"_expression", static_cast<void*>(ctx->_expression)},
-        {"_statement_block", static_cast<void*>(ctx->_statement_block)}
+        {"conditions", static_cast<void*>(&(ctx->conditions))},
+        {"blocks", static_cast<void*>(&(ctx->blocks))}
     };
     if(!When_statementContext_cls) When_statementContext_cls = PyObject_GetAttrString(translator->parser_cls, "When_statementContext");
     PyObject *py_ctx = translator->convert_ctx(this, ctx, When_statementContext_cls, labels, 2);
@@ -624,10 +624,11 @@ antlrcpp::Any SA_ModelicaTranslator::visitConnect_clause(ModelicaParser::Connect
 
 antlrcpp::Any SA_ModelicaTranslator::visitExpression_if(ModelicaParser::Expression_ifContext *ctx){
     speedy_antlr::LabelMap labels[] = {
-        {"_expression", static_cast<void*>(ctx->_expression)}
+        {"conditions", static_cast<void*>(&(ctx->conditions))},
+        {"blocks", static_cast<void*>(&(ctx->blocks))}
     };
     if(!Expression_ifContext_cls) Expression_ifContext_cls = PyObject_GetAttrString(translator->parser_cls, "Expression_ifContext");
-    PyObject *py_ctx = translator->convert_ctx(this, ctx, Expression_ifContext_cls, labels, 1);
+    PyObject *py_ctx = translator->convert_ctx(this, ctx, Expression_ifContext_cls, labels, 2);
     return py_ctx;
 }
 

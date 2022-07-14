@@ -16,11 +16,6 @@ namespace speedy_antlr {
         const char *name;
         void *ref;
     };
-    struct ListLabelMap {
-        const char *name;
-        void *list;
-        size_t list_size;
-    };
 
     // C++ exception for when python throws an error and already has an exception
     // context associated with it.
@@ -61,8 +56,7 @@ namespace speedy_antlr {
             antlr4::tree::AbstractParseTreeVisitor *visitor,
             antlr4::ParserRuleContext *ctx,
             PyObject *ctx_cls,
-            LabelMap labels[]=nullptr, size_t n_labels=0,
-            ListLabelMap list_labels[]=nullptr, size_t n_list_labels=0
+            LabelMap labels[]=nullptr, size_t n_labels=0
         );
     };
 
@@ -71,16 +65,13 @@ namespace speedy_antlr {
     class ErrorTranslatorListener : public antlr4::BaseErrorListener {
         Translator *translator;
         PyObject *sa_err_listener;
-        bool syntaxErrorFound;
 
         public:
         ErrorTranslatorListener(Translator *translator, PyObject *sa_err_listener);
-
+        
         void syntaxError(
             antlr4::Recognizer *recognizer, antlr4::Token *offendingSymbol, size_t line,
             size_t charPositionInLine, const std::string &msg, std::exception_ptr e
         );
-
-        bool foundSyntaxError() {return syntaxErrorFound;}
     };
 }

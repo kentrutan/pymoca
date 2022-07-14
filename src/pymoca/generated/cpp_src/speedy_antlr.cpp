@@ -117,8 +117,7 @@ PyObject* Translator::convert_ctx(
     antlr4::tree::AbstractParseTreeVisitor *visitor,
     antlr4::ParserRuleContext *ctx,
     PyObject *ctx_cls,
-    LabelMap labels[], size_t n_labels,
-    ListLabelMap list_labels[], size_t n_list_labels
+    LabelMap labels[], size_t n_labels
 ){
     // Create py context class
     PyObject *py_ctx = new_cls(ctx_cls);
@@ -129,12 +128,8 @@ PyObject* Translator::convert_ctx(
     // Keep track of which labels were filled already
     std::vector<bool> label_used(n_labels, false);
 
-    // List lables created (holds work in progress)
-    std::vector<PyObject *> list_label_created(n_list_labels, NULL);
-
     // Convert all children
     PyObject *py_children = PyList_New(ctx->children.size());
-
     for (size_t i=0; i < ctx->children.size(); i++) {
         PyObject *py_child = NULL;
         PyObject *py_label_candidate = NULL;
@@ -201,19 +196,6 @@ PyObject* Translator::convert_ctx(
                 label_used[j] = true;
             }
         }
-        // Check if child is contained in one of the list labels
-        for(size_t j=0; j<n_list_labels; j++) {
-            for(size_t k=0; k<list_labels[j].list_size; k++) {
-                if(child_ref == static_cast<void **>(list_labels[j].list)[k]) {
-                    if(!list_label_created[j]) {
-                        list_label_created[j] = PyList_New(list_labels[j].list_size);
-                        PyObject_SetAttrString(py_ctx, list_labels[j].name, list_label_created[j]);
-                    }
-                    PyList_SetItem(list_label_created[j], k, py_label_candidate);
-                }
-            }
-        }
-
         Py_DECREF(py_label_candidate);
 
         // Steals reference to py_child
@@ -225,13 +207,6 @@ PyObject* Translator::convert_ctx(
     for(size_t j=0; j<n_labels; j++) {
         if(!label_used[j]) {
             PyObject_SetAttrString(py_ctx, labels[j].name, Py_None);
-        }
-    }
-
-    // Assign any remaining list labels to None
-    for(size_t j=0; j<n_list_labels; j++) {
-        if(!list_label_created[j]) {
-            PyObject_SetAttrString(py_ctx, list_labels[j].name, Py_None);
         }
     }
 
@@ -265,9 +240,6 @@ PyObject* Translator::convert_ctx(
     PyObject_SetAttrString(py_ctx, "children", py_children);
     Py_DECREF(py_children);
 
-    // TODO: PyObject_SetAttrString(py_ctx, list_labels[j].name, ...);
-
-
     return py_ctx;
 }
 
@@ -278,15 +250,12 @@ PyObject* Translator::convert_ctx(
 ErrorTranslatorListener::ErrorTranslatorListener(Translator *translator, PyObject *sa_err_listener) {
     this->translator = translator;
     this->sa_err_listener = sa_err_listener;
-    this->syntaxErrorFound = false;
 }
 
 void ErrorTranslatorListener::syntaxError(
     antlr4::Recognizer *recognizer, antlr4::Token *offendingSymbol, size_t line,
     size_t charPositionInLine, const std::string &msg, std::exception_ptr e
 ) {
-    this->syntaxErrorFound = true;
-
     // Get input stream from recognizer
     antlr4::IntStream *input_stream;
     if (antlrcpp::is<antlr4::Lexer *>(recognizer)) {

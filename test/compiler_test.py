@@ -52,9 +52,8 @@ class CompilerTest(unittest.TestCase):
     def test_argparse_checks_bad(self):
         'Stuff that argparse should catch and exit'
         arg_examples = [
-            '',  # Must give at least a PATH
             '-m', '-t', '-O', '-o',  # These expect an argument
-            '-t sausage',  # Invalid target
+            '-t sausage',  # Invalid translator
         ]
         # argparse does a sys.exit(2) with these
         for args in arg_examples:
@@ -64,26 +63,36 @@ class CompilerTest(unittest.TestCase):
 
     def test_bad_argument_combinations(self):
         'Bad option combinations caught outside argparse'
-        # --target requires --model
-        # This one uses argparse.error which does a sys.exit(2)
-        with self.assertRaises(SystemExit) as context:
-            self.run_compiler('-tsympy ' + SPRING_MODEL, check_errors=False)
-        self.assertEqual(context.exception.code, 2)
+
+        # The next few use argparse.error which does a sys.exit(2)
+        arg_tests = [
+            '',  # Must give at least a PATHNAME or --modelicapath or MODELICAPATH env
+            '-p spam',  # Must give at least --model if providing MODELICAPTH
+            '-tsympy ' + SPRING_MODEL,  # --translator requires --model
+            '-tcasadi -mspam',  # --translator casadi requires PATHNAME
+        ]
+        for args in arg_tests:
+            with self.assertRaises(SystemExit) as context:
+                self.run_compiler(args, check_errors=False)
+            self.assertEqual(context.exception.code, 2)
 
         # These check multiple errors before exiting
         # List of tuples of (args, number_of_expected_errors)
         bad_options = [
-            # 1) Output file doesn't exist
-            # 2) Modelica file doesn't exist
-            ('-o bacon sausage', 2),
             # 1) No .mo files given (assume none in GENERATED_DIR)
             (GENERATED_DIR, 1),
             # 1) Modelica file does not exist
             ('sausage', 1),
-            # 1) Bad target option syntax
+            # 1) Invalid output directory (is an existing file)
+            # 2) Modelica file doesn't exist
+            (' '.join(('-o ', SPRING_MODEL, 'sausage')), 2),
+            # 1) Bad translator option syntax
             # 2) Give a file instead of a directory for output Path
             # 3) Give a Modelica file that does not exist
             (' '.join(('-t casadi -m Spring -O eggs -o', SPRING_MODEL, 'spam')), 3),
+            # 1) Invalid MODELICAPATH directory
+            # 2) No valid MODELICAPATH directories given
+            ('-p eggs -m spam', 2)
         ]
         for args, expected_errors in bad_options:
             errors = self.run_compiler(args, check_errors=False)
@@ -99,11 +108,15 @@ class CompilerTest(unittest.TestCase):
         self.run_compiler(' '.join([MODEL_DIR, SPRING_MODEL]))
 
     def test_flatten_only(self):
-        'If model is given and target is not, then compiler tool stops after flatten'
+        'If model is given and translator is not, then compiler tool stops after flatten'
         # Parse and flatten
         self.run_compiler('-v -m Spring ' + SPRING_MODEL)
         self.run_compiler('-v -m Aircraft ' + AIRCRAFT_MODEL)
         self.run_compiler('-v -m Spring -m Aircraft ' + ' '.join([SPRING_MODEL, AIRCRAFT_MODEL]))
+
+    def test_modelicapath(self):
+        'No files given, use MODELICAPATH'
+        self.run_compiler('-v -m Spring -p ' + MODEL_DIR)
 
     def test_casadi_options_good(self):
         'CasADi generation expected to run ok'
@@ -111,7 +124,7 @@ class CompilerTest(unittest.TestCase):
         arg_examples = [
             '-vv -Ospam=eggs',  # Flatten only, -O ignored
             '-v -tcasadi',  # -v = logging.INFO
-            '-vv --target=casadi',  # -vv = logging.DEBUG
+            '-vv --translator=casadi',  # -vv = logging.DEBUG
             '-t=casadi -Ocache=False -Ocodegen=False -Ocheck_balanced=True',
         ]
         for args in arg_examples:

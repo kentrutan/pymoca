@@ -298,11 +298,11 @@ def main(argv: List[str]) -> int:
                     try:
                         _ = flatten_class(library_ast, model)
                     # tree.flatten_class can throw Exception in several places
-                    except Exception:  # pylint: disable=broad-except
+                    except Exception as exception:  # pylint: disable=broad-except
                         if log.level is logging.DEBUG:
                             log.exception('Error flattening %s', model)
                         else:
-                            log.error('Error flattening %s', model)
+                            log.error('Error flattening %s: %s', model, exception)
                         errors += 1
 
     elif args.translator == 'casadi':

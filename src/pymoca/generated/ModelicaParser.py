@@ -1,9 +1,13 @@
-# Generated from Modelica.g4 by ANTLR 4.7
+# Generated from Modelica.g4 by ANTLR 4.9.3
 # encoding: utf-8
 from antlr4 import *
 from io import StringIO
-from typing.io import TextIO
 import sys
+if sys.version_info[1] > 5:
+	from typing import TextIO
+else:
+	from typing.io import TextIO
+
 
 def serializedATN():
     with StringIO() as buf:
@@ -737,13 +741,15 @@ class ModelicaParser ( Parser ):
 
     def __init__(self, input:TokenStream, output:TextIO = sys.stdout):
         super().__init__(input, output)
-        self.checkVersion("4.7")
+        self.checkVersion("4.9.3")
         self._interp = ParserATNSimulator(self, self.atn, self.decisionsToDFA, self.sharedContextCache)
         self._predicates = None
 
 
 
+
     class Stored_definitionContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -826,7 +832,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Stored_definition_classContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -886,7 +894,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Class_definitionContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -950,7 +960,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Class_prefixesContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -1008,7 +1020,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Class_typeContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -1144,7 +1158,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Class_specifierContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -1482,7 +1498,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Base_prefixContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -1528,7 +1546,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Enum_listContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -1590,7 +1610,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Enumeration_literalContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -1641,7 +1663,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class CompositionContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -1805,7 +1829,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Language_specificationContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -1850,7 +1876,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class External_function_callContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -1926,7 +1954,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Element_listContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -1986,7 +2016,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class ElementContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -2069,7 +2101,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Regular_elementContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -2178,7 +2212,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Replaceable_elementContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -2307,7 +2343,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Import_clauseContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -2403,7 +2441,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Import_listContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -2468,7 +2508,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Extends_clauseContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -2541,7 +2583,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Constraining_clauseContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -2602,7 +2646,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Component_clauseContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -2673,7 +2719,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Type_prefixContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -2754,7 +2802,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Type_specifier_elementContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -2799,7 +2849,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Type_specifierContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -2861,7 +2913,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Component_listContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -2923,7 +2977,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Component_declarationContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -2988,7 +3044,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Condition_attributeContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -3036,7 +3094,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class DeclarationContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -3106,7 +3166,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class ModificationContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -3253,7 +3315,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Class_modificationContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -3310,7 +3374,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Argument_listContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -3372,7 +3438,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class ArgumentContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -3435,7 +3503,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Element_modification_or_replaceableContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -3520,7 +3590,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Element_modificationContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -3585,7 +3657,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Element_redeclarationContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -3691,7 +3765,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Element_replaceableContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -3768,7 +3844,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Component_clause1Context(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -3826,7 +3904,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Component_declaration1Context(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -3878,7 +3958,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Short_class_definitionContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -4016,7 +4098,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Equation_blockContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -4076,7 +4160,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Equation_sectionContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -4136,7 +4222,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Statement_blockContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -4196,7 +4284,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Algorithm_sectionContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -4256,7 +4346,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Equation_optionsContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -4494,7 +4586,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class EquationContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -4546,7 +4640,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Statement_optionsContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -4875,7 +4971,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class StatementContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -4927,7 +5025,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class If_equationContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -5029,7 +5129,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class If_statementContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -5131,7 +5233,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class For_equationContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -5193,7 +5297,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class For_statementContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -5255,7 +5361,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class For_indicesContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -5317,7 +5425,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class For_indexContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -5377,7 +5487,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class While_statementContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -5439,7 +5551,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class When_equationContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -5530,7 +5644,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class When_statementContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -5621,7 +5737,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Connect_clauseContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -5680,7 +5798,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class ExpressionContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -5816,7 +5936,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Simple_expressionContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -5886,7 +6008,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class ExprContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -6325,7 +6449,9 @@ class ModelicaParser ( Parser ):
             self.unrollRecursionContexts(_parentctx)
         return localctx
 
+
     class PrimaryContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -6617,6 +6743,8 @@ class ModelicaParser ( Parser ):
             super().__init__(parser)
             self.copyFrom(ctx)
 
+        def INITIAL(self):
+            return self.getToken(ModelicaParser.INITIAL, 0)
         def function_call_args(self):
             return self.getTypedRuleContext(ModelicaParser.Function_call_argsContext,0)
 
@@ -6769,7 +6897,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class NameContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -6838,7 +6968,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Component_reference_elementContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -6895,7 +7027,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Component_referenceContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -6957,7 +7091,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Function_call_argsContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -7014,7 +7150,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Function_argumentsContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -7114,7 +7252,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Named_argumentsContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -7176,7 +7316,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Named_argumentContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -7229,7 +7371,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Function_argumentContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -7345,7 +7489,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Output_expression_listContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -7413,7 +7559,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Expression_listContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -7475,7 +7623,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class Array_subscriptsContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -7541,7 +7691,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class SubscriptContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -7600,7 +7752,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class CommentContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -7659,7 +7813,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class String_commentContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -7726,7 +7882,9 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
+
     class AnnotationContext(ParserRuleContext):
+        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)

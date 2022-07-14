@@ -4,6 +4,7 @@ Parse-only and miscellaneous AST tests.
 """
 
 import io
+import os
 import re
 import threading
 import time
@@ -364,16 +365,16 @@ def test_inner_outer_final_parsed_on_symbol():
 
 def test_modelicapath_lookup():
     """Test modelicapath tree top level classes transformed correctly"""
-    stub_tree = parser.modelicapath_to_tree(dirs=[MODEL_DIR])
+    test_package = os.path.join(MODEL_DIR, "Package")
+    stub_tree = parser.modelicapath_to_tree(dirs=[test_package])
     assert len(stub_tree.classes) > 0
     keys = set(stub_tree.classes.keys())
-    assert "Aircraft" in keys
     assert "Package" in keys
     # Test lookup on some MSL that parses OK
-    msl = parser.modelicapath_to_tree(dirs=[MSL4_DIR])
+    msl_dir = os.path.join(MSL4_DIR, "Modelica")
+    msl = parser.modelicapath_to_tree(dirs=[msl_dir])
     # Units is a .mo file, SI is defined inside Units
-    cref = ast.ComponentRef.from_string("Modelica.Units.SI")
-    si = msl.find_class(cref)
+    si = tree.find_name("Modelica.Units.SI", msl)
     assert isinstance(si, ast.Class)
     assert "Angle" in si.classes
     # TODO: More tests to get high enough coverage

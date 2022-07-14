@@ -738,6 +738,8 @@ def _instantiate_partially(
             encapsulated=element.encapsulated,
             partial=element.partial,
             final=element.final,
+            parsed=element.parsed,
+            path=element.path,
         )
         if update_parent_instance:
             parent_instance.classes[element.name] = instance

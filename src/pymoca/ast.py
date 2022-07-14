@@ -27,6 +27,18 @@ class FoundElementaryClassError(Exception):
     pass
 
 
+class LazyParseDictKeyError(KeyError):
+    def __init__(self, msg):
+        self.msg = msg
+        super().__init__(self)
+
+    def __str__(self) -> str:
+        return str(self.msg)
+
+    def __repr__(self) -> str:
+        return type(self).__name__ + "(" + str(self) + ")"
+
+
 class Visibility(Enum):
     PROTECTED = 1, "protected"
     PUBLIC = 2, "public"
@@ -642,20 +654,19 @@ class LazyParseDict(dict):
         # Import locally to avoid circular imports/references
         from . import parser
 
-        file = parser.parse_text(class_.path.read_text(encoding="utf-8"))
-        # Fail lookup if parse fails
-        if file is None:
-            raise KeyError
-        # Fail lookup if class is not in top level of parsed file
-        if __key not in file.classes:
-            raise KeyError
-        # Update class_ with parsed __key class
+        try:
+            file = parser.parse_text(class_.path.read_text(encoding="utf-8"))
+        except parser.ModelicaSyntaxError:
+            raise
+        except Exception as exc:
+            raise LazyParseDictKeyError(f"Error parsing {class_.path}") from exc
+
+        # Update class_ classes with parsed __key classes
         class_.parsed = True
         parsed_class = file.classes[__key]
         class_.update_classes(parsed_class.classes)
+
         # Include any additional classes that may have been parsed
-        file.classes[__key] = class_
-        class_.update_classes(file.classes)
         return class_
 
     def __repr__(self):
@@ -705,7 +716,7 @@ class Class(Node):
         self.parent = None  # type: Optional[Class]
         self.visibility = Visibility.PUBLIC  # type: Visibility
         self.is_short_class_definition = False  # type: bool
-        self.path = Path("/")  # type: Path
+        self.path = None  # type: Optional[Path]
         self.parsed = True  # type: bool
 
         # TODO: Remove hard-wired tree.find_name() when done with prototype
@@ -1193,7 +1204,7 @@ class Tree(Class):
         """Add builtins to root of tree"""
         for name, symbol in self.BUILTIN_TYPES.items():
             new_symbol = copy.deepcopy(symbol)
-            type_class = Class(name=name, type="type", parent=self)
+            type_class = Class(name=name, type="type", parent=self, parsed=True)
             new_symbol.parent = type_class
             type_class.symbols[name] = new_symbol
             self.classes[name] = type_class

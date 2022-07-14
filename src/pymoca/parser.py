@@ -2,6 +2,7 @@
 """
 Modelica parse Tree to AST tree.
 """
+
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import copy
@@ -35,7 +36,6 @@ from .generated.ModelicaLexer import ModelicaLexer  # noqa: I202
 from .generated.ModelicaListener import ModelicaListener
 from .generated.ModelicaParser import ModelicaParser
 
-
 # TODO
 #  - Named function arguments (note that either all have to be named, or none)
 #  - Make sure slice indices (eventually) evaluate to integers
@@ -45,6 +45,19 @@ logger = logging.getLogger("pymoca")
 
 
 DEFAULT_MODEL_CACHE_DB = "model_txt_cache.db"
+
+
+class ModelicaPathError(Exception):
+
+    def __init__(self, msg):
+        self.msg = msg
+        super().__init__(self)
+
+    def __str__(self) -> str:
+        return str(self.msg)
+
+    def __repr__(self) -> str:
+        return type(self).__name__ + "(" + str(self) + ")"
 
 
 class ModelicaSyntaxError(SyntaxError):
@@ -94,7 +107,7 @@ class ModelicaFile:
 
 
 def _path_to_class(path: Path) -> Optional[ast.Class]:
-    """Transform a filesytem path into an ast.Class"""
+    """Transform a filesystem path into an ast.Class"""
     if path.is_dir():
         try:
             package = next(path.glob("package.mo"))
@@ -118,33 +131,26 @@ def _path_to_class(path: Path) -> Optional[ast.Class]:
         return None
 
 
-def _dir_to_tree(dir_: Path, this_class: ast.Class) -> None:
+def _dir_to_tree(dir_: Path, parent: ast.Class) -> None:
     """Recursively walk a filesystem directory tree and transform to unparsed ast.Class"""
-    for path in dir_.iterdir():
-        path = path.resolve()
-        if child_class := _path_to_class(path):
-            this_class.add_class(child_class)
+    if dir_class := _path_to_class(dir_.resolve()):
+        parent.add_class(dir_class)
+        for path in dir_.iterdir():
             if path.is_dir():
-                _dir_to_tree(path, child_class)
+                _dir_to_tree(path, dir_class)
+            elif child_class := _path_to_class(path.resolve()):
+                dir_class.add_class(child_class)
 
 
-def dir_to_tree(dir_: Union[str, Path]) -> ast.Tree:
+def dir_to_tree(dir_: Path) -> ast.Tree:
     """Transform a MODELICAPATH directory into a tree of unparsed stub Classes
 
     A directory turns into an ast.Class with the file to parse for that class
     inserted into the paths attribute and subdirectories inserted as child stub classes.
     TODO: Add version handling (spec 18.8.3, 18.8.4)
     """
-    # Accept str or Path argument
-    dir_ = Path(str(dir_))
-    dir_.resolve()
     root_tree = ast.Tree()
-    if dir_.is_dir():
-        root_class = ast.Class()
-        _dir_to_tree(dir_, root_class)
-        root_tree.name = dir_.parts[-1]
-        root_tree.classes = root_class.classes
-        del root_class
+    _dir_to_tree(dir_, root_tree)
     return root_tree
 
 
@@ -159,6 +165,11 @@ def modelicapath_to_tree(dirs: List[Union[str, Path]]) -> ast.Tree:
     """Return ast.Tree for all directories in dirs list"""
     modelicapath_tree = ast.Tree(name="root", type="MODELICAPATH")
     for dir_ in dirs:
+        # Accept str or Path argument
+        dir_ = Path(str(dir_))
+        dir_.resolve()
+        if not dir_.is_dir():
+            raise ModelicaPathError(f"MODELICAPATH contains non-directory: {dir_}")
         dir_tree = dir_to_tree(dir_)
         modelicapath_tree.extend(dir_tree)
     # TODO: There must be a better way!

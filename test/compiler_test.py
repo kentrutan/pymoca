@@ -21,6 +21,7 @@ BOUNCING_BALL_XML = os.path.join(MODEL_DIR, "bouncing-ball.xml")
 
 def run_compiler(args, check_errors=True):
     """Run compiler with all arguments given as a string
+
     When argparse catches errors in command arguments it calls sys.exit(2).
     If arguments pass argparse, number of errors is expected to be returned from compiler.
     """
@@ -58,7 +59,7 @@ def test_argparse_checks_bad():
         "-t",
         "-O",
         "-o",  # These expect an argument
-        "-t sausage",  # Invalid target
+        "-t sausage",  # Invalid translator
     ]
     # argparse does a sys.exit(2) with these
     for args in arg_examples:
@@ -78,13 +79,10 @@ def test_bad_argument_combinations():
     # These check multiple errors before exiting
     # List of tuples of (args, number_of_expected_errors)
     bad_options = [
-        # 1) Output file doesn't exist
-        # 2) Modelica file doesn't exist
-        ("-o bacon sausage", 2),
+        # 1) Modelica file doesn't exist
+        ("sausage", 1),
         # 1) No .mo files given (assume none in GENERATED_DIR)
         (GENERATED_DIR, 1),
-        # 1) Modelica file does not exist
-        ("sausage", 1),
         # 1) Bad target option syntax
         # 2) Give a file instead of a directory for output Path
         # 3) Give a Modelica file that does not exist
@@ -104,13 +102,16 @@ def test_parse_only():
     # Parse all files in a directory and a given file
     run_compiler(" ".join([MODEL_DIR, SPRING_MODEL]))
 
+    def test_flatten_only():
+        "If model is given and target is not, then compiler tool stops after flatten"
+        # Parse and flatten
+        run_compiler("-v -m Spring " + SPRING_MODEL)
+        run_compiler("-v -m Aircraft " + AIRCRAFT_MODEL)
+        run_compiler("-v -m Spring -m Aircraft " + " ".join([SPRING_MODEL, AIRCRAFT_MODEL]))
 
-def test_flatten_only():
-    "If model is given and target is not, then compiler tool stops after flatten"
-    # Parse and flatten
-    run_compiler("-v -m Spring " + SPRING_MODEL)
-    run_compiler("-v -m Aircraft " + AIRCRAFT_MODEL)
-    run_compiler("-v -m Spring -m Aircraft " + " ".join([SPRING_MODEL, AIRCRAFT_MODEL]))
+    def test_modelicapath():
+        "No files given, use MODELICAPATH"
+        run_compiler("-v -m Spring -p " + MODEL_DIR)
 
 
 def test_casadi_options_good():
@@ -119,7 +120,7 @@ def test_casadi_options_good():
     arg_examples = [
         "-vv -Ospam=eggs",  # Flatten only, -O ignored
         "-v -tcasadi",  # -v = logging.INFO
-        "-vv --target=casadi",  # -vv = logging.DEBUG
+        "-vv --translator=casadi",  # -vv = logging.DEBUG
         "-t=casadi -Ocache=False -Ocodegen=False -Ocheck_balanced=True",
     ]
     for args in arg_examples:

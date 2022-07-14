@@ -123,6 +123,8 @@ class Root(ast.Tree):
             if paths:
                 for path in paths:
                     if path not in self.parsed_files:
+                        # TODO: Flag to turn on/off; also pass file name to parse() and have parse print it
+                        print('Parsing', path)
                         txt = path.read_text(encoding='utf-8')
                         subtree = parse(txt)
                         if subtree is None:

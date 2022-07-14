@@ -710,6 +710,7 @@ class ParseTest(unittest.TestCase):
             parts = path.parts
             model_name = '.'.join(parts[root_index:-1] + (path.stem,))
             flat_class = ast.ComponentRef.from_string(model_name)
+            print('Flattening', model_name)
             try:
                 flat_tree = tree.flatten(library_tree, flat_class)
                 print('Flattened {}'.format(flat_tree.classes[0].name))

@@ -162,8 +162,8 @@ def setup_package(with_binary):
         extra_compile_args = {
             'windows': ['/DANTLR4CPP_STATIC', '/Zc:__cplusplus'],
             'linux': ['-std=c++11'],
-            #TODO: change back: 'darwin': ['-std=c++11'],
-            'darwin': ['-std=c++11', "-g3", "-O0", "-DDEBUG=0", "-UNDEBUG"],
+            'darwin': ['-std=c++11'],
+            #'darwin': ['-std=c++11', "-g3", "-O0", "-DDEBUG=0", "-UNDEBUG"],
             'cygwin': ['-std=c++11'],
         }
 

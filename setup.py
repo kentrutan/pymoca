@@ -231,6 +231,7 @@ def setup_package(with_binary):
         packages=find_packages("src"),
         package_dir={"": "src"},
         include_package_data=True,
+        exclude_package_data={"pymoca.generated": ["cpp_src"]},
         ext_modules=ext_modules,
         cmdclass=cmdclass_
     )

@@ -4,7 +4,7 @@ Modelica parse Tree to AST tree.
 """
 from __future__ import print_function, absolute_import, division, unicode_literals
 
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Set, Optional, Union
 from collections import deque, OrderedDict
 import copy
 from pathlib import Path
@@ -25,6 +25,10 @@ from .generated.ModelicaParser import ModelicaParser
 #  - Named function arguments (note that either all have to be named, or none)
 #  - Make sure slice indices (eventually) evaluate to integers
 
+class ParseError(Exception):
+    """Something failed in parse"""
+    pass
+
 class ModelicaFile:
     def __init__(self, **kwargs):
         self.within = []  # type: List[ast.ComponentRef]
@@ -33,7 +37,8 @@ class ModelicaFile:
 
 class ModelicaPathNode:
     """A node to cache contents of one directory tree in MODELICAPATH"""
-    def __init__(self, dir_: Path):
+    def __init__(self, dir_: Union[str, Path]):
+        dir_ = Path(str(dir_)) # accept str or Path argument
         self.name = dir_.parts[-1] if dir_.parts else ''  # parts returns empty tuple for "."
         self.child = OrderedDict() # type: OrderedDict[str, ModelicaPathNode]
         self.files = OrderedDict() # type: OrderedDict[str, Path]
@@ -45,9 +50,9 @@ class ModelicaPathNode:
             elif path.suffix == '.mo':
                 self.files[path.stem] = path
 
-    def lookup(self, cref: ast.ComponentRef,
-                     paths: List[Optional[Path]] = None) -> List[Path]:
-        """Lookup component ref in this ModelicaPathNode, return list of paths to be parsed
+    def find_pathname_recursively(self, cref: ast.ComponentRef,
+                                         paths: List[Path]) -> List[Path]:
+        """Lookup component ref in this ModelicaPathNode, return list of Paths to be parsed
 
         :param cref: ast.ComponentRef to lookup
         :param paths: path list to eventually be returned, should be None in top-level call
@@ -56,22 +61,42 @@ class ModelicaPathNode:
         All package.mo files in directory tree need to be added to list to be parsed since they
         may contain definitions that are needed.
         """
-        if paths is None:
-            paths = []
         node = self.child.get(cref.name, None)
         if node is not None:
             # Found a sub-node
             paths.append(node.files.get('package', None))
             if cref.child:
                 # Lookup next part of ComponentRef
-                return node.lookup(cref.child[0], paths)
+                return node.find_pathname_recursively(cref.child[0], paths)
         else:
             # No sub-node, lookup file
-            paths.append(self.files.get(cref.name, None))
+            file = self.files.get(cref.name, None)
+            if file:
+                paths.append(file)
+            else:
+                # Search all sub-nodes of children
+                for node in self.child.values():
+                    paths_found = node.find_pathname_recursively(cref, paths)
+                    # Take first successful lookup per spec
+                    if paths_found:
+                        break
         # If any part of lookup failed, empty the list
         if None in paths:
             paths = []
-        return paths # type: ignore[return-value]
+        return paths
+
+    def find_pathname(self, cref: ast.ComponentRef) -> List[Path]:
+        """Lookup component ref in this ModelicaPathNode, return list of Paths to be parsed
+
+        :param cref: ast.ComponentRef to lookup
+        :return: list of patlib.Path that need to be parsed to resolve lookup (empty if not found)
+
+        All package.mo files in directory tree need to be added to list to be parsed since they
+        may contain definitions that are needed.
+        """
+        paths = [] # type: List[Path]
+        self.find_pathname_recursively(cref, paths)
+        return paths
 
     def __repr__(self):
         return '{}("{}")'.format(type(self).__name__, self.name)
@@ -85,31 +110,26 @@ class Root(ast.Tree):
         self.parsed_files = set() # type: Set[Path]
         super().__init__(*args, **kwargs)
 
-    def find_class_in_modelicapath(self, cref: ast.ComponentRef,
-                                   search_parent: bool, search_imports: bool) -> ast.Class:
-        """Search for cref in modelicapath, return Class if found, raise ClassNotFoundError if not
+    def find_ref_in_modelicapath(self, cref: ast.ComponentRef) -> bool:
+        """Search for cref in modelicapath, return True if found.
 
-        This method signature mirrors ast.Class.find_class_resursively, since it is called from
-        that method and in turn may call ast.Class.find_class_resursively again."""
+        Side-effect: if found, parsed files are added to self.
+
+        Reference: Modelica spec version 3.5, section 13.3"""
+        # TODO: Implement library version number handling
         for node in self.modelicapath:
-            # Modelica spec says only search the first tree where top-level name is found
-            if cref.name in list(node.child.keys()) + list(node.files.keys()):
-                paths = node.lookup(cref)
-                if not paths:
-                    raise ast.ClassNotFoundError('Class "{}" not found in MODELICAPATH'.format(cref))
-                # Keep a local tree to make find_class faster than searching self
-                tree = ast.Tree()
+            paths = node.find_pathname(cref)
+            if paths:
                 for path in paths:
                     if path not in self.parsed_files:
                         txt = path.read_text(encoding='utf-8')
                         subtree = parse(txt)
                         if subtree is None:
-                            raise ast.ClassNotFoundError('Error parsing "{}"'.format(path))
-                        tree.extend(subtree)
+                            raise ParseError('Error parsing "{}"'.format(path))
+                        self.extend(subtree)
                         self.parsed_files.add(path)
-                self.extend(tree)
-                return tree.find_class_recursively(cref, search_parent=search_parent, search_imports=search_imports)
-        raise ast.ClassNotFoundError('Class "{}" not found in MODELICAPATH'.format(cref))
+                return True
+        return False
 
 
 # noinspection PyPep8Naming

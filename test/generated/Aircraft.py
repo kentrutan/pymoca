@@ -18,8 +18,8 @@ class Aircraft(OdeModel):
         body__x, body__v_x = mech.dynamicsymbols('body.x, body.v_x')
         self.x = sympy.Matrix([body__x, body__v_x])
         self.x0 = {
-            body__x : 0,
-            body__v_x : 0,
+            body__x : 0.0,
+            body__v_x : 0.0,
             }
 
         # variables
@@ -38,7 +38,7 @@ class Aircraft(OdeModel):
             body__g : 9.81,
             body__c : 0.9,
             body__m : 1.0,
-            accel__b_x__b : 0,
+            accel__b_x__b : 0.0,
             }
 
         # inputs

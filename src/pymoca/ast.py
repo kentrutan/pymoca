@@ -7,7 +7,7 @@ from __future__ import print_function, absolute_import, division, unicode_litera
 import copy
 import json
 from enum import Enum
-from typing import List, Union, Dict, Type
+from typing import List, Union, Dict, Type, Optional
 from collections import OrderedDict
 
 
@@ -85,15 +85,15 @@ class Node:
 
     @classmethod
     def to_json(cls, var):
-        if isinstance(var, list):
+        if isinstance(var, (list, set, tuple)):
             res = [cls.to_json(item) for item in var]
         elif isinstance(var, dict):
             res = {key: cls.to_json(var[key]) for key in var.keys()}
         elif isinstance(var, Node):
             # Avoid infinite recursion by not handling attributes that may go
-            # back up in the tree again.
+            # back up in the tree again. Also avoid root items.
             res = {key: cls.to_json(var.__dict__[key]) for key in var.__dict__.keys()
-                   if key not in ('parent', 'scope', '__deepcopy__')}
+                   if key not in ('parent', 'scope', '__deepcopy__', 'modelicapath', 'parsed_files')}
         elif isinstance(var, Visibility):
             res = str(var)
         else:
@@ -572,7 +572,7 @@ class Class(Node):
 
         super().__init__(**kwargs)
 
-    def _find_class(self, component_ref: ComponentRef, search_parent=True, search_imports=True) -> 'Class':
+    def find_class_recursively(self, component_ref: ComponentRef, search_parent=True, search_imports=True) -> 'Class':
         """ Recursively search for component_ref in self and linked classes
 
         Implement lookup rules per spec chapter 5, see also chapter 13.
@@ -588,7 +588,7 @@ class Class(Node):
                 return self.classes[component_ref.name]
             else:
                 # Avoid infinite recursion by passing search_parent = False
-                return self.classes[component_ref.name]._find_class(component_ref.child[0], False)
+                return self.classes[component_ref.name].find_class_recursively(component_ref.child[0], False)
         except (KeyError, ClassNotFoundError):
             try:
                 if search_imports:
@@ -603,17 +603,17 @@ class Class(Node):
                                 import_ = import_.components[0]
                         elif component_ref.child:
                             import_ = import_.concatenate(component_ref.child[0])
-                        return self._find_class(import_)
+                        return self.find_class_recursively(import_)
                     else:
                         # Next search packages for unqualified imports (slow, but assuming not common)
                         if '*' in self.imports:
                             c = None
-                            for package_ref in self.imports['*'].components:
+                            for package_ref in self.imports['*'].components: # type: ignore[attr-defined]
                                 imported_comp_ref = package_ref.concatenate(ComponentRef(name=component_ref.name))
                                 # Search within the package
                                 try:
                                     # Avoid infinite recursion with search_imports = False
-                                    c = self._find_class(imported_comp_ref, search_imports=False)
+                                    c = self.find_class_recursively(imported_comp_ref, search_imports=False)
                                 except(KeyError, ClassNotFoundError):
                                     pass
                             if c is not None:
@@ -628,9 +628,11 @@ class Class(Node):
                     raise ClassNotFoundError
             except (KeyError, ClassNotFoundError):
                 if search_parent and self.parent is not None and not self.encapsulated:
-                    return self.parent._find_class(component_ref)
+                    return self.parent.find_class_recursively(component_ref)
                 else:
-                    raise ClassNotFoundError("Could not find class '{}'".format(component_ref))
+                    return self.root.find_class_in_modelicapath(component_ref,
+                                                                search_parent=search_parent,
+                                                                search_imports=search_imports)
 
     def find_class(self, component_ref: ComponentRef, copy=True,
                    check_builtin_classes=False, search_imports=True) -> 'Class':
@@ -650,7 +652,7 @@ class Class(Node):
             else:
                 raise FoundElementaryClassError()
 
-        c = self._find_class(component_ref, search_imports)
+        c = self.find_class_recursively(component_ref, search_imports=search_imports)
 
         if copy:
             c = c.copy_including_children()
@@ -664,7 +666,7 @@ class Class(Node):
             t = component_ref.to_tuple()
 
             try:
-                node = self._find_class(ComponentRef(name=t[0]), search_parent)
+                node = self.find_class_recursively(ComponentRef(name=t[0]), search_parent)
                 return node._find_constant_symbol(ComponentRef.from_tuple(t[1:]), False)
             except ClassNotFoundError:
                 try:
@@ -679,7 +681,7 @@ class Class(Node):
                 if isinstance(s.type, InstanceClass):
                     return s.type._find_constant_symbol(ComponentRef.from_tuple(t[1:]), False)
                 elif isinstance(s.type, ComponentRef):
-                    node = self._find_class(s.type)  # Parent lookups is OK here.
+                    node = self.find_class_recursively(s.type)  # Parent lookups is OK here.
                     return node._find_constant_symbol(ComponentRef.from_tuple(t[1:]), False)
                 else:
                     raise Exception("Unknown object type of symbol type: {}".format(type(s.type)))

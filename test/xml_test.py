@@ -7,6 +7,8 @@ import sys
 import time
 import unittest
 
+import casadi
+
 import pymoca.parser as mo_parser
 from pymoca.backends.xml import analysis, generator, sim_scipy
 from pymoca.backends.xml import parser as xml_parser
@@ -19,6 +21,8 @@ MODEL_DIR = os.path.join(TEST_DIR, 'models')
 GENERATED_DIR = os.path.join(TEST_DIR, 'generated')
 
 
+@unittest.skipIf(os.environ.get('GITHUB_ACTIONS') == 'true', 'Fails with InvocationError')
+@unittest.skipIf(casadi.__version__ >= '3.5.5', 'Fails with InvocationError')
 class XmlTest(unittest.TestCase):
     """
     Xml tests
@@ -36,7 +40,6 @@ class XmlTest(unittest.TestCase):
         sys.stdout.flush()
         time.sleep(0.01)
 
-    @unittest.skipIf(os.environ.get('GITHUB_ACTIONS') == 'true', 'Fails with InvocationError')
     def test_noise(self):
 
         # compile to ModelicaXML
@@ -66,7 +69,6 @@ class XmlTest(unittest.TestCase):
         plt.pause(0.1)
         plt.close()
 
-    @unittest.skipIf(os.environ.get('GITHUB_ACTIONS') == 'true', 'Fails with InvocationError')
     def test_simple_circuit(self):
 
         # compile to ModelicaXML
@@ -96,7 +98,6 @@ class XmlTest(unittest.TestCase):
         plt.pause(0.1)
         plt.close()
 
-    @unittest.skipIf(os.environ.get('GITHUB_ACTIONS') == 'true', 'Fails with InvocationError')
     def test_bouncing_ball(self):
 
         # generate

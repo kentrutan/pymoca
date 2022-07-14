@@ -79,7 +79,7 @@ class AntlrBuildCommand(Command):
 def call_antlr4(arg):
     "calls antlr4 on grammar file"
     # pylint: disable=unused-argument, unused-variable
-    antlr_path = os.path.join(ROOT_DIR, "java", "antlr-4.9.3-complete.jar")
+    antlr_path = os.path.join(ROOT_DIR, "antlr", "antlr-4.9.3-complete.jar")
     classpath = os.pathsep.join([".", "{:s}".format(antlr_path), "$CLASSPATH"])
     generated = os.path.join(ROOT_DIR, 'src', 'pymoca', 'generated')
     generated_cpp = os.path.join(generated, 'cpp_src')
@@ -162,8 +162,8 @@ def setup_package(with_binary):
         extra_compile_args = {
             'windows': ['/DANTLR4CPP_STATIC', '/Zc:__cplusplus'],
             'linux': ['-std=c++11'],
-            'darwin': ['-std=c++11'],
-            #'darwin': ['-std=c++11', "-g3", "-O0", "-DDEBUG=0", "-UNDEBUG"],
+            # 'darwin': ['-std=c++11'],
+            'darwin': ['-std=c++11', "-g3", "-O0", "-DDEBUG=0", "-UNDEBUG"],
             'cygwin': ['-std=c++11'],
         }
 
@@ -252,7 +252,7 @@ if __name__ == '__main__':
         try:
             setup_package(with_binary=True)
         except BuildFailed:
-            if 'SPAM_EXAMPLE_REQUIRE_CI_BINARY_BUILD' in os.environ:
+            if 'PYMOCA_REQUIRE_CI_BINARY_BUILD' in os.environ:
                 # Require build to pass if running in travis-ci
                 raise
             else:

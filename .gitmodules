@@ -12,3 +12,9 @@
 	path = test/libraries/MSL-3.2.3
 	url = https://github.com/modelica/ModelicaStandardLibrary.git
 	branch = maint/3.2.3
+[submodule "antlr/speedy-antlr-tool"]
+	path = antlr/speedy-antlr-tool
+	url = https://github.com/amykyta3/speedy-antlr-tool.git
+[submodule "antlr/speedy-antlr-example"]
+	path = antlr/speedy-antlr-example
+	url = https://github.com/amykyta3/speedy-antlr-example.git

@@ -84,7 +84,7 @@ def call_antlr4(arg):
     generated = os.path.join(ROOT_DIR, 'src', 'pymoca', 'generated')
     generated_cpp = os.path.join(generated, 'cpp_src')
     cmd = "java -Xmx500M -cp \"{classpath:s}\" org.antlr.v4.Tool {arg:s}" \
-          " -o {generated:s} -no-visitor -no-listener -Dlanguage=Python3".format(**locals())
+          " -o {generated:s} -visitor -listener -Dlanguage=Python3".format(**locals())
     print(cmd)
     proc = subprocess.Popen(cmd.split(), cwd=os.path.join(ROOT_DIR, 'src', 'pymoca'))
     proc.communicate()
@@ -128,12 +128,14 @@ class ve_build_ext(build_ext):
     """
     def run(self):
         try:
+            self.debug = 1
             build_ext.run(self)
         except DistutilsPlatformError:
             raise BuildFailed()
 
     def build_extension(self, ext):
         try:
+            self.debug = 1
             build_ext.build_extension(self, ext)
         except (CCompilerError, DistutilsExecError, DistutilsPlatformError):
             raise BuildFailed()
@@ -160,7 +162,8 @@ def setup_package(with_binary):
         extra_compile_args = {
             'windows': ['/DANTLR4CPP_STATIC', '/Zc:__cplusplus'],
             'linux': ['-std=c++11'],
-            'darwin': ['-std=c++11'],
+            #TODO: change back: 'darwin': ['-std=c++11'],
+            'darwin': ['-std=c++11', "-g3", "-O0", "-DDEBUG=0", "-UNDEBUG"],
             'cygwin': ['-std=c++11'],
         }
 

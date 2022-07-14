@@ -772,6 +772,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_stored_definition
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterStored_definition" ):
+                listener.enterStored_definition(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitStored_definition" ):
+                listener.exitStored_definition(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitStored_definition" ):
+                return visitor.visitStored_definition(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -836,6 +850,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_stored_definition_class
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterStored_definition_class" ):
+                listener.enterStored_definition_class(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitStored_definition_class" ):
+                listener.exitStored_definition_class(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitStored_definition_class" ):
+                return visitor.visitStored_definition_class(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -888,6 +916,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_class_definition
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterClass_definition" ):
+                listener.enterClass_definition(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitClass_definition" ):
+                listener.exitClass_definition(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitClass_definition" ):
+                return visitor.visitClass_definition(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -936,6 +978,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_class_prefixes
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterClass_prefixes" ):
+                listener.enterClass_prefixes(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitClass_prefixes" ):
+                listener.exitClass_prefixes(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitClass_prefixes" ):
+                return visitor.visitClass_prefixes(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -975,6 +1031,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_class_type
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterClass_type" ):
+                listener.enterClass_type(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitClass_type" ):
+                listener.exitClass_type(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitClass_type" ):
+                return visitor.visitClass_type(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -1124,6 +1194,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.CommentContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterClass_spec_der" ):
+                listener.enterClass_spec_der(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitClass_spec_der" ):
+                listener.exitClass_spec_der(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitClass_spec_der" ):
+                return visitor.visitClass_spec_der(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Class_spec_enumContext(Class_specifierContext):
 
@@ -1139,6 +1223,20 @@ class ModelicaParser ( Parser ):
         def enum_list(self):
             return self.getTypedRuleContext(ModelicaParser.Enum_listContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterClass_spec_enum" ):
+                listener.enterClass_spec_enum(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitClass_spec_enum" ):
+                listener.exitClass_spec_enum(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitClass_spec_enum" ):
+                return visitor.visitClass_spec_enum(self)
+            else:
+                return visitor.visitChildren(self)
 
 
     class Class_spec_baseContext(Class_specifierContext):
@@ -1162,6 +1260,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.Class_modificationContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterClass_spec_base" ):
+                listener.enterClass_spec_base(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitClass_spec_base" ):
+                listener.exitClass_spec_base(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitClass_spec_base" ):
+                return visitor.visitClass_spec_base(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Class_spec_compContext(Class_specifierContext):
 
@@ -1180,6 +1292,20 @@ class ModelicaParser ( Parser ):
         def composition(self):
             return self.getTypedRuleContext(ModelicaParser.CompositionContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterClass_spec_comp" ):
+                listener.enterClass_spec_comp(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitClass_spec_comp" ):
+                listener.exitClass_spec_comp(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitClass_spec_comp" ):
+                return visitor.visitClass_spec_comp(self)
+            else:
+                return visitor.visitChildren(self)
 
 
     class Class_spec_extendsContext(Class_specifierContext):
@@ -1202,6 +1328,20 @@ class ModelicaParser ( Parser ):
         def class_modification(self):
             return self.getTypedRuleContext(ModelicaParser.Class_modificationContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterClass_spec_extends" ):
+                listener.enterClass_spec_extends(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitClass_spec_extends" ):
+                listener.exitClass_spec_extends(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitClass_spec_extends" ):
+                return visitor.visitClass_spec_extends(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -1373,6 +1513,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_base_prefix
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterBase_prefix" ):
+                listener.enterBase_prefix(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitBase_prefix" ):
+                listener.exitBase_prefix(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitBase_prefix" ):
+                return visitor.visitBase_prefix(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -1409,6 +1563,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_enum_list
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterEnum_list" ):
+                listener.enterEnum_list(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitEnum_list" ):
+                listener.exitEnum_list(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitEnum_list" ):
+                return visitor.visitEnum_list(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -1459,6 +1627,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_enumeration_literal
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterEnumeration_literal" ):
+                listener.enterEnumeration_literal(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitEnumeration_literal" ):
+                listener.exitEnumeration_literal(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitEnumeration_literal" ):
+                return visitor.visitEnumeration_literal(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -1532,6 +1714,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_composition
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterComposition" ):
+                listener.enterComposition(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitComposition" ):
+                listener.exitComposition(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitComposition" ):
+                return visitor.visitComposition(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -1647,6 +1843,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_language_specification
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterLanguage_specification" ):
+                listener.enterLanguage_specification(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitLanguage_specification" ):
+                listener.exitLanguage_specification(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitLanguage_specification" ):
+                return visitor.visitLanguage_specification(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -1687,6 +1897,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_external_function_call
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterExternal_function_call" ):
+                listener.enterExternal_function_call(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitExternal_function_call" ):
+                listener.exitExternal_function_call(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitExternal_function_call" ):
+                return visitor.visitExternal_function_call(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -1748,6 +1972,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_element_list
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterElement_list" ):
+                listener.enterElement_list(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitElement_list" ):
+                listener.exitElement_list(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitElement_list" ):
+                return visitor.visitElement_list(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -1804,6 +2042,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_element
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterElement" ):
+                listener.enterElement(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitElement" ):
+                listener.exitElement(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitElement" ):
+                return visitor.visitElement(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -1881,6 +2133,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_regular_element
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterRegular_element" ):
+                listener.enterRegular_element(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitRegular_element" ):
+                listener.exitRegular_element(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitRegular_element" ):
+                return visitor.visitRegular_element(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -1987,6 +2253,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_replaceable_element
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterReplaceable_element" ):
+                listener.enterReplaceable_element(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitReplaceable_element" ):
+                listener.exitReplaceable_element(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitReplaceable_element" ):
+                return visitor.visitReplaceable_element(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -2089,6 +2369,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_import_clause
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterImport_clause" ):
+                listener.enterImport_clause(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitImport_clause" ):
+                listener.exitImport_clause(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitImport_clause" ):
+                return visitor.visitImport_clause(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -2168,6 +2462,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_import_list
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterImport_list" ):
+                listener.enterImport_list(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitImport_list" ):
+                listener.exitImport_list(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitImport_list" ):
+                return visitor.visitImport_list(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -2222,6 +2530,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_extends_clause
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterExtends_clause" ):
+                listener.enterExtends_clause(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitExtends_clause" ):
+                listener.exitExtends_clause(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitExtends_clause" ):
+                return visitor.visitExtends_clause(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -2280,6 +2602,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_constraining_clause
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterConstraining_clause" ):
+                listener.enterConstraining_clause(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitConstraining_clause" ):
+                listener.exitConstraining_clause(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitConstraining_clause" ):
+                return visitor.visitConstraining_clause(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -2337,6 +2673,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_component_clause
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterComponent_clause" ):
+                listener.enterComponent_clause(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitComponent_clause" ):
+                listener.exitComponent_clause(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitComponent_clause" ):
+                return visitor.visitComponent_clause(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -2380,6 +2730,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_type_prefix
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterType_prefix" ):
+                listener.enterType_prefix(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitType_prefix" ):
+                listener.exitType_prefix(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitType_prefix" ):
+                return visitor.visitType_prefix(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -2452,6 +2816,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_type_specifier_element
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterType_specifier_element" ):
+                listener.enterType_specifier_element(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitType_specifier_element" ):
+                listener.exitType_specifier_element(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitType_specifier_element" ):
+                return visitor.visitType_specifier_element(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -2488,6 +2866,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_type_specifier
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterType_specifier" ):
+                listener.enterType_specifier(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitType_specifier" ):
+                listener.exitType_specifier(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitType_specifier" ):
+                return visitor.visitType_specifier(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -2538,6 +2930,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_component_list
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterComponent_list" ):
+                listener.enterComponent_list(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitComponent_list" ):
+                listener.exitComponent_list(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitComponent_list" ):
+                return visitor.visitComponent_list(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -2594,6 +3000,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_component_declaration
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterComponent_declaration" ):
+                listener.enterComponent_declaration(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitComponent_declaration" ):
+                listener.exitComponent_declaration(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitComponent_declaration" ):
+                return visitor.visitComponent_declaration(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -2639,6 +3059,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_condition_attribute
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterCondition_attribute" ):
+                listener.enterCondition_attribute(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitCondition_attribute" ):
+                listener.exitCondition_attribute(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitCondition_attribute" ):
+                return visitor.visitCondition_attribute(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -2681,6 +3115,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_declaration
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterDeclaration" ):
+                listener.enterDeclaration(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitDeclaration" ):
+                listener.exitDeclaration(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitDeclaration" ):
+                return visitor.visitDeclaration(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -2749,6 +3197,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.ExpressionContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterModification_class" ):
+                listener.enterModification_class(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitModification_class" ):
+                listener.exitModification_class(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitModification_class" ):
+                return visitor.visitModification_class(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Modification_assignment2Context(ModificationContext):
 
@@ -2760,6 +3222,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.ExpressionContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterModification_assignment2" ):
+                listener.enterModification_assignment2(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitModification_assignment2" ):
+                listener.exitModification_assignment2(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitModification_assignment2" ):
+                return visitor.visitModification_assignment2(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Modification_assignmentContext(ModificationContext):
 
@@ -2770,6 +3246,20 @@ class ModelicaParser ( Parser ):
         def expression(self):
             return self.getTypedRuleContext(ModelicaParser.ExpressionContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterModification_assignment" ):
+                listener.enterModification_assignment(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitModification_assignment" ):
+                listener.exitModification_assignment(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitModification_assignment" ):
+                return visitor.visitModification_assignment(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -2840,6 +3330,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_class_modification
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterClass_modification" ):
+                listener.enterClass_modification(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitClass_modification" ):
+                listener.exitClass_modification(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitClass_modification" ):
+                return visitor.visitClass_modification(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -2887,6 +3391,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_argument_list
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterArgument_list" ):
+                listener.enterArgument_list(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitArgument_list" ):
+                listener.exitArgument_list(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitArgument_list" ):
+                return visitor.visitArgument_list(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -2938,6 +3456,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_argument
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterArgument" ):
+                listener.enterArgument(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitArgument" ):
+                listener.exitArgument(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitArgument" ):
+                return visitor.visitArgument(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -2995,6 +3527,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_element_modification_or_replaceable
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterElement_modification_or_replaceable" ):
+                listener.enterElement_modification_or_replaceable(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitElement_modification_or_replaceable" ):
+                listener.exitElement_modification_or_replaceable(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitElement_modification_or_replaceable" ):
+                return visitor.visitElement_modification_or_replaceable(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -3067,6 +3613,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_element_modification
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterElement_modification" ):
+                listener.enterElement_modification(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitElement_modification" ):
+                listener.exitElement_modification(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitElement_modification" ):
+                return visitor.visitElement_modification(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -3128,6 +3688,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_element_redeclaration
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterElement_redeclaration" ):
+                listener.enterElement_redeclaration(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitElement_redeclaration" ):
+                listener.exitElement_redeclaration(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitElement_redeclaration" ):
+                return visitor.visitElement_redeclaration(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -3214,6 +3788,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_element_replaceable
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterElement_replaceable" ):
+                listener.enterElement_replaceable(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitElement_replaceable" ):
+                listener.exitElement_replaceable(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitElement_replaceable" ):
+                return visitor.visitElement_replaceable(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -3279,6 +3867,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_component_clause1
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterComponent_clause1" ):
+                listener.enterComponent_clause1(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitComponent_clause1" ):
+                listener.exitComponent_clause1(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitComponent_clause1" ):
+                return visitor.visitComponent_clause1(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -3320,6 +3922,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_component_declaration1
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterComponent_declaration1" ):
+                listener.enterComponent_declaration1(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitComponent_declaration1" ):
+                listener.exitComponent_declaration1(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitComponent_declaration1" ):
+                return visitor.visitComponent_declaration1(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -3383,6 +3999,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_short_class_definition
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterShort_class_definition" ):
+                listener.enterShort_class_definition(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitShort_class_definition" ):
+                listener.exitShort_class_definition(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitShort_class_definition" ):
+                return visitor.visitShort_class_definition(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -3486,6 +4116,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_equation_block
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterEquation_block" ):
+                listener.enterEquation_block(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitEquation_block" ):
+                listener.exitEquation_block(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitEquation_block" ):
+                return visitor.visitEquation_block(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -3533,6 +4177,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_equation_section
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterEquation_section" ):
+                listener.enterEquation_section(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitEquation_section" ):
+                listener.exitEquation_section(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitEquation_section" ):
+                return visitor.visitEquation_section(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -3582,6 +4240,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_statement_block
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterStatement_block" ):
+                listener.enterStatement_block(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitStatement_block" ):
+                listener.exitStatement_block(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitStatement_block" ):
+                return visitor.visitStatement_block(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -3629,6 +4301,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_algorithm_section
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterAlgorithm_section" ):
+                listener.enterAlgorithm_section(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitAlgorithm_section" ):
+                listener.exitAlgorithm_section(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitAlgorithm_section" ):
+                return visitor.visitAlgorithm_section(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -3688,6 +4374,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.When_equationContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterEquation_when" ):
+                listener.enterEquation_when(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitEquation_when" ):
+                listener.exitEquation_when(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitEquation_when" ):
+                return visitor.visitEquation_when(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Equation_connect_clauseContext(Equation_optionsContext):
 
@@ -3699,6 +4399,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.Connect_clauseContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterEquation_connect_clause" ):
+                listener.enterEquation_connect_clause(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitEquation_connect_clause" ):
+                listener.exitEquation_connect_clause(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitEquation_connect_clause" ):
+                return visitor.visitEquation_connect_clause(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Equation_forContext(Equation_optionsContext):
 
@@ -3709,6 +4423,20 @@ class ModelicaParser ( Parser ):
         def for_equation(self):
             return self.getTypedRuleContext(ModelicaParser.For_equationContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterEquation_for" ):
+                listener.enterEquation_for(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitEquation_for" ):
+                listener.exitEquation_for(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitEquation_for" ):
+                return visitor.visitEquation_for(self)
+            else:
+                return visitor.visitChildren(self)
 
 
     class Equation_functionContext(Equation_optionsContext):
@@ -3724,6 +4452,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.Function_call_argsContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterEquation_function" ):
+                listener.enterEquation_function(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitEquation_function" ):
+                listener.exitEquation_function(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitEquation_function" ):
+                return visitor.visitEquation_function(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Equation_simpleContext(Equation_optionsContext):
 
@@ -3738,6 +4480,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.ExpressionContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterEquation_simple" ):
+                listener.enterEquation_simple(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitEquation_simple" ):
+                listener.exitEquation_simple(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitEquation_simple" ):
+                return visitor.visitEquation_simple(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Equation_ifContext(Equation_optionsContext):
 
@@ -3748,6 +4504,20 @@ class ModelicaParser ( Parser ):
         def if_equation(self):
             return self.getTypedRuleContext(ModelicaParser.If_equationContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterEquation_if" ):
+                listener.enterEquation_if(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitEquation_if" ):
+                listener.exitEquation_if(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitEquation_if" ):
+                return visitor.visitEquation_if(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -3835,6 +4605,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_equation
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterEquation" ):
+                listener.enterEquation(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitEquation" ):
+                listener.exitEquation(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitEquation" ):
+                return visitor.visitEquation(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -3881,6 +4665,20 @@ class ModelicaParser ( Parser ):
             self.copyFrom(ctx)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterStatement_break" ):
+                listener.enterStatement_break(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitStatement_break" ):
+                listener.exitStatement_break(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitStatement_break" ):
+                return visitor.visitStatement_break(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Statement_whileContext(Statement_optionsContext):
 
@@ -3891,6 +4689,20 @@ class ModelicaParser ( Parser ):
         def while_statement(self):
             return self.getTypedRuleContext(ModelicaParser.While_statementContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterStatement_while" ):
+                listener.enterStatement_while(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitStatement_while" ):
+                listener.exitStatement_while(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitStatement_while" ):
+                return visitor.visitStatement_while(self)
+            else:
+                return visitor.visitChildren(self)
 
 
     class Statement_component_functionContext(Statement_optionsContext):
@@ -3909,6 +4721,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.Function_call_argsContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterStatement_component_function" ):
+                listener.enterStatement_component_function(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitStatement_component_function" ):
+                listener.exitStatement_component_function(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitStatement_component_function" ):
+                return visitor.visitStatement_component_function(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Statement_returnContext(Statement_optionsContext):
 
@@ -3916,6 +4742,20 @@ class ModelicaParser ( Parser ):
             super().__init__(parser)
             self.copyFrom(ctx)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterStatement_return" ):
+                listener.enterStatement_return(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitStatement_return" ):
+                listener.exitStatement_return(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitStatement_return" ):
+                return visitor.visitStatement_return(self)
+            else:
+                return visitor.visitChildren(self)
 
 
     class Statement_forContext(Statement_optionsContext):
@@ -3928,6 +4768,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.For_statementContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterStatement_for" ):
+                listener.enterStatement_for(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitStatement_for" ):
+                listener.exitStatement_for(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitStatement_for" ):
+                return visitor.visitStatement_for(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Statement_whenContext(Statement_optionsContext):
 
@@ -3939,6 +4793,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.When_statementContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterStatement_when" ):
+                listener.enterStatement_when(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitStatement_when" ):
+                listener.exitStatement_when(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitStatement_when" ):
+                return visitor.visitStatement_when(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Statement_ifContext(Statement_optionsContext):
 
@@ -3949,6 +4817,20 @@ class ModelicaParser ( Parser ):
         def if_statement(self):
             return self.getTypedRuleContext(ModelicaParser.If_statementContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterStatement_if" ):
+                listener.enterStatement_if(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitStatement_if" ):
+                listener.exitStatement_if(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitStatement_if" ):
+                return visitor.visitStatement_if(self)
+            else:
+                return visitor.visitChildren(self)
 
 
     class Statement_component_referenceContext(Statement_optionsContext):
@@ -3966,6 +4848,20 @@ class ModelicaParser ( Parser ):
         def function_call_args(self):
             return self.getTypedRuleContext(ModelicaParser.Function_call_argsContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterStatement_component_reference" ):
+                listener.enterStatement_component_reference(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitStatement_component_reference" ):
+                listener.exitStatement_component_reference(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitStatement_component_reference" ):
+                return visitor.visitStatement_component_reference(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -4094,6 +4990,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_statement
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterStatement" ):
+                listener.enterStatement(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitStatement" ):
+                listener.exitStatement(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitStatement" ):
+                return visitor.visitStatement(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -4143,6 +5053,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_if_equation
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterIf_equation" ):
+                listener.enterIf_equation(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitIf_equation" ):
+                listener.exitIf_equation(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitIf_equation" ):
+                return visitor.visitIf_equation(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -4234,6 +5158,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_if_statement
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterIf_statement" ):
+                listener.enterIf_statement(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitIf_statement" ):
+                listener.exitIf_statement(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitIf_statement" ):
+                return visitor.visitIf_statement(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -4316,6 +5254,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_for_equation
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterFor_equation" ):
+                listener.enterFor_equation(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitFor_equation" ):
+                listener.exitFor_equation(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitFor_equation" ):
+                return visitor.visitFor_equation(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -4366,6 +5318,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_for_statement
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterFor_statement" ):
+                listener.enterFor_statement(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitFor_statement" ):
+                listener.exitFor_statement(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitFor_statement" ):
+                return visitor.visitFor_statement(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -4412,6 +5378,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_for_indices
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterFor_indices" ):
+                listener.enterFor_indices(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitFor_indices" ):
+                listener.exitFor_indices(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitFor_indices" ):
+                return visitor.visitFor_indices(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -4463,6 +5443,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_for_index
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterFor_index" ):
+                listener.enterFor_index(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitFor_index" ):
+                listener.exitFor_index(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitFor_index" ):
+                return visitor.visitFor_index(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -4513,6 +5507,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_while_statement
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterWhile_statement" ):
+                listener.enterWhile_statement(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitWhile_statement" ):
+                listener.exitWhile_statement(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitWhile_statement" ):
+                return visitor.visitWhile_statement(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -4571,6 +5579,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_when_equation
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterWhen_equation" ):
+                listener.enterWhen_equation(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitWhen_equation" ):
+                listener.exitWhen_equation(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitWhen_equation" ):
+                return visitor.visitWhen_equation(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -4651,6 +5673,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_when_statement
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterWhen_statement" ):
+                listener.enterWhen_statement(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitWhen_statement" ):
+                listener.exitWhen_statement(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitWhen_statement" ):
+                return visitor.visitWhen_statement(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -4719,6 +5755,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_connect_clause
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterConnect_clause" ):
+                listener.enterConnect_clause(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitConnect_clause" ):
+                listener.exitConnect_clause(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitConnect_clause" ):
+                return visitor.visitConnect_clause(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -4782,6 +5832,20 @@ class ModelicaParser ( Parser ):
                 return self.getTypedRuleContext(ModelicaParser.ExpressionContext,i)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterExpression_if" ):
+                listener.enterExpression_if(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitExpression_if" ):
+                listener.exitExpression_if(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitExpression_if" ):
+                return visitor.visitExpression_if(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Expression_simpleContext(ExpressionContext):
 
@@ -4792,6 +5856,20 @@ class ModelicaParser ( Parser ):
         def simple_expression(self):
             return self.getTypedRuleContext(ModelicaParser.Simple_expressionContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterExpression_simple" ):
+                listener.enterExpression_simple(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitExpression_simple" ):
+                listener.exitExpression_simple(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitExpression_simple" ):
+                return visitor.visitExpression_simple(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -4876,6 +5954,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_simple_expression
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterSimple_expression" ):
+                listener.enterSimple_expression(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitSimple_expression" ):
+                listener.exitSimple_expression(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitSimple_expression" ):
+                return visitor.visitSimple_expression(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -4947,6 +6039,20 @@ class ModelicaParser ( Parser ):
                 return self.getTypedRuleContext(ModelicaParser.ExprContext,i)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterExpr_add" ):
+                listener.enterExpr_add(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitExpr_add" ):
+                listener.exitExpr_add(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitExpr_add" ):
+                return visitor.visitExpr_add(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Expr_signedContext(ExprContext):
 
@@ -4958,6 +6064,20 @@ class ModelicaParser ( Parser ):
         def expr(self):
             return self.getTypedRuleContext(ModelicaParser.ExprContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterExpr_signed" ):
+                listener.enterExpr_signed(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitExpr_signed" ):
+                listener.exitExpr_signed(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitExpr_signed" ):
+                return visitor.visitExpr_signed(self)
+            else:
+                return visitor.visitChildren(self)
 
 
     class Expr_expContext(ExprContext):
@@ -4974,6 +6094,20 @@ class ModelicaParser ( Parser ):
                 return self.getTypedRuleContext(ModelicaParser.PrimaryContext,i)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterExpr_exp" ):
+                listener.enterExpr_exp(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitExpr_exp" ):
+                listener.exitExpr_exp(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitExpr_exp" ):
+                return visitor.visitExpr_exp(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Expr_orContext(ExprContext):
 
@@ -4988,6 +6122,20 @@ class ModelicaParser ( Parser ):
                 return self.getTypedRuleContext(ModelicaParser.ExprContext,i)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterExpr_or" ):
+                listener.enterExpr_or(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitExpr_or" ):
+                listener.exitExpr_or(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitExpr_or" ):
+                return visitor.visitExpr_or(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Expr_primaryContext(ExprContext):
 
@@ -4998,6 +6146,20 @@ class ModelicaParser ( Parser ):
         def primary(self):
             return self.getTypedRuleContext(ModelicaParser.PrimaryContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterExpr_primary" ):
+                listener.enterExpr_primary(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitExpr_primary" ):
+                listener.exitExpr_primary(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitExpr_primary" ):
+                return visitor.visitExpr_primary(self)
+            else:
+                return visitor.visitChildren(self)
 
 
     class Expr_andContext(ExprContext):
@@ -5012,6 +6174,20 @@ class ModelicaParser ( Parser ):
             else:
                 return self.getTypedRuleContext(ModelicaParser.ExprContext,i)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterExpr_and" ):
+                listener.enterExpr_and(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitExpr_and" ):
+                listener.exitExpr_and(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitExpr_and" ):
+                return visitor.visitExpr_and(self)
+            else:
+                return visitor.visitChildren(self)
 
 
     class Expr_relContext(ExprContext):
@@ -5028,6 +6204,20 @@ class ModelicaParser ( Parser ):
                 return self.getTypedRuleContext(ModelicaParser.ExprContext,i)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterExpr_rel" ):
+                listener.enterExpr_rel(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitExpr_rel" ):
+                listener.exitExpr_rel(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitExpr_rel" ):
+                return visitor.visitExpr_rel(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Expr_notContext(ExprContext):
 
@@ -5038,6 +6228,20 @@ class ModelicaParser ( Parser ):
         def expr(self):
             return self.getTypedRuleContext(ModelicaParser.ExprContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterExpr_not" ):
+                listener.enterExpr_not(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitExpr_not" ):
+                listener.exitExpr_not(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitExpr_not" ):
+                return visitor.visitExpr_not(self)
+            else:
+                return visitor.visitChildren(self)
 
 
     class Expr_mulContext(ExprContext):
@@ -5053,6 +6257,20 @@ class ModelicaParser ( Parser ):
             else:
                 return self.getTypedRuleContext(ModelicaParser.ExprContext,i)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterExpr_mul" ):
+                listener.enterExpr_mul(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitExpr_mul" ):
+                listener.exitExpr_mul(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitExpr_mul" ):
+                return visitor.visitExpr_mul(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -5258,6 +6476,20 @@ class ModelicaParser ( Parser ):
         def STRING(self):
             return self.getToken(ModelicaParser.STRING, 0)
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterPrimary_string" ):
+                listener.enterPrimary_string(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitPrimary_string" ):
+                listener.exitPrimary_string(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitPrimary_string" ):
+                return visitor.visitPrimary_string(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Primary_endContext(PrimaryContext):
 
@@ -5265,6 +6497,20 @@ class ModelicaParser ( Parser ):
             super().__init__(parser)
             self.copyFrom(ctx)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterPrimary_end" ):
+                listener.enterPrimary_end(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitPrimary_end" ):
+                listener.exitPrimary_end(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitPrimary_end" ):
+                return visitor.visitPrimary_end(self)
+            else:
+                return visitor.visitChildren(self)
 
 
     class Primary_output_expression_listContext(PrimaryContext):
@@ -5277,6 +6523,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.Output_expression_listContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterPrimary_output_expression_list" ):
+                listener.enterPrimary_output_expression_list(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitPrimary_output_expression_list" ):
+                listener.exitPrimary_output_expression_list(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitPrimary_output_expression_list" ):
+                return visitor.visitPrimary_output_expression_list(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Primary_unsigned_numberContext(PrimaryContext):
 
@@ -5286,6 +6546,20 @@ class ModelicaParser ( Parser ):
 
         def UNSIGNED_NUMBER(self):
             return self.getToken(ModelicaParser.UNSIGNED_NUMBER, 0)
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterPrimary_unsigned_number" ):
+                listener.enterPrimary_unsigned_number(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitPrimary_unsigned_number" ):
+                listener.exitPrimary_unsigned_number(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitPrimary_unsigned_number" ):
+                return visitor.visitPrimary_unsigned_number(self)
+            else:
+                return visitor.visitChildren(self)
 
 
     class Primary_function_argumentsContext(PrimaryContext):
@@ -5298,6 +6572,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.Function_argumentsContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterPrimary_function_arguments" ):
+                listener.enterPrimary_function_arguments(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitPrimary_function_arguments" ):
+                listener.exitPrimary_function_arguments(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitPrimary_function_arguments" ):
+                return visitor.visitPrimary_function_arguments(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Primary_falseContext(PrimaryContext):
 
@@ -5305,6 +6593,20 @@ class ModelicaParser ( Parser ):
             super().__init__(parser)
             self.copyFrom(ctx)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterPrimary_false" ):
+                listener.enterPrimary_false(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitPrimary_false" ):
+                listener.exitPrimary_false(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitPrimary_false" ):
+                return visitor.visitPrimary_false(self)
+            else:
+                return visitor.visitChildren(self)
 
 
     class Primary_derivativeContext(PrimaryContext):
@@ -5317,6 +6619,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.Function_call_argsContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterPrimary_derivative" ):
+                listener.enterPrimary_derivative(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitPrimary_derivative" ):
+                listener.exitPrimary_derivative(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitPrimary_derivative" ):
+                return visitor.visitPrimary_derivative(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Primary_component_referenceContext(PrimaryContext):
 
@@ -5327,6 +6643,20 @@ class ModelicaParser ( Parser ):
         def component_reference(self):
             return self.getTypedRuleContext(ModelicaParser.Component_referenceContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterPrimary_component_reference" ):
+                listener.enterPrimary_component_reference(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitPrimary_component_reference" ):
+                listener.exitPrimary_component_reference(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitPrimary_component_reference" ):
+                return visitor.visitPrimary_component_reference(self)
+            else:
+                return visitor.visitChildren(self)
 
 
     class Primary_expression_listContext(PrimaryContext):
@@ -5342,6 +6672,20 @@ class ModelicaParser ( Parser ):
                 return self.getTypedRuleContext(ModelicaParser.Expression_listContext,i)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterPrimary_expression_list" ):
+                listener.enterPrimary_expression_list(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitPrimary_expression_list" ):
+                listener.exitPrimary_expression_list(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitPrimary_expression_list" ):
+                return visitor.visitPrimary_expression_list(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Primary_trueContext(PrimaryContext):
 
@@ -5349,6 +6693,20 @@ class ModelicaParser ( Parser ):
             super().__init__(parser)
             self.copyFrom(ctx)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterPrimary_true" ):
+                listener.enterPrimary_true(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitPrimary_true" ):
+                listener.exitPrimary_true(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitPrimary_true" ):
+                return visitor.visitPrimary_true(self)
+            else:
+                return visitor.visitChildren(self)
 
 
     class Primary_functionContext(PrimaryContext):
@@ -5364,6 +6722,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.Function_call_argsContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterPrimary_function" ):
+                listener.enterPrimary_function(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitPrimary_function" ):
+                listener.exitPrimary_function(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitPrimary_function" ):
+                return visitor.visitPrimary_function(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Primary_initialContext(PrimaryContext):
 
@@ -5376,6 +6748,20 @@ class ModelicaParser ( Parser ):
         def function_call_args(self):
             return self.getTypedRuleContext(ModelicaParser.Function_call_argsContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterPrimary_initial" ):
+                listener.enterPrimary_initial(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitPrimary_initial" ):
+                listener.exitPrimary_initial(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitPrimary_initial" ):
+                return visitor.visitPrimary_initial(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -5528,6 +6914,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_name
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterName" ):
+                listener.enterName(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitName" ):
+                listener.exitName(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitName" ):
+                return visitor.visitName(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -5586,6 +6986,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_component_reference_element
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterComponent_reference_element" ):
+                listener.enterComponent_reference_element(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitComponent_reference_element" ):
+                listener.exitComponent_reference_element(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitComponent_reference_element" ):
+                return visitor.visitComponent_reference_element(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -5630,6 +7044,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_component_reference
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterComponent_reference" ):
+                listener.enterComponent_reference(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitComponent_reference" ):
+                listener.exitComponent_reference(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitComponent_reference" ):
+                return visitor.visitComponent_reference(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -5677,6 +7105,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_function_call_args
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterFunction_call_args" ):
+                listener.enterFunction_call_args(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitFunction_call_args" ):
+                listener.exitFunction_call_args(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitFunction_call_args" ):
+                return visitor.visitFunction_call_args(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -5736,6 +7178,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_function_arguments
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterFunction_arguments" ):
+                listener.enterFunction_arguments(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitFunction_arguments" ):
+                listener.exitFunction_arguments(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitFunction_arguments" ):
+                return visitor.visitFunction_arguments(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -5814,6 +7270,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_named_arguments
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterNamed_arguments" ):
+                listener.enterNamed_arguments(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitNamed_arguments" ):
+                listener.exitNamed_arguments(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitNamed_arguments" ):
+                return visitor.visitNamed_arguments(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -5863,6 +7333,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_named_argument
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterNamed_argument" ):
+                listener.enterNamed_argument(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitNamed_argument" ):
+                listener.exitNamed_argument(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitNamed_argument" ):
+                return visitor.visitNamed_argument(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -5915,6 +7399,20 @@ class ModelicaParser ( Parser ):
             return self.getTypedRuleContext(ModelicaParser.ExpressionContext,0)
 
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterArgument_expression" ):
+                listener.enterArgument_expression(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitArgument_expression" ):
+                listener.exitArgument_expression(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitArgument_expression" ):
+                return visitor.visitArgument_expression(self)
+            else:
+                return visitor.visitChildren(self)
+
 
     class Argument_functionContext(Function_argumentContext):
 
@@ -5928,6 +7426,20 @@ class ModelicaParser ( Parser ):
         def named_arguments(self):
             return self.getTypedRuleContext(ModelicaParser.Named_argumentsContext,0)
 
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterArgument_function" ):
+                listener.enterArgument_function(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitArgument_function" ):
+                listener.exitArgument_function(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitArgument_function" ):
+                return visitor.visitArgument_function(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -5995,6 +7507,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_output_expression_list
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterOutput_expression_list" ):
+                listener.enterOutput_expression_list(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitOutput_expression_list" ):
+                listener.exitOutput_expression_list(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitOutput_expression_list" ):
+                return visitor.visitOutput_expression_list(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -6051,6 +7577,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_expression_list
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterExpression_list" ):
+                listener.enterExpression_list(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitExpression_list" ):
+                listener.exitExpression_list(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitExpression_list" ):
+                return visitor.visitExpression_list(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -6100,6 +7640,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_array_subscripts
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterArray_subscripts" ):
+                listener.enterArray_subscripts(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitArray_subscripts" ):
+                listener.exitArray_subscripts(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitArray_subscripts" ):
+                return visitor.visitArray_subscripts(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -6152,6 +7706,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_subscript
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterSubscript" ):
+                listener.enterSubscript(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitSubscript" ):
+                listener.exitSubscript(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitSubscript" ):
+                return visitor.visitSubscript(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -6203,6 +7771,20 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_comment
 
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterComment" ):
+                listener.enterComment(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitComment" ):
+                listener.exitComment(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitComment" ):
+                return visitor.visitComment(self)
+            else:
+                return visitor.visitChildren(self)
+
 
 
 
@@ -6247,6 +7829,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_string_comment
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterString_comment" ):
+                listener.enterString_comment(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitString_comment" ):
+                listener.exitString_comment(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitString_comment" ):
+                return visitor.visitString_comment(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 
@@ -6300,6 +7896,20 @@ class ModelicaParser ( Parser ):
 
         def getRuleIndex(self):
             return ModelicaParser.RULE_annotation
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterAnnotation" ):
+                listener.enterAnnotation(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitAnnotation" ):
+                listener.exitAnnotation(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitAnnotation" ):
+                return visitor.visitAnnotation(self)
+            else:
+                return visitor.visitChildren(self)
 
 
 

@@ -915,8 +915,10 @@ def parse(text: str) -> Optional[Root]:
     # # parser.buildParseTrees = False
     # listener = ModelicaParserErrorListener()
     # parser.addErrorListener(listener)
-    parse_tree = sa_modelica.parse(input_stream, 'stored_definition', error_listener)
-    if error_listener.error:
+    try:
+        parse_tree = sa_modelica.parse(input_stream, 'stored_definition', error_listener)
+    except SyntaxError:
+    #if error_listener.error:
         return None
     ast_listener = ASTListener()
     parse_walker = antlr4.ParseTreeWalker()

@@ -572,6 +572,41 @@ class Class(Node):
 
         super().__init__(**kwargs)
 
+    def _find_class_in_imports(self, component_ref: ComponentRef) -> 'Class':
+        """Search for component_ref in self.imports"""
+        if component_ref.name in self.imports:
+            # First search qualified imports (most common case)
+            import_ = self.imports[component_ref.name] # type: Union[ImportClause, ComponentRef]
+            if isinstance(import_, ImportClause):
+                # Expand short name
+                if component_ref.child:
+                    import_ = import_.components[0].concatenate(component_ref.child[0])
+                else:
+                    import_ = import_.components[0]
+            elif component_ref.child:
+                import_ = import_.concatenate(component_ref.child[0])
+            return self.find_class(import_)
+        else:
+            # Next search packages for unqualified imports (slow, but assuming not common)
+            if '*' in self.imports:
+                c = None
+                for package_ref in self.imports['*'].components: # type: ignore[attr-defined]
+                    imported_comp_ref = package_ref.concatenate(ComponentRef(name=component_ref.name))
+                    # Search within the package
+                    try:
+                        # Avoid infinite recursion with search_imports = False
+                        c = self.find_class(imported_comp_ref, search_imports=False)
+                    except(KeyError, ClassNotFoundError):
+                        pass
+                if c is not None:
+                    # Store result for next lookup
+                    self.imports[component_ref.name] = imported_comp_ref
+                    return c
+                else:
+                    raise ClassNotFoundError
+            else:
+                raise ClassNotFoundError
+
     def find_class_recursively(self, component_ref: ComponentRef, search_parent=True, search_imports=True) -> 'Class':
         """ Recursively search for component_ref in self and linked classes
 
@@ -580,8 +615,6 @@ class Class(Node):
         https://mbe.modelica.university/components/packages/lookup/
         """
         # TODO: Get rid of exception-based algorithm or make imports have separate exception?
-        # TODO: Move import logic to separate function?
-        # TODO: Implement library path lookup from section 13.2.2 of spec
         # TODO: Try @functools.lru_cache if profile shows this is hotspot
         try:
             if not component_ref.child:
@@ -592,47 +625,13 @@ class Class(Node):
         except (KeyError, ClassNotFoundError):
             try:
                 if search_imports:
-                    if component_ref.name in self.imports:
-                        # First search qualified imports (most common case)
-                        import_ = self.imports[component_ref.name] # type: Union[ImportClause, ComponentRef]
-                        if isinstance(import_, ImportClause):
-                            # Expand short name
-                            if component_ref.child:
-                                import_ = import_.components[0].concatenate(component_ref.child[0])
-                            else:
-                                import_ = import_.components[0]
-                        elif component_ref.child:
-                            import_ = import_.concatenate(component_ref.child[0])
-                        return self.find_class_recursively(import_)
-                    else:
-                        # Next search packages for unqualified imports (slow, but assuming not common)
-                        if '*' in self.imports:
-                            c = None
-                            for package_ref in self.imports['*'].components: # type: ignore[attr-defined]
-                                imported_comp_ref = package_ref.concatenate(ComponentRef(name=component_ref.name))
-                                # Search within the package
-                                try:
-                                    # Avoid infinite recursion with search_imports = False
-                                    c = self.find_class_recursively(imported_comp_ref, search_imports=False)
-                                except(KeyError, ClassNotFoundError):
-                                    pass
-                            if c is not None:
-                                # Store result for next lookup
-                                self.imports[component_ref.name] = imported_comp_ref
-                                return c
-                            else:
-                                raise ClassNotFoundError
-                        else:
-                            raise ClassNotFoundError
+                    return self._find_class_in_imports(component_ref)
                 else:
                     raise ClassNotFoundError
             except (KeyError, ClassNotFoundError):
                 if search_parent and self.parent is not None and not self.encapsulated:
                     return self.parent.find_class_recursively(component_ref)
-                else:
-                    return self.root.find_class_in_modelicapath(component_ref,
-                                                                search_parent=search_parent,
-                                                                search_imports=search_imports)
+        raise ClassNotFoundError
 
     def find_class(self, component_ref: ComponentRef, copy=True,
                    check_builtin_classes=False, search_imports=True) -> 'Class':
@@ -652,7 +651,16 @@ class Class(Node):
             else:
                 raise FoundElementaryClassError()
 
-        c = self.find_class_recursively(component_ref, search_imports=search_imports)
+        try:
+            c = self.find_class_recursively(component_ref, search_imports=search_imports)
+        except ClassNotFoundError:
+            # This will parse any files needed if found in MODELICAPATH
+            if self.root.find_ref_in_modelicapath(component_ref):
+                # If above parsed files, restart search
+                # TODO: Implement shortcut since we know the reference is in the just-parsed tree
+                c = self.find_class_recursively(component_ref, search_imports=search_imports)
+            else:
+                raise ClassNotFoundError('Error: class not found: ' + str(component_ref))
 
         if copy:
             c = c.copy_including_children()

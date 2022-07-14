@@ -660,7 +660,7 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(types, {'PositivePin', 'NegativePin'})
 
     def test_modelicapathnode(self):
-        mp = parser.ModelicaPathNode(Path(MSL4_DIR))
+        mp = parser.ModelicaPathNode(MSL4_DIR)
         self.assertEqual(mp.child.keys(), {'Modelica', 'ModelicaReference', 'ModelicaServices',
                                            'ModelicaTest'})
         self.assertEqual(mp.files.keys(), {'ObsoleteModelica4', 'ModelicaTestConversion4',
@@ -670,21 +670,21 @@ class ParseTest(unittest.TestCase):
         #                             'Clocked', 'ComplexBlocks', 'Media'})
         # Package directory
         cref = ast.ComponentRef.from_string('Modelica')
-        paths = mp.lookup(cref)
+        paths = mp.find_pathname(cref)
         self.assertEqual(paths[0].name, 'package.mo')
         # Package file
         cref = ast.ComponentRef.from_string('Modelica.Blocks.Continuous')
-        paths = mp.lookup(cref)
+        paths = mp.find_pathname(cref)
         self.assertEqual(paths[2].name, 'Continuous.mo')
         # Class within a package file
         cref = ast.ComponentRef.from_string('Modelica.Icons.Information')
-        paths= mp.lookup(cref)
+        paths= mp.find_pathname(cref)
         self.assertEqual(paths[1].name, 'Icons.mo')
 
     def test_modelicapath(self):
-        mp = parser.ModelicaPathNode(Path(MSL4_DIR))
+        mp = parser.ModelicaPathNode(MSL4_DIR)
         modelicapath = [mp]
-        mp = parser.ModelicaPathNode(Path(COMPLIANCE_DIR))
+        mp = parser.ModelicaPathNode(COMPLIANCE_DIR)
         modelicapath.append(mp)
         library_tree = parser.Root(name='ModelicaTree', modelicapath=modelicapath)
 
@@ -696,6 +696,26 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(connectors, {'in_p', 'in_n', 'VMin', 'VMax', 'out'})
         types = {sym.connector.type for sym in symbols.values() if sym.connector}
         self.assertEqual(types, {'PositivePin', 'NegativePin'})
+
+    def test_flatten_every_MSL_example(self):
+        mp = parser.ModelicaPathNode(MSL4_DIR)
+        modelicapath = [mp]
+        library_tree = parser.Root(name='ModelicaTree', modelicapath=modelicapath)
+
+        msl_path = Path(MSL4_DIR)
+        root_index = len(msl_path.parts)
+        for path in msl_path.glob('**/Examples/**/*.mo'):
+            if path.name == 'package.mo':
+                continue
+            parts = path.parts
+            model_name = '.'.join(parts[root_index:-1] + (path.stem,))
+            flat_class = ast.ComponentRef.from_string(model_name)
+            try:
+                flat_tree = tree.flatten(library_tree, flat_class)
+                print('Flattened {}'.format(flat_tree.classes[0].name))
+            except Exception as e:
+                print('Error Flattening {}:  {}'.format(model_name, e))
+                #raise e
 
 
 

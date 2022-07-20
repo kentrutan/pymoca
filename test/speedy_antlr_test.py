@@ -12,7 +12,7 @@ from pymoca.generated import sa_modelica
 MY_DIR = os.path.dirname(os.path.realpath(__file__))
 MODEL_DIR = os.path.join(MY_DIR, 'models')
 
-
+@unittest.skip('WIP: TestEquivalent')
 class TestEquivalent(unittest.TestCase):
     """This is based on speedy_antlr_example test"""
 

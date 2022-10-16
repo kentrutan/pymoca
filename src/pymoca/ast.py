@@ -655,7 +655,11 @@ class Class(Node):
             c = self.find_class_recursively(component_ref, search_imports=search_imports)
         except ClassNotFoundError:
             # This will parse any files needed if found in MODELICAPATH
-            if self.root.find_ref_in_modelicapath(component_ref):
+            if self == self.root:
+                start = component_ref
+            else:
+                start = self.full_reference()
+            if self.root.find_ref_in_modelicapath(component_ref, start):
                 # If above parsed files, restart search
                 # TODO: Implement shortcut since we know the reference is in the just-parsed tree
                 c = self.find_class_recursively(component_ref, search_imports=search_imports)

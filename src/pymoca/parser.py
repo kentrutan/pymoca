@@ -4,7 +4,7 @@ Modelica parse Tree to AST tree.
 """
 from __future__ import print_function, absolute_import, division, unicode_literals
 
-from typing import Dict, List, Set, Optional, Union
+from typing import Dict, List, Set, Optional, Union, Tuple, Any
 from collections import deque, OrderedDict
 import copy
 from pathlib import Path
@@ -35,24 +35,28 @@ class ModelicaFile:
         self.classes = OrderedDict()  # type: OrderedDict[str, ast.Class]
         super().__init__(**kwargs)
 
+# TODO: Refactor into tree visitor or listener design pattern
 class ModelicaPathNode:
     """A node to cache contents of one directory tree in MODELICAPATH"""
     def __init__(self, dir_: Union[str, Path]):
         dir_ = Path(str(dir_)) # accept str or Path argument
         self.name = dir_.parts[-1] if dir_.parts else ''  # parts returns empty tuple for "."
         self.child = OrderedDict() # type: OrderedDict[str, ModelicaPathNode]
+        self.parent = None # type: Optional[ModelicaPathNode]
         self.files = OrderedDict() # type: OrderedDict[str, Path]
         for path in dir_.iterdir():
             if path.is_dir():
                 # Modelica spec says directories must contain package.mo.
                 if list(path.glob('package.mo')):
-                    self.child[path.parts[-1]] = ModelicaPathNode(path)
+                    new_node = ModelicaPathNode(path)
+                    new_node.parent = self
+                    self.child[path.parts[-1]] = new_node
             elif path.suffix == '.mo':
                 self.files[path.stem] = path
 
-    def find_pathname_recursively(self, cref: ast.ComponentRef,
-                                         paths: List[Path]) -> List[Path]:
-        """Lookup component ref in this ModelicaPathNode, return list of Paths to be parsed
+    def find_pathname_recursively_down(self, cref: ast.ComponentRef,
+                                         paths: List[Path]) -> Tuple[List[Path], Any]:
+        """Lookup component ref in this ModelicaPathNode, return list of Paths to be parsed and node where found
 
         :param cref: ast.ComponentRef to lookup
         :param paths: path list to eventually be returned, should be None in top-level call
@@ -61,41 +65,100 @@ class ModelicaPathNode:
         All package.mo files in directory tree need to be added to list to be parsed since they
         may contain definitions that are needed.
         """
+        if paths is None:
+            paths = [] # type: List[Optional[Path]]
         node = self.child.get(cref.name, None)
         if node is not None:
             # Found a sub-node
             paths.append(node.files.get('package', None))
             if cref.child:
                 # Lookup next part of ComponentRef
-                return node.find_pathname_recursively(cref.child[0], paths)
+                return node.find_pathname_recursively_down(cref.child[0], paths)
+            else:
+                node_found = node
         else:
             # No sub-node, lookup file
             file = self.files.get(cref.name, None)
             if file:
                 paths.append(file)
+                node_found = self
             else:
                 # Search all sub-nodes of children
+                node_found = None
                 for node in self.child.values():
-                    paths_found = node.find_pathname_recursively(cref, paths)
+                    paths, node_found = node.find_pathname_recursively_down(cref, paths)
                     # Take first successful lookup per spec
-                    if paths_found:
+                    if node_found:
                         break
         # If any part of lookup failed, empty the list
         if None in paths:
             paths = []
-        return paths
+            node_found = None
+        return paths, node_found
 
-    def find_pathname(self, cref: ast.ComponentRef) -> List[Path]:
+    def find_pathname_recursively_up(self, cref: ast.ComponentRef,
+                                        paths: List[Path]) -> List[Path]:
         """Lookup component ref in this ModelicaPathNode, return list of Paths to be parsed
 
         :param cref: ast.ComponentRef to lookup
+        :param paths: path list to eventually be returned, should be None in top-level call
         :return: list of patlib.Path that need to be parsed to resolve lookup (empty if not found)
 
-        All package.mo files in directory tree need to be added to list to be parsed since they
-        may contain definitions that are needed.
+        Lookup starts in directory hierarchy starting at self and proceeds up to root.
+        """
+        # Search for cref within node_found
+        paths_found, _ = self.find_pathname_recursively_down(cref, paths)
+        if paths_found:
+            return paths_found
+        if self.parent is not None:
+            return self.parent.find_pathname_recursively_up(cref, paths)
+        else:
+            return []
+
+    def find_pathname_up(self, cref: ast.ComponentRef, source: ast.ComponentRef) -> List[Path]:
+        """Lookup component ref in this ModelicaPathNode starting at source, return list of Paths to be parsed
+
+        :param cref: ast.ComponentRef to lookup
+        :param source: ast.ComponentRef for starting lookup
+        :return: list of patlib.Path that need to be parsed to resolve lookup (empty if not found)
+
+        Lookup starts in hierarchy starting at source and proceeds up to root according to Modelica
+        name lookup rules.
+        """
+        # TODO: Can this better integrate with ast.Class.find_class() for simplicity and efficiency?
+
+        # Find source class to start search (assumes source is fully qualified)
+        _, source_node = self.find_pathname_recursively_down(source, None)
+        if not source_node:
+            return []
+        # Search for cref within source_node
+        paths_found, node_found = source_node.find_pathname_recursively_down(cref, None)
+        if node_found:
+            return paths_found
+        # Not found below so look upward
+        node = source_node.parent
+        if node is not None:
+            return node.find_pathname_recursively_up(cref, paths_found)
+
+        # If any part of lookup failed, empty the list
+        if None in paths_found:
+            paths_found = []
+        return paths_found
+
+    def find_pathname(self, cref: ast.ComponentRef, source: ast.ComponentRef) -> List[Path]:
+        """Lookup component ref in this ModelicaPathNode starting at source, return list of Paths to be parsed
+
+        :param cref: ast.ComponentRef to lookup
+        :param source: ast.ComponentRef for starting lookup
+        :return: list of pathlib.Path that need to be parsed to resolve lookup (empty if not found)
+
+        Lookup in directory hierarchy starting at source and proceed up to root according to Modelica
+        name lookup rules. If not found, search back down from root according to MODELICAPATH lookup rules.
         """
         paths = [] # type: List[Path]
-        self.find_pathname_recursively(cref, paths)
+        paths = self.find_pathname_up(cref, source)
+        if not paths:
+            paths, _ = self.find_pathname_recursively_down(cref, paths)
         return paths
 
     def __repr__(self):
@@ -110,15 +173,18 @@ class Root(ast.Tree):
         self.parsed_files = set() # type: Set[Path]
         super().__init__(*args, **kwargs)
 
-    def find_ref_in_modelicapath(self, cref: ast.ComponentRef) -> bool:
-        """Search for cref in modelicapath, return True if found.
+    def full_reference(self):
+        return self.name
+
+    def find_ref_in_modelicapath(self, cref: ast.ComponentRef, source: ast.ComponentRef) -> bool:
+        """Search for cref in modelicapath starting at source, return True if found.
 
         Side-effect: if found, parsed files are added to self.
 
-        Reference: Modelica spec version 3.5, section 13.3"""
+        Reference: Modelica spec version 3.5, chapter 13"""
         # TODO: Implement library version number handling
         for node in self.modelicapath:
-            paths = node.find_pathname(cref)
+            paths = node.find_pathname(cref, source)
             if paths:
                 for path in paths:
                     if path not in self.parsed_files:

@@ -159,7 +159,7 @@ class ModelicaPathNode:
         paths = [] # type: List[Path]
         paths = self.find_pathname_up(cref, source)
         if not paths:
-            paths = self.find_pathname_recursively_down(cref, paths)
+            paths, _ = self.find_pathname_recursively_down(cref, paths)
         return paths
 
     def __repr__(self):

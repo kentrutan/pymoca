@@ -56,18 +56,18 @@ class ModelicaPathNode:
                 self.files[path.stem] = path
 
     def find_pathname_recursively_down(self, cref: ast.ComponentRef,
-                                         paths: List[Path]) -> Tuple[List[Path], Any]:
+                paths: Optional[List[Optional[Path]]]) -> Tuple[List[Path], Any]:
         """Lookup component ref in this ModelicaPathNode, return list of Paths to be parsed and node where found
 
         :param cref: ast.ComponentRef to lookup
         :param paths: path list to eventually be returned, should be None in top-level call
-        :return: list of patlib.Path that need to be parsed to resolve lookup (empty if not found)
+        :return: list of pathlib.Path that need to be parsed to resolve lookup (empty if not found)
 
         All package.mo files in directory tree need to be added to list to be parsed since they
         may contain definitions that are needed.
         """
         if paths is None:
-            paths = [] # type: List[Optional[Path]]
+            paths = []
         node = self.child.get(cref.name, None)
         if node is not None:
             # Found a sub-node
@@ -84,21 +84,16 @@ class ModelicaPathNode:
                 paths.append(file)
                 node_found = self
             else:
-                # Search all sub-nodes of children
+                # Lookup failed (see spec 3.5 section 13.3 last paragraph)
                 node_found = None
-                for node in self.child.values():
-                    paths, node_found = node.find_pathname_recursively_down(cref, paths)
-                    # Take first successful lookup per spec
-                    if node_found:
-                        break
         # If any part of lookup failed, empty the list
-        if None in paths:
+        if None in paths or not node_found:
             paths = []
             node_found = None
         return paths, node_found
 
     def find_pathname_recursively_up(self, cref: ast.ComponentRef,
-                                        paths: List[Path]) -> List[Path]:
+                                        paths: Optional[List[Optional[Path]]]) -> List[Path]:
         """Lookup component ref in this ModelicaPathNode, return list of Paths to be parsed
 
         :param cref: ast.ComponentRef to lookup

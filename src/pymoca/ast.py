@@ -415,6 +415,7 @@ class Symbol(Node):
         self.visibility = Visibility.PRIVATE  # type: Visibility
         self.class_modification = None  # type: ClassModification
         self.connector = None # type: Symbol
+        self.parent = None # type: Class
         super().__init__(**kwargs)
 
     def __str__(self):

@@ -670,16 +670,21 @@ class ParseTest(unittest.TestCase):
         #                             'Clocked', 'ComplexBlocks', 'Media'})
         # Package directory
         cref = ast.ComponentRef.from_string('Modelica')
-        paths = mp.find_pathname(cref)
+        paths = mp.find_pathname(cref, cref)
         self.assertEqual(paths[0].name, 'package.mo')
         # Package file
         cref = ast.ComponentRef.from_string('Modelica.Blocks.Continuous')
-        paths = mp.find_pathname(cref)
+        paths = mp.find_pathname(cref, cref)
         self.assertEqual(paths[2].name, 'Continuous.mo')
         # Class within a package file
         cref = ast.ComponentRef.from_string('Modelica.Icons.Information')
-        paths= mp.find_pathname(cref)
+        paths= mp.find_pathname(cref, cref)
         self.assertEqual(paths[1].name, 'Icons.mo')
+        # Unqualified name lookup
+        cref = ast.ComponentRef.from_string('Icons')
+        start = ast.ComponentRef.from_string('Modelica.Icons.Information')
+        paths= mp.find_pathname(cref, start)
+        self.assertEqual(paths[0].name, 'Icons.mo')
 
     def test_modelicapath(self):
         mp = parser.ModelicaPathNode(MSL4_DIR)
@@ -697,6 +702,7 @@ class ParseTest(unittest.TestCase):
         types = {sym.connector.type for sym in symbols.values() if sym.connector}
         self.assertEqual(types, {'PositivePin', 'NegativePin'})
 
+    @unittest.skip('Takes too long')
     def test_flatten_every_MSL_example(self):
         mp = parser.ModelicaPathNode(MSL4_DIR)
         modelicapath = [mp]

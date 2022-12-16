@@ -1043,3 +1043,5 @@ class ModelicaListener(ParseTreeListener):
         pass
 
 
+
+del ModelicaParser

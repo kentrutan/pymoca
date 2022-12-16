@@ -165,7 +165,7 @@ type_specifier_element :
     ;
 
 type_specifier :
-    type_specifier_element ('.' type_specifier_element)*
+    global_lookup='.'? type_specifier_element ('.' type_specifier_element)*
     ;
 
 // B.2.4.4 ------------------------------------------------
@@ -449,7 +449,7 @@ primary :
 
 // B.2.7.5 ------------------------------------------------
 name :
-    '.'? IDENT ('.' IDENT)*
+    IDENT ('.' IDENT)*
     ;
 
 // B.2.7.6 ------------------------------------------------
@@ -458,7 +458,7 @@ component_reference_element :
     ;
 
 component_reference :
-    component_reference_element ('.' component_reference_element)*
+    global_lookup='.'? component_reference_element ('.' component_reference_element)*
     ;
 
 // B.2.7.7 ------------------------------------------------

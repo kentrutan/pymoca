@@ -621,6 +621,14 @@ class ASTListener(ModelicaListener):
         # if 'state' not in self.class_node.symbols[comp_name].prefixes:
         #    self.class_node.symbols[comp_name].prefixes += ['state']
 
+    def exitPrimary_initial(self, ctx: ModelicaParser.Primary_initialContext):
+        args = ctx.function_call_args().function_arguments()
+        operands = self.ast[args][:-1] if args else []
+        self.ast[ctx] = ast.Expression(
+            operator='initial',
+            operands=operands
+        )
+
     def exitType_specifier_element(self, ctx: ModelicaParser.Type_specifier_elementContext):
         self.ast[ctx] = ast.ComponentRef(
             name=ctx.IDENT().getText(),

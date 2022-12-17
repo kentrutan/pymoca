@@ -660,6 +660,15 @@ class ASTListener(ModelicaListener):
         if len(self.ast[ctx]) == 1:
             self.ast[ctx] = self.ast[ctx][0]
 
+    def exitPrimary_expression_list(self, ctx: ModelicaParser.Primary_expression_listContext):
+        outer_list = []
+        for expression_list in ctx.expression_list():
+            inner_list = []
+            for expression in expression_list.expression():
+                inner_list.append(self.ast[expression.simple_expression()])
+            outer_list.append(inner_list)
+        self.ast[ctx] = outer_list
+
     def exitPrimary_function_arguments(self, ctx: ModelicaParser.Primary_function_argumentsContext):
         # TODO: This does not support for generators yet.
         #       Only expressions are supported, e.g. {1.0, 2.0, 3.0}.

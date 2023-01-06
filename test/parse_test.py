@@ -600,10 +600,10 @@ class ParseTest(unittest.TestCase):
         model_name = 'ModelicaCompliance.Functions.Calls.CallNamedArgumentsAssignment'
         flat_class = ast.ComponentRef.from_string(model_name)
         flat_ast = tree.flatten(library_ast, flat_class)
-        A = flat_ast.classes[model_name].equations[0].right.named_operands['A']
+        A = flat_ast.classes[model_name].statements[0].right.named_operands['A']
         for val in range(1,5):
             self.assertEqual(A.values[val-1].value, val)
-        x = flat_ast.classes[model_name].equations[0].right.named_operands['x']
+        x = flat_ast.classes[model_name].statements[0].right.named_operands['x']
         self.assertEqual(x.value, 21)
 
     # Tests using the Modelica Standard Library

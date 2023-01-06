@@ -438,9 +438,14 @@ class ASTListener(ModelicaListener):
             pass
 
     def exitStatement_component_reference(self, ctx: ModelicaParser.Statement_component_referenceContext):
+        right = []
+        if ctx.expression():
+            right = self.ast[ctx.expression()]
+        else:
+            right = self.ast[ctx.function_call_args().function_arguments()][:-1]
         self.ast[ctx] = ast.AssignmentStatement(
             left=[self.ast[ctx.component_reference()]],
-            right=self.ast[ctx.expression()])
+            right=right)
 
     def exitStatement_component_function(self, ctx: ModelicaParser.Statement_component_functionContext):
         all_comp_refs = [self.ast[x] for x in ctx.component_reference()]

@@ -424,7 +424,6 @@ class ASTListener(ModelicaListener):
     #   + Function calls (inside current function).
     #   + Break
     #   + Return
-    #   + While
     #   + When? (also in equation missing)
 
     def enterStatement(self, ctx: ModelicaParser.StatementContext):
@@ -466,6 +465,9 @@ class ASTListener(ModelicaListener):
     def exitStatement_for(self, ctx: ModelicaParser.Statement_forContext):
         self.ast[ctx] = self.ast[ctx.for_statement()]
 
+    def exitStatement_while(self, ctx: ModelicaParser.Statement_whileContext):
+        self.ast[ctx] = self.ast[ctx.while_statement()]
+
     def exitStatement_when(self, ctx: ModelicaParser.Equation_whenContext):
         self.ast[ctx] = self.ast[ctx.when_equation()]
 
@@ -477,6 +479,13 @@ class ASTListener(ModelicaListener):
         self.ast[ctx] = ast.IfStatement(
             conditions=conditions,
             blocks=blocks)
+
+    def exitWhile_statement(self, ctx: ModelicaParser.While_statementContext):
+        block = self.ast[ctx.block]
+        condition = self.ast[ctx.condition]
+        self.ast[ctx] = ast.WhileStatement(
+            condition=condition,
+            block=block)
 
     def exitWhen_statement(self, ctx: ModelicaParser.When_statementContext):
         blocks = [self.ast[b] for b in ctx.blocks]

@@ -347,6 +347,18 @@ class WhenStatement(Node):
             type(self).__name__, self.conditions, self.blocks)
 
 
+class WhileStatement(Node):
+    def __init__(self, **kwargs):
+        self.condition = None  # type: Union[Expression, Primary, ComponentRef]
+        self.block = None      # type: Union[AssignmentStatement, IfStatement, ForStatement]
+        self.comment = ''  # type: str
+        super().__init__(**kwargs)
+
+    def __repr__(self):
+        return '{}(conditions={!r}, blocks={!r})'.format(
+            type(self).__name__, self.condition, self.block)
+
+
 class ForStatement(Node):
     def __init__(self, **kwargs):
         self.indices = []  # type: List[ForIndex]

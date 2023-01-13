@@ -913,11 +913,6 @@ def expand_connections(node: ast.Class, default_flows: bool = True) -> None:
                     # We may be connecting classes which are not connectors, such as Reals.
                     class_right = node.find_class(sym_right.type)
             except ast.FoundElementaryClassError:
-                primary_types = ['Real']
-                # TODO
-                if sym_left.type.name not in primary_types or sym_right.type.name not in primary_types:
-                    logger.warning("Connector class {} or {} not defined.  "
-                                   "Assuming it to be an elementary type.".format(sym_left.type, sym_right.type))
                 connect_equation = ast.Equation(left=equation.left, right=equation.right)
                 node.equations.append(connect_equation)
             else:

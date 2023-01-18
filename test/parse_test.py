@@ -147,6 +147,24 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(flat_tree.classes['C2'].symbols['v1'].nominal.value, 1000.0)
         self.assertEqual(flat_tree.classes['C2'].symbols['v2'].nominal.value, 1000.0)
 
+    def test_nested_classes_two_deep(self):
+        with open(os.path.join(MODEL_DIR, 'NestedClassesTwoDeep.mo'), 'r') as f:
+            txt = f.read()
+        ast_tree = parser.parse(txt)
+        flat_tree = tree.flatten(ast_tree, ast.ComponentRef.from_string('P.M'))
+
+        self.assertEqual(flat_tree.classes['P.M'].symbols['p.v'].nominal.value, 0.0)
+        self.assertEqual(flat_tree.classes['P.M'].symbols['n.v'].nominal.value, 0.0)
+
+    def test_nested_classes_two_deep2(self):
+        with open(os.path.join(MODEL_DIR, 'NestedClassesTwoDeep2.mo'), 'r') as f:
+            txt = f.read()
+        ast_tree = parser.parse(txt)
+        flat_tree = tree.flatten(ast_tree, ast.ComponentRef.from_string('P.M'))
+
+        self.assertEqual(flat_tree.classes['P.M'].symbols['p.v'].nominal.value, 0.0)
+        self.assertEqual(flat_tree.classes['P.M'].symbols['n.v'].nominal.value, 0.0)
+
     def test_inheritance_symbol_modifiers(self):
         with open(os.path.join(MODEL_DIR, 'Inheritance.mo'), 'r') as f:
             txt = f.read()

@@ -208,6 +208,62 @@ class TreeWalker:
         else:
             pass
 
+class SkipAnnotationsWalker(TreeWalker):
+    """TreeWalker that skips processing of annotations"""
+
+    def skip_child(self, tree: ast.Node, child_name: str) -> bool:
+        skip = super().skip_child(tree, child_name)
+        if isinstance(tree, ast.Class) and child_name == "annotation":
+            return True
+        return skip
+
+
+class NameFinder(TreeListener):
+    """
+    Finds all Nodes in tree with given name attribute
+    """
+    def __init__(self, name: str):
+        """Find name in tree starting at node"""
+        self.nodes = []
+        self.name = name
+        super().__init__()
+
+    def exitEvery(self, node: ast.Node):
+        """Add Node to list if name matches"""
+        if hasattr(node, 'name'):
+            if (node.name == self.name):
+                self.nodes.append(node)
+
+
+def find_name(tree: ast.Node, name: str):
+    """Find name (string) in tree"""
+    finder = NameFinder(name)
+    TreeWalker().walk(finder, tree)
+    return finder.nodes
+
+
+class NameInClassFinder(TreeListener):
+    """
+    Finds all Classes in tree containing given name attribute
+    """
+    def __init__(self, name: str):
+        """Find name in tree starting at node"""
+        self.nodes = []
+        self.name = name
+        super().__init__()
+
+    def exitClass(self, node: ast.Class):
+        """Add Node to list if class contains name matches"""
+        if find_name(node, self.name):
+            self.nodes.append(node)
+
+
+def find_classes_containing_name(tree: ast.Node, name: str):
+    """Find name (string) in tree"""
+    finder = NameInClassFinder(name)
+    TreeWalker().walk(finder, tree)
+    return finder.nodes
+
 
 def flatten_extends(orig_class: Union[ast.Class, ast.InstanceClass], modification_environment=None,
                     parent=None) -> ast.InstanceClass:

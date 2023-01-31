@@ -161,7 +161,7 @@ class TreeWalker:
         endless recursion by skipping references to e.g. parent nodes.
         :return: True if child needs to be skipped, False otherwise.
         """
-        if (isinstance(tree, ast.Class) or isinstance(tree, ast.Symbol)) and child_name == 'parent' or \
+        if isinstance(tree, (ast.Class, ast.Symbol)) and child_name in ('parent', 'connector') or \
                 isinstance(tree, ast.ClassModificationArgument) and child_name in ('scope', '__deepcopy__'):
             return True
         return False
@@ -288,7 +288,11 @@ def flatten_extends(orig_class: Union[ast.Class, ast.InstanceClass], modificatio
             if len(orig_class.extends) > 1:
                 raise Exception(
                     "When extending a built-in class (Real, Integer, ...) you cannot extend other classes as well")
-            extended_orig_class.type = c.type
+            # Preserve connector type for later processing
+            if extended_orig_class.type != 'connector':
+                extended_orig_class.type = c.type
+            # Add prefixes to __value symbol
+            c.symbols['__value'].prefixes += extends.prefixes
 
         c = flatten_extends(c, extends.class_modification, parent=c.parent)
 
@@ -328,7 +332,8 @@ def flatten_extends(orig_class: Union[ast.Class, ast.InstanceClass], modificatio
         extended_orig_class.modification_environment.arguments.extend(modification_environment.arguments)
 
     # If the current class is inheriting an elementary type, we shift modifications from the class to its __value symbol
-    if extended_orig_class.type == "__builtin":
+    if extended_orig_class.type == "__builtin" or (
+        extended_orig_class.type == "connector" and "__value" in extended_orig_class.symbols):
         if extended_orig_class.symbols['__value'].class_modification is not None:
             extended_orig_class.symbols['__value'].class_modification.arguments.extend(
                 extended_orig_class.modification_environment.arguments)
@@ -474,7 +479,8 @@ def build_instance_tree(orig_class: Union[ast.Class, ast.InstanceClass], modific
         else:
             # Symbol is not elementary type. Check if we need to move any modifications along.
             sym_arguments = [x for x in extended_orig_class.modification_environment.arguments
-                             if isinstance(x.value, ast.ElementModification) and x.value.component.name == sym_name]
+                             if isinstance(x.value, ast.ElementModification) and x.value.component.name == sym_name
+                             or sym_name == "__value" and x.value.component.name == "value" ]
 
             # Remove from current class's modification environment
             extended_orig_class.modification_environment.arguments = [
@@ -568,8 +574,7 @@ def flatten_symbols(class_: ast.InstanceClass, instance_name='') -> ast.Class:
             # Elementary type
             flat_sym.dimensions = flat_sym.dimensions
             flat_class.symbols[flat_sym.name] = flat_sym
-        elif sym.type.type == "__builtin" or (sym.type.type == "type"
-                                              and "__value" in sym.type.symbols
+        elif sym.type.type == "__builtin" or ("__value" in sym.type.symbols
                                               and sym.type.symbols["__value"].type.name
                                                                     in ast.Class.BUILTIN):
             # Class inherited from elementary type (e.g. "type Voltage =
@@ -583,8 +588,15 @@ def flatten_symbols(class_: ast.InstanceClass, instance_name='') -> ast.Class:
             else:
                 flat_sym.class_modification = sym.type.symbols['__value'].class_modification
 
+            if sym.type.type == 'connector':
+                # Set __connector_type attribute for connect() clause processing
+                # This is for connectors derived from builtin (e.g. `connector
+                # RealInput = input Real`
+                flat_sym.__connector_type = sym.type.symbols['__value'].type
+
+            flat_sym.prefixes += sym.type.symbols['__value'].prefixes
             for att in flat_sym.ATTRIBUTES + ["type"]:
-                setattr(flat_class.symbols[flat_sym.name], att, getattr(sym.type.symbols['__value'], att))
+                setattr(flat_sym, att, getattr(sym.type.symbols['__value'], att))
 
             continue
         else:
@@ -968,12 +980,12 @@ def expand_connections(node: ast.Class, default_flows: bool = True) -> None:
 
             try:
                 class_left = getattr(sym_left, '__connector_type', None)
-                if class_left is None:
+                if class_left is None or isinstance(class_left, ast.ComponentRef):
                     # We may be connecting classes which are not connectors, such as Reals.
                     class_left = node.find_class(sym_left.type)
                 # noinspection PyUnusedLocal
                 class_right = getattr(sym_right, '__connector_type', None)
-                if class_right is None:
+                if class_right is None or isinstance(class_left, ast.ComponentRef):
                     # We may be connecting classes which are not connectors, such as Reals.
                     class_right = node.find_class(sym_right.type)
             except ast.FoundElementaryClassError:
@@ -1056,21 +1068,21 @@ def expand_connections(node: ast.Class, default_flows: bool = True) -> None:
             connect_equation = ast.Equation(left=sym, right=ast.Primary(value=0))
             node.equations.append(connect_equation)
 
-    # move __connector_type attributes to symbols that originated from connectors
-    connectors = []
-    for name, sym in node.symbols.items():
-        if hasattr(sym, '__connector_type'):
-            connectors.append(sym)
-    # remove from symbol table
+    connectors = [sym for sym in node.symbols.values() if hasattr(sym, '__connector_type')]
     for sym in connectors:
-        del node.symbols[sym.name]
-
-    # annotate symbols that are in a connector
+        # remove from symbol table if connector is not an elementary type
+        if sym.__connector_type.name not in ast.Class.BUILTIN:
+            del node.symbols[sym.name]
+    # annotate symbols that are in an outer connector (see MLS v3.5 section 9.1.2)
     for connector in connectors:
         for sym_name in node.symbols:
             if sym_name.split('.')[0] == connector.name:
                 sym = node.symbols[sym_name]
                 sym.connector = connector
+
+    # Connection processing done so we no longer need the special attribute
+    for sym in connectors:
+        del sym.__connector_type
 
 
 def add_state_value_equations(node: ast.Node) -> None:

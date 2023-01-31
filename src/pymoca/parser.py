@@ -268,8 +268,13 @@ class ASTListener(ModelicaListener):
             class_modification = self.ast[ctx.class_modification()]
         else:
             class_modification = ast.ClassModification()
+
+        prefixes = ctx.base_prefix().getText().split(' ')
+        if prefixes[0] == '':
+            prefixes = []
         extends_clause = ast.ExtendsClause(component=self.ast[ctx.component_reference()],
-                                          class_modification=class_modification)
+                                          class_modification=class_modification,
+                                          prefixes=prefixes)
         class_node.extends.append(extends_clause)
 
     def exitComposition(self, ctx: ModelicaParser.CompositionContext):

@@ -559,12 +559,13 @@ class ExtendsClause(Node):
     def __init__(self, **kwargs):
         self.component = None  # type: ComponentRef
         self.class_modification = None  # type: ClassModification
+        self.prefixes = []  # type: List[str]
         self.visibility = Visibility.PRIVATE  # type: Visibility
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return '{}(component={}, class_modification={!r}, visibility={!r})'.format(
-            type(self).__name__, self.component, self.class_modification, self.visibility)
+        return '{}(component={}, prefixes={!r}, class_modification={!r}, visibility={!r})'.format(
+            type(self).__name__, self.component, self.prefixes, self.class_modification, self.visibility)
 
 class Class(Node):
     BUILTIN = ("Real", "Integer", "String", "Boolean")

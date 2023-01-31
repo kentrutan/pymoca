@@ -316,11 +316,13 @@ class ASTListener(ModelicaListener):
     def exitArgument(self, ctx: ModelicaParser.ArgumentContext):
         argument = ast.ClassModificationArgument()
         if ctx.element_modification_or_replaceable() is not None:
-            argument.value = self.ast[ctx.element_modification_or_replaceable()]
+            ctx_argument = ctx.element_modification_or_replaceable()
             argument.redeclare = False
         else:
-            argument.value = self.ast[ctx.element_redeclaration()]
+            ctx_argument = ctx.element_redeclaration()
             argument.redeclare = True
+        argument.value = self.ast[ctx_argument]
+        argument.final = ctx_argument.FINAL() is not None
         self.ast[ctx] = argument
 
     def exitArgument_list(self, ctx: ModelicaParser.Argument_listContext):
@@ -792,16 +794,31 @@ class ASTListener(ModelicaListener):
         self.in_extends_clause = False
 
     def exitRegular_element(self, ctx: ModelicaParser.Regular_elementContext):
+        # TODO: redeclare, inner, outer
         if ctx.comp_elem is not None:
-            self.ast[ctx] = self.ast[ctx.comp_elem]
+            ctx_elem = ctx.comp_elem
         else:
-            self.ast[ctx] = self.ast[ctx.class_elem]
+            ctx_elem = ctx.class_elem
+        element = self.ast[ctx_elem]
+        element.final = ctx.FINAL() is not None
+        # TODO: Rename symbol_list to symbol for symmetry with ast.Class
+        if hasattr(element, 'symbol_list'):
+            symbols = element.symbol_list
+        else:
+            symbols = element.symbols.values()
+        for sym in symbols:
+            sym.final = element.final
+        self.ast[ctx] = element
 
     def exitReplaceable_element(self, ctx: ModelicaParser.Replaceable_elementContext):
+        # TODO: redeclare, inner, outer, replaceable, constraining_clause, comment
         if ctx.comp_elem is not None:
-            self.ast[ctx] = self.ast[ctx.comp_elem]
+            ctx_elem = ctx.comp_elem
         else:
-            self.ast[ctx] = self.ast[ctx.class_elem]
+            ctx_elem = ctx.class_elem
+        element = self.ast[ctx_elem]
+        element.final = ctx.FINAL() is not None
+        self.ast[ctx] = element
 
     def enterComponent_clause(self, ctx: ModelicaParser.Component_clauseContext):
         prefixes = ctx.type_prefix().getText().split(' ')
@@ -895,6 +912,7 @@ class ASTListener(ModelicaListener):
         sym.dimensions = dimensions
         sym.prefixes = self.comp_clause.prefixes
         sym.type = self.comp_clause.type
+        sym.final = self.comp_clause.final
 
         # Declarations can also occur in extends clauses, in which case we do not have to add it to the class's symbols.
         if not self.in_extends_clause:

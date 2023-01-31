@@ -462,6 +462,7 @@ def build_instance_tree(orig_class: Union[ast.Class, ast.InstanceClass], modific
                         vmod_arg.value = ast.ElementModification()
                         vmod_arg.value.component = ast.ComponentRef(name="value")
                         vmod_arg.value.modifications = [el_arg]
+                        vmod_arg.final = arg.final
                         sym_mod.arguments.append(vmod_arg)
                     else:
                         sym_mod.arguments.extend(el_arg.arguments)
@@ -503,6 +504,7 @@ def build_instance_tree(orig_class: Union[ast.Class, ast.InstanceClass], modific
                             vmod_arg.value = ast.ElementModification()
                             vmod_arg.value.component = ast.ComponentRef(name="value")
                             vmod_arg.value.modifications = [el_arg]
+                            vmod_arg.final = arg.final
                             sym_mod.arguments.append(vmod_arg)
                         else:
                             sym_mod.arguments.extend(el_arg.arguments)
@@ -810,10 +812,12 @@ def modify_symbol(sym: ast.Symbol, scope: ast.InstanceClass) -> None:
             "Found redeclaration modification which should already have been handled."
 
         # TODO: Strip all non-symbol stuff.
-        if argument.component.name not in ast.Symbol.ATTRIBUTES:
-            raise Exception("Trying to set unknown symbol property {}".format(argument.component.name))
-
-        setattr(sym, argument.component.name, argument.modifications[0])
+        if argument.component.name in ast.Symbol.ATTRIBUTES:
+            setattr(sym, argument.component.name, argument.modifications[0])
+            if argument.component.name == 'value':
+                sym.final = class_mod_argument.final
+        else:
+            logger.warning('Ignoring symbol "{}" modification "{}"'.format(sym.name, argument.component.name))
 
     sym.class_modification.arguments = skip_args
 

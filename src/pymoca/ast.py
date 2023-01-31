@@ -433,6 +433,7 @@ class ComponentClause(Node):
         self.dimensions = [[Primary(value=None)]]  # type: List[List[Union[Expression, Primary, ComponentRef]]]
         self.comment = []  # type: List[str]
         self.symbol_list = []  # type: List[Symbol]
+        self.final = False  # type: bool
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -538,6 +539,7 @@ class ClassModificationArgument(Node):
         self.value = []  # type: Union[ElementModification, ComponentClause, ShortClassDefinition]
         self.scope = None  # type: InstanceClass
         self.redeclare = False
+        self.final = False  # type: bool
         super().__init__(**kwargs)
 
     def __repr__(self):

@@ -963,6 +963,7 @@ def expand_connections(node: ast.Class, default_flows: bool = True) -> None:
     # add flow equations
     # for all equations in original class
     flow_connections = OrderedDict()
+    connection_sets = set()
     orig_equations = node.equations[:]
     node.equations = []
     for equation in orig_equations:
@@ -974,6 +975,13 @@ def expand_connections(node: ast.Class, default_flows: bool = True) -> None:
             if len(equation.right.child) != 0:
                 raise Exception("Could not resolve {} in connect clause ({}*, {}*)".format(
                     equation.right, equation.left, equation.right))
+
+            # Prevent redundant connection equations
+            connection = (equation.left.name, equation.right.name)
+            if connection in connection_sets:
+                continue
+            connection_sets.add(connection)
+            connection_sets.add(tuple(reversed(connection)))
 
             sym_left = node.symbols[equation.left.name]
             sym_right = node.symbols[equation.right.name]

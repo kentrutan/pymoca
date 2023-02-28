@@ -45,6 +45,13 @@ ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 # pylint: disable=no-init, too-few-public-methods
 
 
+PYTHON_VERSION = sys.version_info[:3]
+PYTHON_VERSION_REQUIRED = (3, 7, 0)
+if PYTHON_VERSION < PYTHON_VERSION_REQUIRED:
+    sys.exit("Sorry, only Python >= {}.{}.{} is supported".format(
+        *PYTHON_VERSION_REQUIRED))
+
+
 class AntlrBuildCommand(Command):
     """Customized setuptools build command."""
 

@@ -116,7 +116,7 @@ class Primary(Node):
 
 class Array(Node):
     def __init__(self, **kwargs):
-        self.values = []  # type: List[Union[Expression, Primary, ComponentRef, Array]]
+        self.values = []  # type: List[Union[Expression, Primary, ComponentRef, Array, Iterator]]
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -140,6 +140,20 @@ class Slice(Node):
     def __str__(self):
         return '{} start: {}, stop: {}, step: {}'.format(
             type(self).__name__, self.start, self.stop, self.step)
+
+
+class Iterator(Node):
+    def __init__(self, **kwargs):
+        self.expression = Primary(value=None)  # type: Union[Expression, Primary, ComponentRef]
+        self.indices = []  # type: List[ForIndex]
+        super().__init__(**kwargs)
+
+    def __repr__(self):
+        return '{}(expression={!r}, indices={!r})'.format(
+            type(self).__name__, self.expression, self.indices)
+
+    def __str__(self):
+        return '{} for {}'.format(self.expression, self.indices)
 
 
 class ComponentRef(Node):
@@ -376,6 +390,7 @@ class Function(Node):
         self.name = '' # type: str
         self.arguments = []  # type: List[Union[Expression, Primary, ComponentRef, Array]]
         self.named_args = {}  # type: Dict[str, Union[Expression, Primary, ComponentRef, Array]]
+        self.indices = []  # type: List[ForIndex]
         self.comment = ''  # type: str
         super().__init__(**kwargs)
 

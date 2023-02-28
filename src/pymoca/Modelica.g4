@@ -479,7 +479,7 @@ function_call_args :
 //     ;
 
 function_arguments :
-    expression 'for' for_indices    # function_arguments_reduction_expression
+    expression 'for' for_indices    # function_arguments_iterator
     | function_arguments_non_first  # function_arguments_list
     ;
 

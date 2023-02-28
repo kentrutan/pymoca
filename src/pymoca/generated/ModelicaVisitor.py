@@ -524,8 +524,8 @@ class ModelicaVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by ModelicaParser#function_arguments_reduction_expression.
-    def visitFunction_arguments_reduction_expression(self, ctx:ModelicaParser.Function_arguments_reduction_expressionContext):
+    # Visit a parse tree produced by ModelicaParser#function_arguments_iterator.
+    def visitFunction_arguments_iterator(self, ctx:ModelicaParser.Function_arguments_iteratorContext):
         return self.visitChildren(ctx)
 
 

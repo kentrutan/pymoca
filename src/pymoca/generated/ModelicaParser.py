@@ -7054,7 +7054,7 @@ class ModelicaParser ( Parser ):
 
 
 
-    class Function_arguments_reduction_expressionContext(Function_argumentsContext):
+    class Function_arguments_iteratorContext(Function_argumentsContext):
 
         def __init__(self, parser, ctx:ParserRuleContext): # actually a ModelicaParser.Function_argumentsContext
             super().__init__(parser)
@@ -7068,16 +7068,16 @@ class ModelicaParser ( Parser ):
 
 
         def enterRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "enterFunction_arguments_reduction_expression" ):
-                listener.enterFunction_arguments_reduction_expression(self)
+            if hasattr( listener, "enterFunction_arguments_iterator" ):
+                listener.enterFunction_arguments_iterator(self)
 
         def exitRule(self, listener:ParseTreeListener):
-            if hasattr( listener, "exitFunction_arguments_reduction_expression" ):
-                listener.exitFunction_arguments_reduction_expression(self)
+            if hasattr( listener, "exitFunction_arguments_iterator" ):
+                listener.exitFunction_arguments_iterator(self)
 
         def accept(self, visitor:ParseTreeVisitor):
-            if hasattr( visitor, "visitFunction_arguments_reduction_expression" ):
-                return visitor.visitFunction_arguments_reduction_expression(self)
+            if hasattr( visitor, "visitFunction_arguments_iterator" ):
+                return visitor.visitFunction_arguments_iterator(self)
             else:
                 return visitor.visitChildren(self)
 
@@ -7117,7 +7117,7 @@ class ModelicaParser ( Parser ):
             self._errHandler.sync(self)
             la_ = self._interp.adaptivePredict(self._input,106,self._ctx)
             if la_ == 1:
-                localctx = ModelicaParser.Function_arguments_reduction_expressionContext(self, localctx)
+                localctx = ModelicaParser.Function_arguments_iteratorContext(self, localctx)
                 self.enterOuterAlt(localctx, 1)
                 self.state = 879
                 self.expression()

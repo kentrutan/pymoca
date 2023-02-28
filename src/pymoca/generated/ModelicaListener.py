@@ -935,12 +935,12 @@ class ModelicaListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by ModelicaParser#function_arguments_reduction_expression.
-    def enterFunction_arguments_reduction_expression(self, ctx:ModelicaParser.Function_arguments_reduction_expressionContext):
+    # Enter a parse tree produced by ModelicaParser#function_arguments_iterator.
+    def enterFunction_arguments_iterator(self, ctx:ModelicaParser.Function_arguments_iteratorContext):
         pass
 
-    # Exit a parse tree produced by ModelicaParser#function_arguments_reduction_expression.
-    def exitFunction_arguments_reduction_expression(self, ctx:ModelicaParser.Function_arguments_reduction_expressionContext):
+    # Exit a parse tree produced by ModelicaParser#function_arguments_iterator.
+    def exitFunction_arguments_iterator(self, ctx:ModelicaParser.Function_arguments_iteratorContext):
         pass
 
 

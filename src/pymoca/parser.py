@@ -702,31 +702,45 @@ class ASTListener(ModelicaListener):
         self.ast[ctx] = outer_list
 
     def exitPrimary_array(self, ctx: ModelicaParser.Primary_arrayContext):
-        # TODO: This does not support for generators yet.
-        #       Only expressions are supported, e.g. {1.0, 2.0, 3.0}.
-        v = [self.ast[x] for x in ctx.array_arguments().expression()]
+        # TODO: Test iterators
+        #       Only expressions, e.g. {1.0, 2.0, 3.0}, have been tested.
+        indices = ctx.array_arguments().for_indices()
+        expression = ctx.array_arguments().expression()
+        if indices is not None:
+            v = [ast.Iterator(expression=self.ast[expression[0]],
+                              indices=self.ast[indices]
+                              )]
+        else:
+            v = [self.ast[x] for x in expression]
         self.ast[ctx] = ast.Array(values=v)
 
     def exitNamed_arguments(self, ctx: ModelicaParser.Named_argumentsContext):
         self.ast[ctx] = {x.IDENT().getText(): self.ast[x.function_argument()]
                             for x in ctx.named_argument()}
 
+    def exitFunction_arguments_iterator(self,
+            ctx: ModelicaParser.Function_arguments_iteratorContext):
+        args = [ast.Iterator(expression=self.ast[ctx.expression()],
+                             indices=self.ast[ctx.for_indices()]
+                             )]
+        self.ast[ctx] = args
+
     def exitFunction_arguments_list(self, ctx: ModelicaParser.Function_arguments_listContext):
         # Unpack the arguments list
         # Would like to have ANTLR handle this, but Modelica grammar makes it difficult
-        func_args = []
+        args = []
         named_args = {}
         child = ctx.function_arguments_non_first()
         while child:
             arg = child.function_argument()
             if arg:
-                func_args.append(self.ast[arg])
+                args.append(self.ast[arg])
             arg = child.named_arguments()
             if arg:
                 named_args.update(self.ast[arg])
             child = child.function_arguments_non_first()
-        func_args.append(named_args)
-        self.ast[ctx] = func_args
+        args.append(named_args)
+        self.ast[ctx] = args
 
     def exitEquation_function(self, ctx: ModelicaParser.Equation_functionContext):
         args = self.ast[ctx.function_call_args().function_arguments()]

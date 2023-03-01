@@ -10,7 +10,7 @@ case "$#" in
         exit 1;;
 esac
 basic="antlr4-python3-runtime==4.9.* casadi sympy scipy jinja2 lxml matplotlib"
-develop="speedy-antlr-tool==1.3.* coverage pytest pytest-cov pytest-xdist pylint flake8 mypy tox"
+develop="speedy-antlr-tool==1.3.* coverage pytest pytest-cov pytest-xdist pylint flake8 mypy tox versioneer"
 notebook="jupyterlab pydotplus control slycot"
 case "$config" in
     basic)      packages="$basic";;

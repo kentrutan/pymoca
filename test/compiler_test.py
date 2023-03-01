@@ -7,7 +7,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 
-import tools.compiler
+import pymoca.compiler
 
 FILE_DIR = os.path.dirname(os.path.realpath(__file__))
 MODEL_DIR = os.path.join(FILE_DIR, 'models')
@@ -26,7 +26,7 @@ class CompilerTest(unittest.TestCase):
 
     def run_compiler(self, args, check_errors=True):
         'Run compiler with all arguments given as a string'
-        exitval = tools.compiler.main(args.split())
+        exitval = pymoca.compiler.main(args.split())
         if check_errors:
             self.assertFalse(exitval, msg='tools.compiler ' + args)
         return exitval

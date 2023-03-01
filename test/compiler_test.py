@@ -7,7 +7,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 import unittest
 
-import tools.compiler
+import pymoca.compiler
 
 FILE_DIR = os.path.dirname(os.path.realpath(__file__))
 MODEL_DIR = os.path.join(FILE_DIR, 'models')
@@ -26,7 +26,10 @@ class CompilerTest(unittest.TestCase):
 
     def run_compiler(self, args, check_errors=True):
         'Run compiler with all arguments given as a string'
-        exitval = tools.compiler.main(args.split())
+        # Add program name to args
+        argv = args.split()
+        argv.insert(0, 'pymoca')
+        exitval = pymoca.compiler.main(argv)
         if check_errors:
             self.assertFalse(exitval, msg='tools.compiler ' + args)
         return exitval
@@ -36,6 +39,12 @@ class CompilerTest(unittest.TestCase):
         filename_path = os.path.join(MODEL_DIR, filename)
         args = options + ' -m' + model + ' ' + filename_path
         return self.run_compiler(args)
+
+    def test_compiler_arg_types(self):
+        'Compiler raises ValueError when args are not List[str]'
+        for args in (tuple('pymoca'), [1, 2, 3], 'str is not allowed', ['pymoca', 2]):
+            with self.assertRaises(ValueError):
+                pymoca.compiler.main(args)
 
     def test_argparse_checks_good(self):
         'Stuff that argparse should handle ok and exit'

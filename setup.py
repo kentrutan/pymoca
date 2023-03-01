@@ -139,7 +139,8 @@ def setup_package():
         packages=find_packages("src"),
         package_dir={"": "src"},
         include_package_data=True,
-        cmdclass=cmdclass_
+        cmdclass=cmdclass_,
+        entry_points={'console_scripts': ['pymoca = pymoca.compiler:cli']},
     )
 
 

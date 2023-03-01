@@ -14,13 +14,10 @@ import time
 import logging
 import json
 
-from pymoca import __version__
-import pymoca.ast
-import pymoca.tree
-import pymoca.parser
+from . import __version__, ast, tree, parser
 
-import pymoca.backends.sympy.generator as sympy_gen
-import pymoca.backends.casadi.api as casadi_api
+from .backends.sympy import generator as sympy_gen
+from .backends.casadi import api as casadi_api
 
 log = logging.getLogger("pymoca")
 logging.basicConfig(stream=sys.stderr)
@@ -46,7 +43,7 @@ def list_modelica_files(paths: List[Path]) -> List[Path]:
     return files
 
 
-def parse_file(path: Path) -> Union[pymoca.ast.Tree, None]:
+def parse_file(path: Path) -> Union[ast.Tree, None]:
     """Parse a Modelica file and return AST or None on failure
 
     :param path: single Path containing Modelica code
@@ -56,7 +53,7 @@ def parse_file(path: Path) -> Union[pymoca.ast.Tree, None]:
     try:
         log.info('Parsing %s ...', path)
         with path.open(encoding='utf-8') as file:
-            ast = pymoca.parser.parse(file.read())
+            ast = parser.parse(file.read())
         if ast is None:
             log.error('Syntax error in file "%s"', path)
         elif log.level == logging.DEBUG:
@@ -71,7 +68,7 @@ def parse_file(path: Path) -> Union[pymoca.ast.Tree, None]:
     return ast
 
 
-def parse_all(paths: List[Path], ast: pymoca.ast.Tree = None) -> Tuple[List[Path], List[Path]]:
+def parse_all(paths: List[Path], ast: ast.Tree = None) -> Tuple[List[Path], List[Path]]:
     """Parse a list of files and directory trees and add to given AST
 
     :param paths: List of files and diretory trees to parse
@@ -82,7 +79,7 @@ def parse_all(paths: List[Path], ast: pymoca.ast.Tree = None) -> Tuple[List[Path
     if not files:
         return [], []
     if not ast:
-        ast = pymoca.ast.Tree(name='ModelicaTree')
+        ast = ast.Tree(name='ModelicaTree')
     # Parse all .mo files
     error_files = []
     for path in files:
@@ -94,22 +91,22 @@ def parse_all(paths: List[Path], ast: pymoca.ast.Tree = None) -> Tuple[List[Path
     return files, error_files
 
 
-def flatten_class(library_ast: pymoca.ast.Tree, class_: str) -> pymoca.ast.Tree:
+def flatten_class(library_ast: ast.Tree, class_: str) -> ast.Tree:
     """Flatten given class and return AST
 
     :param library_ast: Previously parsed AST containing the above class
     :param class_: Class to flatten, e.g. 'Package1.Package2.Model'
-    :return: flattened pymoca.ast.Tree
+    :return: flattened ast.Tree
     """
     log.info('Flattening %s ...', class_)
-    component_ref = pymoca.ast.ComponentRef.from_string(class_)
-    flat_tree = pymoca.tree.flatten(library_ast, component_ref)
+    component_ref = ast.ComponentRef.from_string(class_)
+    flat_tree = tree.flatten(library_ast, component_ref)
     if log.level == logging.DEBUG:
         log.debug(json.dumps(flat_tree.to_json(flat_tree), indent=2))
     return flat_tree
 
 
-def translate(library_ast: pymoca.ast.Tree, model: str,
+def translate(library_ast: ast.Tree, model: str,
               translator: str, options: dict, outdir: Path = Path('.')) -> bool:
     """Given parsed Modelica AST, generate code for model into given directory
 
@@ -146,12 +143,12 @@ class MyArgumentParser(argparse.ArgumentParser):
     def convert_arg_line_to_args(self, arg_line):
         return arg_line.split()
 
-def main(argv: List[str]) -> int:
-    """Parse command line options and do the work
+def cli() -> int:
+    '''Parse command line options and do the work
 
-    :param argv: list of command line arguments, not including program name (pass "-h" for help printout)
+    Command line arguments are taken from sys.argv("-h" gives help printout).
     :return: number of usage errors (not parse errors)
-    """
+    '''
     example_help = '''
     Examples:
 
@@ -195,7 +192,7 @@ def main(argv: List[str]) -> int:
     genargs.add_argument('-o', '--outdir', type=Path, default='.',
                     help='directory to contain output code')
 
-    args = argp.parse_args(argv)
+    args = argp.parse_args()
     errors = 0  # For additional argument checks beyond what argparse does
 
     if args.verbose == 0:
@@ -274,16 +271,16 @@ def main(argv: List[str]) -> int:
         return errors
 
     # Scan and cache MODELICAPATH directories and files
-    modelicapath_list = [] # type: List[pymoca.parser.ModelicaPathNode]
+    modelicapath_list = [] # type: List[parser.ModelicaPathNode]
     for path in modelica_path:
-        modelicapath_list.append(pymoca.parser.ModelicaPathNode(path))
+        modelicapath_list.append(parser.ModelicaPathNode(path))
 
     tic = time.perf_counter()
     error_files = [] # type: List[Path]
     modelica_files = [] # type: List[Path]
     if args.translator == 'sympy' or not args.translator:
 
-        library_ast = pymoca.parser.Root(name='ModelicaTree', modelicapath=modelicapath_list)
+        library_ast = parser.Root(name='ModelicaTree', modelicapath=modelicapath_list)
         modelica_files, error_files = parse_all(args.PATHNAME, library_ast)
         if not modelica_files and not modelicapath_list:
             errors += 1
@@ -351,8 +348,17 @@ def main(argv: List[str]) -> int:
     log.info(goodbye_message)
     return errors
 
+def main(argv: List[str]) -> int:
+    """Entry point to command line interface from imported module
+
+    :param argv: Command line arguments
+    """
+    if not isinstance(argv, list) or not all(isinstance(x, str) for x in argv):
+        raise ValueError('argv must be list of str')
+    sys.argv = argv
+    return cli()
 
 if __name__ == '__main__':
-    err = main(sys.argv[1:])
+    err = cli()
     logging.shutdown()
     sys.exit(err)

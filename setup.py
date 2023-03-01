@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-"""A python/modelica based simulation environment.
+"""A Modelica to computer algebra system (CAS) compiler written in python.
 
-Pymoca contains a Python based compiler for the modelica language
-and enables interacting with Modelica easily in Python.
+Pymoca contains a Python-based compiler for the modelica language
+that enables interacting with Modelica syntax in Python as well as
+generation of code for various environments in the backends package.
 
 """
 

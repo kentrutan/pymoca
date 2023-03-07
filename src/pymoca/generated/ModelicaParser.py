@@ -507,46 +507,46 @@ class ModelicaParser ( Parser ):
 
     sharedContextCache = PredictionContextCache()
 
-    literalNames = [ "<INVALID>", "';'", "'class'", "'model'", "'operator'",
-                     "'record'", "'block'", "'expandable'", "'connector'",
-                     "'type'", "'package'", "'pure'", "'impure'", "'function'",
-                     "'end'", "'='", "'enumeration'", "'('", "':'", "')'",
-                     "'der'", "','", "'extends'", "'public'", "'protected'",
-                     "'external'", "'replaceable'", "'import'", "'.*'",
-                     "'.{'", "'}'", "'constrainedby'", "'flow'", "'stream'",
-                     "'discrete'", "'parameter'", "'constant'", "'input'",
-                     "'output'", "'.'", "'if'", "':='", "'equation'", "'algorithm'",
-                     "'break'", "'return'", "'then'", "'elseif'", "'else'",
-                     "'for'", "'loop'", "'in'", "'while'", "'when'", "'elsewhen'",
-                     "'connect'", "'+'", "'-'", "'^'", "'.^'", "'*'", "'/'",
-                     "'./'", "'.+'", "'.-'", "'<'", "'<='", "'>'", "'>='",
-                     "'=='", "'<>'", "'not'", "'and'", "'or'", "'false'",
-                     "'true'", "'['", "']'", "'{'", "'annotation'", "'each'",
-                     "'partial'", "'final'", "'within'", "'encapsulated'",
+    literalNames = [ "<INVALID>", "';'", "'class'", "'model'", "'operator'", 
+                     "'record'", "'block'", "'expandable'", "'connector'", 
+                     "'type'", "'package'", "'pure'", "'impure'", "'function'", 
+                     "'end'", "'='", "'enumeration'", "'('", "':'", "')'", 
+                     "'der'", "','", "'extends'", "'public'", "'protected'", 
+                     "'external'", "'replaceable'", "'import'", "'.*'", 
+                     "'.{'", "'}'", "'constrainedby'", "'flow'", "'stream'", 
+                     "'discrete'", "'parameter'", "'constant'", "'input'", 
+                     "'output'", "'.'", "'if'", "':='", "'equation'", "'algorithm'", 
+                     "'break'", "'return'", "'then'", "'elseif'", "'else'", 
+                     "'for'", "'loop'", "'in'", "'while'", "'when'", "'elsewhen'", 
+                     "'connect'", "'+'", "'-'", "'^'", "'.^'", "'*'", "'/'", 
+                     "'./'", "'.+'", "'.-'", "'<'", "'<='", "'>'", "'>='", 
+                     "'=='", "'<>'", "'not'", "'and'", "'or'", "'false'", 
+                     "'true'", "'['", "']'", "'{'", "'annotation'", "'each'", 
+                     "'partial'", "'final'", "'within'", "'encapsulated'", 
                      "'redeclare'", "'inner'", "'outer'", "'initial'" ]
 
-    symbolicNames = [ "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>",
-                      "EACH", "PARTIAL", "FINAL", "WITHIN", "ENCAPSULATED",
-                      "REDECLARE", "INNER", "OUTER", "INITIAL", "IDENT",
+    symbolicNames = [ "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
+                      "EACH", "PARTIAL", "FINAL", "WITHIN", "ENCAPSULATED", 
+                      "REDECLARE", "INNER", "OUTER", "INITIAL", "IDENT", 
                       "STRING", "UNSIGNED_NUMBER", "COMMENT", "WS" ]
 
     RULE_stored_definition = 0
@@ -628,29 +628,30 @@ class ModelicaParser ( Parser ):
     RULE_string_comment = 76
     RULE_annotation = 77
 
-    ruleNames =  [ "stored_definition", "stored_definition_class", "class_definition",
-                   "class_prefixes", "class_type", "class_specifier", "base_prefix",
-                   "enum_list", "enumeration_literal", "composition", "language_specification",
-                   "external_function_call", "element_list", "element",
-                   "regular_element", "replaceable_element", "import_clause",
-                   "import_list", "extends_clause", "constraining_clause",
-                   "component_clause", "type_prefix", "type_specifier_element",
-                   "type_specifier", "component_list", "component_declaration",
-                   "condition_attribute", "declaration", "modification",
-                   "class_modification", "argument_list", "argument", "element_modification_or_replaceable",
-                   "element_modification", "element_redeclaration", "element_replaceable",
-                   "component_clause1", "component_declaration1", "short_class_definition",
-                   "equation_block", "equation_section", "statement_block",
-                   "algorithm_section", "equation_options", "equation",
-                   "statement_options", "statement", "if_equation", "if_statement",
-                   "for_equation", "for_statement", "for_indices", "for_index",
-                   "while_statement", "when_equation", "when_statement",
-                   "connect_clause", "expression", "simple_expression",
-                   "expr", "primary", "name", "component_reference_element",
-                   "component_reference", "function_call_args", "function_arguments",
-                   "named_arguments", "named_argument", "function_argument",
-                   "output_expression_list", "expression_list", "array_subscripts",
-                   "subscript", "comment", "string_comment", "annotation" ]
+    ruleNames =  [ "stored_definition", "stored_definition_class", "class_definition", 
+                   "class_prefixes", "class_type", "class_specifier", "base_prefix", 
+                   "enum_list", "enumeration_literal", "composition", "language_specification", 
+                   "external_function_call", "element_list", "element", 
+                   "regular_element", "replaceable_element", "import_clause", 
+                   "import_list", "extends_clause", "constraining_clause", 
+                   "component_clause", "type_prefix", "type_specifier_element", 
+                   "type_specifier", "component_list", "component_declaration", 
+                   "condition_attribute", "declaration", "modification", 
+                   "class_modification", "argument_list", "argument", "element_modification_or_replaceable", 
+                   "element_modification", "element_redeclaration", "element_replaceable", 
+                   "component_clause1", "component_declaration1", "short_class_definition", 
+                   "equation_block", "equation_section", "statement_block", 
+                   "algorithm_section", "equation_options", "equation", 
+                   "statement_options", "statement", "if_equation", "if_statement", 
+                   "for_equation", "for_statement", "for_indices", "for_index", 
+                   "while_statement", "when_equation", "when_statement", 
+                   "connect_clause", "expression", "simple_expression", 
+                   "expr", "primary", "name", "component_reference_element", 
+                   "component_reference", "function_call_args", "function_arguments", 
+                   "function_arguments_non_first", "array_arguments", "named_arguments", 
+                   "named_argument", "function_argument", "output_expression_list", 
+                   "expression_list", "array_subscripts", "subscript", "comment", 
+                   "string_comment", "annotation" ]
 
     EOF = Token.EOF
     T__0=1
@@ -1166,7 +1167,7 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_class_specifier
 
-
+     
         def copyFrom(self, ctx:ParserRuleContext):
             super().copyFrom(ctx)
 
@@ -2466,9 +2467,9 @@ class ModelicaParser ( Parser ):
                 if _alt==1:
                     self.state = 391
                     self.match(ModelicaParser.T__20)
-                    self.state = 388
-                    self.import_list()
-                self.state = 393
+                    self.state = 392
+                    self.import_list() 
+                self.state = 397
                 self._errHandler.sync(self)
                 _alt = self._interp.adaptivePredict(self._input,42,self._ctx)
 
@@ -3137,7 +3138,7 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_modification
 
-
+     
         def copyFrom(self, ctx:ParserRuleContext):
             super().copyFrom(ctx)
 
@@ -4083,9 +4084,9 @@ class ModelicaParser ( Parser ):
                 if _alt==1:
                     self.state = 563
                     self.equation()
-                    self.state = 557
-                    self.match(ModelicaParser.T__0)
-                self.state = 563
+                    self.state = 564
+                    self.match(ModelicaParser.T__0) 
+                self.state = 570
                 self._errHandler.sync(self)
                 _alt = self._interp.adaptivePredict(self._input,76,self._ctx)
 
@@ -4287,7 +4288,7 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_equation_options
 
-
+     
         def copyFrom(self, ctx:ParserRuleContext):
             super().copyFrom(ctx)
 
@@ -4577,7 +4578,7 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_statement_options
 
-
+     
         def copyFrom(self, ctx:ParserRuleContext):
             super().copyFrom(ctx)
 
@@ -5320,14 +5321,13 @@ class ModelicaParser ( Parser ):
             self.for_index()
             self.state = 699
             self._errHandler.sync(self)
-            _alt = self._interp.adaptivePredict(self._input,88,self._ctx)
-            while _alt!=2 and _alt!=ATN.INVALID_ALT_NUMBER:
-                if _alt==1:
-                    self.state = 691
-                    self.match(ModelicaParser.T__20)
-                    self.state = 689
-                    self.for_index()
-                self.state = 694
+            _la = self._input.LA(1)
+            while _la==ModelicaParser.T__20:
+                self.state = 695
+                self.match(ModelicaParser.T__20)
+                self.state = 696
+                self.for_index()
+                self.state = 701
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
@@ -5712,7 +5712,7 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_expression
 
-
+     
         def copyFrom(self, ctx:ParserRuleContext):
             super().copyFrom(ctx)
 
@@ -5918,7 +5918,7 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_expr
 
-
+     
         def copyFrom(self, ctx:ParserRuleContext):
             super().copyFrom(ctx)
 
@@ -6334,8 +6334,8 @@ class ModelicaParser ( Parser ):
                         self.expr(3)
                         pass
 
-
-                self.state = 808
+             
+                self.state = 815
                 self._errHandler.sync(self)
                 _alt = self._interp.adaptivePredict(self._input,98,self._ctx)
 
@@ -6357,7 +6357,7 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_primary
 
-
+     
         def copyFrom(self, ctx:ParserRuleContext):
             super().copyFrom(ctx)
 
@@ -6967,9 +6967,9 @@ class ModelicaParser ( Parser ):
                 if _alt==1:
                     self.state = 866
                     self.match(ModelicaParser.T__38)
-                    self.state = 860
-                    self.component_reference_element()
-                self.state = 865
+                    self.state = 867
+                    self.component_reference_element() 
+                self.state = 872
                 self._errHandler.sync(self)
                 _alt = self._interp.adaptivePredict(self._input,104,self._ctx)
 
@@ -7048,7 +7048,7 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_function_arguments
 
-
+     
         def copyFrom(self, ctx:ParserRuleContext):
             super().copyFrom(ctx)
 
@@ -7143,9 +7143,7 @@ class ModelicaParser ( Parser ):
             self.exitRule()
         return localctx
 
-
     class Function_arguments_non_firstContext(ParserRuleContext):
-        __slots__ = 'parser'
 
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
@@ -7214,6 +7212,86 @@ class ModelicaParser ( Parser ):
                 self.named_arguments()
                 pass
 
+
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+    class Array_argumentsContext(ParserRuleContext):
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def expression(self, i:int=None):
+            if i is None:
+                return self.getTypedRuleContexts(ModelicaParser.ExpressionContext)
+            else:
+                return self.getTypedRuleContext(ModelicaParser.ExpressionContext,i)
+
+
+        def for_indices(self):
+            return self.getTypedRuleContext(ModelicaParser.For_indicesContext,0)
+
+
+        def getRuleIndex(self):
+            return ModelicaParser.RULE_array_arguments
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterArray_arguments" ):
+                listener.enterArray_arguments(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitArray_arguments" ):
+                listener.exitArray_arguments(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitArray_arguments" ):
+                return visitor.visitArray_arguments(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def array_arguments(self):
+
+        localctx = ModelicaParser.Array_argumentsContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 134, self.RULE_array_arguments)
+        self._la = 0 # Token type
+        try:
+            self.enterOuterAlt(localctx, 1)
+            self.state = 894
+            self.expression()
+            self.state = 904
+            self._errHandler.sync(self)
+            token = self._input.LA(1)
+            if token in [ModelicaParser.T__20, ModelicaParser.T__29]:
+                self.state = 899
+                self._errHandler.sync(self)
+                _la = self._input.LA(1)
+                while _la==ModelicaParser.T__20:
+                    self.state = 895
+                    self.match(ModelicaParser.T__20)
+                    self.state = 896
+                    self.expression()
+                    self.state = 901
+                    self._errHandler.sync(self)
+                    _la = self._input.LA(1)
+
+                pass
+            elif token in [ModelicaParser.T__48]:
+                self.state = 902
+                self.match(ModelicaParser.T__48)
+                self.state = 903
+                self.for_indices()
+                pass
+            else:
+                raise NoViableAltException(self)
 
         except RecognitionException as re:
             localctx.exception = re
@@ -7348,7 +7426,7 @@ class ModelicaParser ( Parser ):
         def getRuleIndex(self):
             return ModelicaParser.RULE_function_argument
 
-
+     
         def copyFrom(self, ctx:ParserRuleContext):
             super().copyFrom(ctx)
 
@@ -7898,23 +7976,23 @@ class ModelicaParser ( Parser ):
     def expr_sempred(self, localctx:ExprContext, predIndex:int):
             if predIndex == 0:
                 return self.precpred(self._ctx, 7)
-
+         
 
             if predIndex == 1:
                 return self.precpred(self._ctx, 6)
-
+         
 
             if predIndex == 2:
                 return self.precpred(self._ctx, 5)
-
+         
 
             if predIndex == 3:
                 return self.precpred(self._ctx, 3)
-
+         
 
             if predIndex == 4:
                 return self.precpred(self._ctx, 2)
-
+         
 
 
 

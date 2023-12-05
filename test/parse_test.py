@@ -4,11 +4,14 @@ Parse-only and miscellaneous AST tests.
 """
 
 import io
+import os
 import re
 import threading
 import time
 
 from conftest_parse import (
+    MODEL_DIR,
+    MSL4_DIR,
     _flush,
     parse_model_files,
 )
@@ -358,6 +361,219 @@ def test_inner_outer_final_parsed_on_symbol():
     assert m.symbols["y"].inner is False
     assert m.symbols["n"].final is True
     assert m.symbols["n"].inner is False
+
+
+def test_modelicapath_lookup():
+    """Test modelicapath tree top level classes transformed correctly"""
+    test_package = os.path.join(MODEL_DIR, "Package")
+    stub_tree = parser.modelicapath_to_tree(dirs=[test_package])
+    assert len(stub_tree.classes) > 0
+    keys = set(stub_tree.classes.keys())
+    assert "Package" in keys
+    # Test lookup on some MSL that parses OK
+    msl_dir = os.path.join(MSL4_DIR, "Modelica")
+    msl = parser.modelicapath_to_tree(dirs=[msl_dir])
+    # Units is a .mo file, SI is defined inside Units
+    si = tree.find_name("Modelica.Units.SI", msl)
+    assert isinstance(si, ast.Class)
+    assert "Angle" in si.classes
+    # TODO: More tests to get high enough coverage
+
+
+def test_lazyparse_syntax_error(tmp_path):
+    """LazyParseClass propagates ModelicaSyntaxError on first content access."""
+    pkg_dir = tmp_path / "Pkg"
+    pkg_dir.mkdir()
+    (pkg_dir / "package.mo").write_text("package Pkg\n  INVALID SYNTAX\nend Pkg;")
+    stub_tree = parser.modelicapath_to_tree(dirs=[pkg_dir])
+    pkg = stub_tree.classes["Pkg"]
+    with pytest.raises(parser.ModelicaSyntaxError):
+        _ = pkg.classes
+
+
+def test_lazyparse_missing_expected_class(tmp_path):
+    """LazyParseClass raises KeyError when parsed file contains wrong class name."""
+    pkg_dir = tmp_path / "Pkg"
+    pkg_dir.mkdir()
+    (pkg_dir / "package.mo").write_text("package Wrong\nend Wrong;")
+    stub_tree = parser.modelicapath_to_tree(dirs=[pkg_dir])
+    pkg = stub_tree.classes["Pkg"]
+    with pytest.raises(KeyError, match="Pkg"):
+        _ = pkg.classes
+
+
+def test_lazyparse_file_disappeared(tmp_path):
+    """LazyParseClass propagates FileNotFoundError when stub path was deleted."""
+    pkg_dir = tmp_path / "Pkg"
+    pkg_dir.mkdir()
+    pkg_mo = pkg_dir / "package.mo"
+    pkg_mo.write_text("package Pkg\nend Pkg;")
+    stub_tree = parser.modelicapath_to_tree(dirs=[pkg_dir])
+    pkg = stub_tree.classes["Pkg"]
+    pkg_mo.unlink()
+    with pytest.raises(FileNotFoundError):
+        _ = pkg.classes
+
+
+def test_lazyparse_subdir_clashes_with_parsed_class(tmp_path):
+    """LazyParseClass raises ModelicaPathError when package.mo declares a class
+    whose name also exists as a subdirectory (MLS 3.5 §13.4.1)."""
+    pkg_dir = tmp_path / "Pkg"
+    pkg_dir.mkdir()
+    (pkg_dir / "package.mo").write_text("package Pkg\n  package Bar\n  end Bar;\nend Pkg;")
+    bar_dir = pkg_dir / "Bar"
+    bar_dir.mkdir()
+    (bar_dir / "package.mo").write_text("package Bar\nend Bar;")
+    stub_tree = parser.modelicapath_to_tree(dirs=[pkg_dir])
+    pkg = stub_tree.classes["Pkg"]
+    with pytest.raises(parser.ModelicaPathError, match="Bar"):
+        _ = pkg.classes
+
+
+def test_lazyparse_metadata_matches_direct_parse(tmp_path):
+    """Excluded metadata attrs match direct-parse values after lazy parse fires.
+
+    Validates _ATTRS_NEEDING_PARSE exclusions: stub defaults are overwritten by
+    _parse_in_place so every attr has the correct value once content access fires parse.
+    """
+    # Directory-package stubs: encapsulated, partial, final
+    dir_cases = [
+        ("encapsulated", "encapsulated package Pkg\nend Pkg;", True),
+        ("partial", "partial package Pkg\nend Pkg;", True),
+        ("final", "final package Pkg\nend Pkg;", True),
+    ]
+    for attr, content, expected in dir_cases:
+        d = tmp_path / f"stub_{attr}"
+        d.mkdir()
+        pkg_dir = d / "Pkg"
+        pkg_dir.mkdir()
+        (pkg_dir / "package.mo").write_text(content)
+        lazy = parser.modelicapath_to_tree(dirs=[pkg_dir])
+        stub = lazy.classes["Pkg"]
+        assert isinstance(stub, parser.LazyParseClass), f"{attr}: not a stub before access"
+        _ = stub.extends  # trigger parse
+        direct = parser.parse_text(content).classes["Pkg"]
+        assert getattr(stub, attr) == getattr(direct, attr) == expected, f"mismatch: {attr}"
+
+    # File-based stubs (inside a wrapper Lib/ package so _dir_to_tree adds them)
+    lib_dir = tmp_path / "Lib"
+    lib_dir.mkdir()
+    (lib_dir / "package.mo").write_text("package Lib\nend Lib;")
+
+    # type: force _file_class_type heuristic miss (keyword hidden past 1KB peek)
+    long_comment = "// " + "x" * 1025
+    type_content = f"{long_comment}\npackage Pkg\nend Pkg;"
+    (lib_dir / "Pkg.mo").write_text(type_content)
+    lazy = parser.modelicapath_to_tree(dirs=[lib_dir])
+    # Get Pkg stub via vars() bypass so accessing it doesn't trigger Lib parse
+    pkg_stub = vars(lazy.classes["Lib"])["classes"]["Pkg"]
+    assert pkg_stub.type == "class", "heuristic should return 'class' for keyword past 1KB"
+    _ = pkg_stub.extends  # trigger Pkg parse
+    assert pkg_stub.type == "package"
+
+    # is_short_class_definition: file stub for a short class definition
+    (lib_dir / "Angle.mo").write_text("type Angle = Real;")
+    lazy2 = parser.modelicapath_to_tree(dirs=[lib_dir])
+    angle_stub = vars(lazy2.classes["Lib"])["classes"]["Angle"]
+    assert angle_stub.is_short_class_definition is False  # default before parse
+    _ = angle_stub.extends  # trigger parse
+    assert angle_stub.is_short_class_definition is True
+
+
+def test_modelicapath_matches_direct_parse():
+    """MODELICAPATH-parsed model matches direct-parsed result end-to-end.
+
+    Exercises excluded metadata attrs and content attrs on a representative
+    single-class model to detect any stub-default vs. parsed-value divergence.
+    """
+    pkg_dir = os.path.join(MODEL_DIR, "Package")
+    direct_spring = parser.parse_file(os.path.join(pkg_dir, "Spring.mo")).classes["Spring"]
+
+    lazy_tree = parser.modelicapath_to_tree(dirs=[pkg_dir])
+    _ = lazy_tree.classes["Package"].classes  # trigger Package parse
+    spring_stub = lazy_tree.classes["Package"].classes["Spring"]
+    _ = spring_stub.symbols  # trigger Spring parse
+
+    for attr in ("type", "partial", "encapsulated", "final", "is_short_class_definition"):
+        assert getattr(spring_stub, attr) == getattr(direct_spring, attr), f"mismatch: {attr}"
+    assert set(spring_stub.symbols.keys()) == set(direct_spring.symbols.keys())
+    assert len(spring_stub.equations) == len(direct_spring.equations)
+
+
+def test_lazyparse_remove_class(tmp_path):
+    """LazyParseClass.remove_class removes child and clears parent without triggering parse."""
+    pkg_dir = tmp_path / "Pkg"
+    pkg_dir.mkdir()
+    (pkg_dir / "package.mo").write_text("package Pkg\nend Pkg;")
+    (pkg_dir / "Child.mo").write_text("model Child\nend Child;")
+    stub_tree = parser.modelicapath_to_tree(dirs=[pkg_dir])
+    pkg = stub_tree.classes["Pkg"]
+    child = vars(pkg)["classes"]["Child"]
+    pkg.remove_class(child)
+    assert "Child" not in vars(pkg)["classes"]
+    assert child.parent is None
+    assert isinstance(pkg, parser.LazyParseClass)  # parse never fired
+
+
+def test_lazyparse_extend_overlapping_dirs(tmp_path):
+    """modelicapath_to_tree merges two roots with the same top-level package name,
+    including recursively merging sub-packages with the same name."""
+    d1, d2 = tmp_path / "d1", tmp_path / "d2"
+    for d in (d1, d2):
+        d.mkdir()
+        modelica = d / "Modelica"
+        modelica.mkdir()
+        (modelica / "package.mo").write_text("package Modelica\nend Modelica;")
+    (d1 / "Modelica" / "Units").mkdir()
+    (d1 / "Modelica" / "Units" / "package.mo").write_text("package Units\nend Units;")
+    (d2 / "Modelica" / "Math").mkdir()
+    (d2 / "Modelica" / "Math" / "package.mo").write_text("package Math\nend Math;")
+    # Same sub-package name in both roots: exercises the recursive _extend branch
+    for d in (d1, d2):
+        (d / "Modelica" / "Icons").mkdir()
+        (d / "Modelica" / "Icons" / "package.mo").write_text("package Icons\nend Icons;")
+
+    merged = parser.modelicapath_to_tree(dirs=[d1 / "Modelica", d2 / "Modelica"])
+    modelica = merged.classes["Modelica"]
+    # Disjoint sub-packages merged; overlapping sub-package deduplicated
+    assert "Units" in vars(modelica)["classes"]
+    assert "Math" in vars(modelica)["classes"]
+    assert "Icons" in vars(modelica)["classes"]
+    assert isinstance(modelica, parser.LazyParseClass)  # parse never fired
+
+
+def test_lazyparse_reparents_symbols(tmp_path):
+    """_parse_in_place re-parents symbols to the demoted class object."""
+    pkg_dir = tmp_path / "Lib"
+    pkg_dir.mkdir()
+    (pkg_dir / "package.mo").write_text("package Lib\n  constant Real pi = 3.14159;\nend Lib;")
+    stub_tree = parser.modelicapath_to_tree(dirs=[pkg_dir])
+    lib = stub_tree.classes["Lib"]
+    syms = lib.symbols  # triggers parse
+    assert "pi" in syms
+    assert syms["pi"].parent is lib
+
+
+def test_modelicapath_non_directory(tmp_path):
+    """modelicapath_to_tree raises ModelicaPathError when a path is not a directory."""
+    a_file = tmp_path / "notadir.mo"
+    a_file.write_text("model Nope\nend Nope;")
+    with pytest.raises(parser.ModelicaPathError, match="non-directory"):
+        parser.modelicapath_to_tree(dirs=[a_file])
+
+
+def test_modelicapath_file_type_unreadable(tmp_path):
+    """_file_class_type returns 'class' when the file cannot be opened."""
+    # Pass a directory as the path: open() on a dir raises IsADirectoryError (OSError)
+    result = parser._file_class_type(tmp_path)
+    assert result == "class"
+
+
+def test_modelicapath_path_to_class_ignores_other(tmp_path):
+    """_path_to_class returns None for paths that are neither files nor directories."""
+    dangling = tmp_path / "dangling.mo"
+    dangling.symlink_to(tmp_path / "nonexistent.mo")
+    assert parser._path_to_class(dangling) is None
 
 
 def test_parse_class_extends_basic():

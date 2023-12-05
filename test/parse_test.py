@@ -8,9 +8,9 @@ import re
 import threading
 import time
 
-import pytest
-
 from conftest_parse import (
+    MODEL_DIR,
+    MSL4_DIR,
     _flush,
     parse_model_files,
 )
@@ -18,6 +18,8 @@ from conftest_parse import (
 from pymoca import ast
 from pymoca import parser
 from pymoca import tree
+
+import pytest
 
 
 def test_ast_element_full_name():
@@ -358,6 +360,24 @@ def test_inner_outer_final_parsed_on_symbol():
     assert m.symbols["y"].inner is False
     assert m.symbols["n"].final is True
     assert m.symbols["n"].inner is False
+
+
+def test_modelicapath_lookup():
+    """Test modelicapath tree top level classes transformed correctly"""
+    stub_tree = parser.modelicapath_to_tree(dirs=[MODEL_DIR])
+    assert len(stub_tree.classes) > 0
+    keys = set(stub_tree.classes.keys())
+    assert "Aircraft" in keys
+    assert "Package" in keys
+    # Test lookup on some MSL that parses OK
+    msl = parser.modelicapath_to_tree(dirs=[MSL4_DIR])
+    # Units is a .mo file, SI is defined inside Units
+    cref = ast.ComponentRef.from_string("Modelica.Units.SI")
+    si = msl.find_class(cref)
+    assert isinstance(si, ast.Class)
+    assert "Angle" in si.classes
+    # TODO: More tests to get high enough coverage
+    # TODO: Check for all KeyError cases in LazyParseDict.__getitem__
 
 
 if __name__ == "__main__":

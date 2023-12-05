@@ -11,6 +11,7 @@ import math
 import sys
 from collections import OrderedDict
 from enum import Enum, IntEnum
+from pathlib import Path
 from typing import List, Optional, Type, Union  # noqa: F401
 
 
@@ -95,15 +96,20 @@ class Node:
 
     @classmethod
     def to_json(cls, var):
+        def guard(var):
+            if isinstance(var, Path):
+                return var.resolve().as_uri()
+            return var
+
         if isinstance(var, list):
-            res = [cls.to_json(item) for item in var]
+            res = [cls.to_json(guard(item)) for item in var]
         elif isinstance(var, dict):
-            res = {key: cls.to_json(var[key]) for key in var.keys()}
+            res = {key: cls.to_json(guard(var[key])) for key in var.keys()}
         elif isinstance(var, Node):
             # Avoid infinite recursion by not handling attributes that may go
             # back up in the tree again.
             res = {
-                key: cls.to_json(var.__dict__[key])
+                key: cls.to_json(guard(var.__dict__[key]))
                 for key in var.__dict__.keys()
                 if key not in ("parent", "parent_instance", "scope", "__deepcopy__")
             }

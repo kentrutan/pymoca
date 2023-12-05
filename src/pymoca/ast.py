@@ -2,6 +2,7 @@
 """
 Modelica AST definitions
 """
+
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import copy
@@ -10,6 +11,7 @@ import math
 import sys
 from collections import OrderedDict
 from enum import Enum, IntEnum
+from pathlib import Path
 from typing import List, Optional, Type, Union  # noqa: F401
 
 
@@ -94,15 +96,20 @@ class Node:
 
     @classmethod
     def to_json(cls, var):
+        def guard(var):
+            if isinstance(var, Path):
+                return var.resolve().as_uri()
+            return var
+
         if isinstance(var, list):
-            res = [cls.to_json(item) for item in var]
+            res = [cls.to_json(guard(item)) for item in var]
         elif isinstance(var, dict):
-            res = {key: cls.to_json(var[key]) for key in var.keys()}
+            res = {key: cls.to_json(guard(var[key])) for key in var.keys()}
         elif isinstance(var, Node):
             # Avoid infinite recursion by not handling attributes that may go
             # back up in the tree again.
             res = {
-                key: cls.to_json(var.__dict__[key])
+                key: cls.to_json(guard(var.__dict__[key]))
                 for key in var.__dict__.keys()
                 if key not in ("parent", "parent_instance", "scope", "__deepcopy__")
             }
@@ -653,7 +660,7 @@ class Class(Node):
         self.replaceable = False  # type: bool
         self.type = ""  # type: str
         self.comment = ""  # type: str
-        self.classes = OrderedDict()  # type: OrderedDict[str, Class]
+        self.classes = OrderedDict()  # type: dict[str, Class]
         self.symbols = OrderedDict()  # type: OrderedDict[str, Symbol]
         self.functions = OrderedDict()  # type: OrderedDict[str, Class]
         self.initial_equations = []  # type: List[Union[Equation, ForEquation]]
@@ -848,6 +855,15 @@ class Class(Node):
                 self.classes[class_name]._extend(other.classes[class_name])
             else:
                 self.classes[class_name] = other.classes[class_name]
+
+    def _update_parent_refs(self) -> None:
+        for c in self.classes.values():
+            c.parent = self
+            c._update_parent_refs()
+
+    def update_classes(self, other: dict[str, "Class"]) -> None:
+        for class_ in other.values():
+            self.add_class(class_)
 
     @property
     def root(self):
@@ -1157,13 +1173,8 @@ class Tree(Class):
         self._extend(other)
         self.update_parent_refs()
 
-    def _update_parent_refs(self, parent: Class) -> None:
-        for c in parent.classes.values():
-            c.parent = parent
-            self._update_parent_refs(c)
-
     def update_parent_refs(self) -> None:
-        self._update_parent_refs(self)
+        self._update_parent_refs()
 
     def __repr__(self):
         return "{}(classes={!r})".format(type(self).__name__, self.classes)

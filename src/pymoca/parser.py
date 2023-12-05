@@ -2,6 +2,7 @@
 """
 Modelica parse Tree to AST tree.
 """
+
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import copy
@@ -10,13 +11,14 @@ import logging
 import os
 import pickle
 import platform
+import re
 import sqlite3
 import sys
 import time
 from collections import OrderedDict, deque
 from datetime import timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Union  # noqa: F401
+from typing import Any, Dict, List, Optional, Union  # noqa: F401
 
 import antlr4
 import antlr4.Parser
@@ -26,10 +28,11 @@ from antlr4.error.ErrorListener import ErrorListener
 import pymoca
 
 from . import ast
-from .generated.ModelicaLexer import ModelicaLexer
+
+# noinspection PyUnresolvedReferences,PyUnresolvedReferences
+from .generated.ModelicaLexer import ModelicaLexer  # noqa: I202
 from .generated.ModelicaListener import ModelicaListener
 from .generated.ModelicaParser import ModelicaParser
-
 
 # TODO
 #  - Named function arguments (note that either all have to be named, or none)
@@ -40,6 +43,19 @@ logger = logging.getLogger("pymoca")
 
 
 DEFAULT_MODEL_CACHE_DB = "model_txt_cache.db"
+
+
+class ModelicaPathError(Exception):
+
+    def __init__(self, msg):
+        self.msg = msg
+        super().__init__(self)
+
+    def __str__(self) -> str:
+        return str(self.msg)
+
+    def __repr__(self) -> str:
+        return type(self).__name__ + "(" + str(self) + ")"
 
 
 class ModelicaSyntaxError(SyntaxError):
@@ -88,6 +104,174 @@ class ModelicaFile:
         super().__init__(**kwargs)
 
 
+_TYPE_KEYWORD_RE = re.compile(r"\b(package|model|connector|record|function|type|block|operator)\b")
+_WITHIN_RE = re.compile(r"\bwithin\s+[^;]*;")
+
+
+def _file_class_type(path: Path) -> str:
+    """Peek at the first 1024 bytes of a .mo file to detect its Modelica class type keyword."""
+    try:
+        with path.open(encoding="utf-8", errors="ignore") as f:
+            text = f.read(1024)
+    except OSError:
+        return "class"
+    text = _WITHIN_RE.sub("", text, count=1)
+    m = _TYPE_KEYWORD_RE.search(text)
+    return m.group(1) if m else "class"
+
+
+class LazyParseClass(ast.Class):
+    """Class subtype for an unparsed MODELICAPATH file or package.
+
+    Parses itself in-place on first access of certain unparsed attributes,
+    then demotes __class__ back to Class so subsequent accesses have no overhead.
+    """
+
+    # Attributes that are empty in LazyParseClass and must be populated by parse.
+    # Metadata attributes (type, partial, replaceable, encapsulated, final, comment,
+    # is_short_class_definition) are excluded: their stub defaults match the parser's
+    # defaults for unspecified values, and _parse_in_place overwrites them correctly.
+    # Excluding them avoids triggering parse on every sub-package during stub-tree assembly.
+    # Caller audit: tree code reads these attrs only after a content access (classes,
+    # symbols, etc.) has already fired parse, so stubs are never observed with stale defaults.
+    # Tests: test_lazyparse_metadata_matches_direct_parse, test_modelicapath_matches_direct_parse
+    _ATTRS_NEEDING_PARSE = frozenset(
+        {
+            "classes",
+            "symbols",
+            "extends",
+            "equations",
+            "initial_equations",
+            "statements",
+            "initial_statements",
+            "imports",
+            "annotation",
+            "functions",
+        }
+    )
+
+    def __init__(self, path: Optional[Path] = None, **kwargs):
+        super().__init__(**kwargs)
+        self.path = path  # type: Optional[Path]
+
+    def __getattribute__(self, name: str) -> Any:
+        if name in LazyParseClass._ATTRS_NEEDING_PARSE:
+            self._parse_in_place()
+        return object.__getattribute__(self, name)
+
+    # Use vars(self) to bypass __getattribute__ and avoid triggering parse during tree assembly.
+    def _parse_in_place(self) -> None:
+        my = vars(self)
+        file = parse_text(my["path"].read_text(encoding="utf-8"))
+        parsed_class = file.classes[my["name"]]
+        # Capture any directory-package sub-stubs added by the filesystem walk before
+        # the update overwrites .classes with the parsed content.
+        existing_subdir_stubs = list(my["classes"].values())
+        saved_parent = my["parent"]
+
+        # Set parent BEFORE __dict__.update so that arg.scope references inside parsed
+        # symbols (e.g. stateSelect=stateSelect) resolve via the correct full_name.
+        parsed_class.parent = saved_parent
+        # Mutate in-place so every existing reference (e.g. captured ast_ref) sees
+        # parsed content without needing to know a swap occurred.
+        self.__dict__.update(parsed_class.__dict__)
+        self.parent = saved_parent
+        self.__class__ = ast.Class  # demote: drops .path, removes __getattribute__ overhead
+
+        # Re-parent classes/symbols that arrived via parsed_class (parsed_class is orphaned)
+        for sub in dict.values(self.classes):
+            if isinstance(sub, ast.Class):
+                sub.parent = self
+        for sym in self.symbols.values():
+            if hasattr(sym, "parent"):
+                sym.parent = self
+
+        clash = {c.name for c in existing_subdir_stubs} & set(self.classes.keys())
+        if clash:
+            raise ModelicaPathError(
+                f"Class names {sorted(clash)} declared in both {my['path']} "
+                f"and as sibling file/directory (MLS 3.5 §13.4.1)"
+            )
+        for sub in existing_subdir_stubs:
+            self.add_class(sub)
+
+    def add_class(self, c: ast.Class) -> None:
+        vars(self)["classes"][c.name] = c
+        c.parent = self
+
+    def remove_class(self, c: ast.Class) -> None:
+        del vars(self)["classes"][c.name]
+        c.parent = None
+
+    def _extend(self, other: ast.Class) -> None:
+        my_classes = vars(self)["classes"]
+        other_classes = vars(other)["classes"]
+        for class_name in other_classes:
+            if class_name in my_classes:
+                my_classes[class_name]._extend(other_classes[class_name])
+            else:
+                my_classes[class_name] = other_classes[class_name]
+
+    def _update_parent_refs(self) -> None:
+        for c in vars(self)["classes"].values():
+            c.parent = self
+            c._update_parent_refs()
+
+
+def _path_to_class(path: Path) -> Optional[ast.Class]:
+    """Transform a filesystem path into a LazyParseClass"""
+    if path.is_dir():
+        try:
+            package = next(path.glob("package.mo"))
+            return LazyParseClass(path=package, name=path.parts[-1], type="package")
+        except StopIteration:
+            # Directories must contain a package.mo file (per Modelica spec)
+            return None
+    elif path.is_file():
+        if path.suffix != ".mo" or path.stem == "package":
+            return None
+        return LazyParseClass(path=path, name=path.stem, type=_file_class_type(path))
+    else:
+        # Ignore anything else in MODELICAPATH
+        return None
+
+
+def _dir_to_tree(dir_: Path, parent: ast.Class) -> None:
+    """Recursively walk a filesystem directory tree to a LazyParseClass tree"""
+    if dir_class := _path_to_class(dir_.resolve()):
+        parent.add_class(dir_class)
+        for path in dir_.iterdir():
+            if path.is_dir():
+                _dir_to_tree(path, dir_class)
+            elif child_class := _path_to_class(path.resolve()):
+                dir_class.add_class(child_class)
+
+
+def dir_to_tree(dir_: Path) -> ast.Tree:
+    """Transform a MODELICAPATH directory into a Tree with LazyParseClass children"""
+    root_tree = ast.Tree()
+    _dir_to_tree(dir_, root_tree)
+    return root_tree
+
+
+def modelicapath_to_tree(dirs: List[Union[str, Path]]) -> ast.Tree:
+    """Return ast.Tree for all directories in dirs list
+
+    TODO: Add version handling (spec 18.8.3, 18.8.4)
+    """
+    modelicapath_tree = ast.Tree(name="root", type="MODELICAPATH")
+    for dir_ in dirs:
+        # Accept str or Path argument
+        dir_ = Path(str(dir_))
+        dir_.resolve()
+        if not dir_.is_dir():
+            raise ModelicaPathError(f"MODELICAPATH contains non-directory: {dir_}")
+        dir_tree = dir_to_tree(dir_)
+        modelicapath_tree.extend(dir_tree)
+    return modelicapath_tree
+
+
+# noinspection PyPep8Naming
 class ASTListener(ModelicaListener):
     def __init__(self):
         self.file_node = None  # type: ModelicaFile
@@ -133,7 +317,10 @@ class ASTListener(ModelicaListener):
         self.ast[ctx] = class_node
 
     def enterClass_definition(self, ctx: ModelicaParser.Class_definitionContext):
-        class_node = ast.Class(name=ctx.getText())  # Temporary name to help debugging parsing
+        class_node = ast.Class(
+            name=ctx.getText(),  # Temporary name to help when debugging parsing
+            parent=self.class_node,
+        )
         class_node.encapsulated = ctx.ENCAPSULATED() is not None
         class_node.partial = ctx.class_prefixes().PARTIAL() is not None
         class_node.type = ctx.class_prefixes().class_type().getText()
@@ -923,8 +1110,8 @@ class ModelicaParserErrorListener(ErrorListener):
         raise ModelicaSyntaxError(msg, info)
 
 
-def _parse(text: str, trace: bool = False) -> ast.Tree:
-    """Parse Modelica code given in text"""
+def _parse_text(text: str, trace: bool) -> ModelicaFile:
+    """Parse Modelica code given in text, return ModelicaFile"""
     input_stream = antlr4.InputStream(text)
     lexer = ModelicaLexer(input_stream)
     stream = antlr4.CommonTokenStream(lexer)
@@ -940,7 +1127,12 @@ def _parse(text: str, trace: bool = False) -> ast.Tree:
     ast_listener = ASTListener()
     parse_walker = antlr4.ParseTreeWalker()
     parse_walker.walk(ast_listener, parse_tree)
-    modelica_file = ast_listener.file_node
+    return ast_listener.file_node
+
+
+def _parse(text: str, trace: bool) -> ast.Tree:
+    """Parse Modelica code given in text, return Tree"""
+    modelica_file = _parse_text(text, trace)
     return file_to_tree(modelica_file)
 
 
@@ -1116,8 +1308,32 @@ def parse(
         sqlite3.DatabaseError: If the cache database file is corrupt.
 
     """
+    modelica_file = parse_text(
+        txt,
+        model_cache_folder=model_cache_folder,
+        cache_db=cache_db,
+        cache_expiration_days=cache_expiration_days,
+        always_update_last_hit=always_update_last_hit,
+        bypass_cache=bypass_cache,
+    )
+    if modelica_file is None:
+        return None
+    return file_to_tree(modelica_file)
+
+
+def parse_text(
+    txt: str,
+    /,
+    trace: bool = False,
+    model_cache_folder: Optional[Path] = None,
+    cache_db: str = DEFAULT_MODEL_CACHE_DB,
+    cache_expiration_days: int = 30,
+    always_update_last_hit: bool = False,
+    bypass_cache: bool = False,
+) -> ModelicaFile:
+    """Parse the Modelica code given in text and return the parsed ModelicaFile."""
     if bypass_cache:
-        return _parse(txt, trace=trace)
+        return _parse_text(txt, trace=trace)
 
     pymoca_version = pymoca.__version__
 
@@ -1125,7 +1341,7 @@ def parse(
     # code can't be uniquely identified.
     if pymoca_version.endswith(".dirty"):
         logger.debug("Bypassing cache because working directory is dirty")
-        return _parse(txt, trace=trace)
+        return _parse_text(txt, trace=trace)
 
     if model_cache_folder is not None:
         db_folder = model_cache_folder
@@ -1191,7 +1407,7 @@ def parse(
     result = cursor.fetchone()
     conn.commit()
 
-    tree = None
+    file = None
 
     if result:
         logger.debug(f"Model with hash '{txt_hash}' ({pymoca_version}) found in cache")
@@ -1211,22 +1427,22 @@ def parse(
             )
             conn.commit()
         try:
-            tree = pickle.loads(pickled_data)
+            file = pickle.loads(pickled_data)
         except pickle.UnpicklingError:
             logger.warning(f"Model with hash '{txt_hash}' ({pymoca_version}) failed to unpickle")
     else:
         logger.debug(f"Model with hash '{txt_hash}' ({pymoca_version}) not in cache")
 
-    if tree is None:
+    if file is None:
         # We get here if we didn't find anything in the cache, or if the
         # unpickling of the cache failed
         try:
-            tree = _parse(txt, trace=trace)
+            file = _parse_text(txt, trace=trace)
         except Exception:
             conn.close()
             raise
 
-        pickled_data = pickle.dumps(tree)
+        pickled_data = pickle.dumps(file)
 
         # Note that we do an 'INSERT OR REPLACE' because concurrent access
         # might mean two processes/threads try to insert an entry
@@ -1239,7 +1455,7 @@ def parse(
 
     conn.close()
 
-    return tree
+    return file
 
 
 def parse_file(file_path: Union[str, Path], trace: bool = False) -> ast.Tree:

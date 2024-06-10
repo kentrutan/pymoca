@@ -232,6 +232,19 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(flat_tree.classes["C2"].symbols["bcomp3.a"].value.value, 1.0)
         self.assertEqual(flat_tree.classes["C2"].symbols["bcomp3.b"].value.value, 2.0)
 
+    def test_inheritance_instantiation(self):
+        with open(os.path.join(MODEL_DIR, "RecursiveInstantiation.mo"), "r") as f:
+            txt = f.read()
+        ast_tree = parser.parse(txt)
+
+        # Check that b modification to redeclare A contains the p=1 modification
+        b_mod = ast_tree.classes["M"].symbols["b"].class_modification
+        self.assertIsNotNone(b_mod)
+        redeclare_mod = b_mod.arguments[0].value.class_modification
+        self.assertEqual(len(redeclare_mod.arguments), 1)
+        self.assertEqual(redeclare_mod.arguments[0].value.component.name, "p")
+        self.assertEqual(redeclare_mod.arguments[0].value.modifications[0].value, 1)
+
     def test_nested_classes(self):
         ast_tree = self.parse_model_files("NestedClasses.mo")
         flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="C2"))

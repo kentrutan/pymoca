@@ -887,6 +887,7 @@ def _instantiate_class(
     new_class.extends = _instantiate_extends(new_class.extends, modification_environment, new_class)
 
     # TODO: Step 5: Check and cull elements with same name in _instantiate_class
+    # See `parse_test.test_instantiation_function_input_order`
 
     # 6. Recursively instantiate symbols
     # Spec says "local and inherited", but we already did inherited

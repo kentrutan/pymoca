@@ -293,7 +293,7 @@ class TreeWalker:
 class TreePath(tuple):
     """A path to a class or symbol in a tree"""
 
-    def __new__(cls, *args):
+    def __new__(cls, *args: Union[ast.Class, ast.Symbol, ast.ExtendsClause]) -> "TreePath":
         return super().__new__(cls, args)
 
     def __str__(self) -> str:
@@ -308,7 +308,7 @@ class TreePath(tuple):
         return self[-1]
 
 
-def _build_path(element: Union[ast.Class, ast.Symbol]) -> TreePath:
+def _build_path(element: Union[ast.Class, ast.Symbol, ast.ExtendsClause]) -> TreePath:
     """Build path from root to element"""
     path = []
     current = element
@@ -319,8 +319,12 @@ def _build_path(element: Union[ast.Class, ast.Symbol]) -> TreePath:
 
 
 def _combine_paths(path1: TreePath, path2: TreePath) -> TreePath:
-    """Combine two paths, removing duplicate connecting node"""
-    combined_path = path1 + path2[1:]
+    """Combine two paths, removing duplicate connecting nodes"""
+    index = 0
+    for index, element in enumerate(path2):
+        if index >= len(path1) or path1[index] != element:
+            break
+    combined_path = path1 + path2[index:]
     return TreePath(*combined_path)
 
 
@@ -456,7 +460,7 @@ def _find_simple_name(
     # Step 0.1: Predefined types
     # TODO: Implement fix for #333 to ensure we don't silently override user-defined BUILTINS
     if name in InstanceTree.BUILTIN_TYPES:
-        return _build_path(scope.root.classes[name])
+        return TreePath(scope.root.classes[name])
 
     # Step 0.2: The scope itself
     if scope.name == name:
@@ -709,6 +713,7 @@ def _find_inherited(
             else:
                 return TreePath()
 
+        # ExtendsClause case
         extends_scope = _find_name(
             extends.component,
             scope,
@@ -726,7 +731,15 @@ def _find_inherited(
             )
             current_extends.remove(extends)
             if found:
-                return _combine_paths(extends_scope, found)
+                # Remove the path before the extends clause component
+                extends_path = TreePath()
+                for index, element in enumerate(found):
+                    if hasattr(element, "name") and element.name == extends.component.name:
+                        extends_path = TreePath(*found[index + 1 :])
+                        break
+                tree_path = _combine_paths(_build_path(extends.parent), TreePath(extends))
+                tree_path = _combine_paths(tree_path, extends_path)
+                return tree_path
         else:
             current_extends.remove(extends)
     return TreePath()

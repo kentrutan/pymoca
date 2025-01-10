@@ -696,8 +696,9 @@ def _find_inherited(
                 # If there are modifications, need to add to an instantiated class
                 if extends.class_modification.arguments:
                     instance_tree = InstanceTree(found.root)
+                    modification_environment = copy.copy(extends.class_modification)
                     found = instance_tree._instantiate_class(
-                        found, extends.class_modification, instance_tree
+                        found, modification_environment, found.parent
                     )
 
                 return found
@@ -919,12 +920,21 @@ class InstanceTree(ast.Tree):
         else:
             from_class = orig_class
         for name, class_ in from_class.classes.items():
+            # Include modifications from the class itself and the modification environment
+            apply_mod = self._append_modifications(
+                new_class.modification_environment,
+                modification_environment,
+            )
             instance = self._instantiate_partially(
                 class_,
-                modification_environment,
+                apply_mod,
                 new_class,
             )
             new_class.classes[name] = instance
+            # Remove only the modifications from the modification environment that were applied
+            modification_environment.arguments = [
+                arg for arg in modification_environment.arguments if arg in apply_mod.arguments
+            ]
 
         for name, symbol in from_class.symbols.items():
             instance = self._instantiate_partially(

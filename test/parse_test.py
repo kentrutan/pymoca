@@ -700,6 +700,63 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(bla_mod.value.component.name, "value")
         self.assertEqual(bla_mod.value.modifications[-1].value, 3)
 
+    def test_component_encapsulated_class_modification(self):
+        """Test modification of a component and a class with types of encapsulated classes
+
+        The model is similar to the one in name_lookup_test.test_need_for_temporary_flattening
+        """
+        txt = """
+        package P
+            class A
+                // Doesn't have a class B or D itself, but gets them via C
+                extends C(D(bla=3, B(bla=2)));
+            end A;
+            class C
+                encapsulated class D
+                    constant Integer bla = 1;
+                    encapsulated class B
+                        constant Integer bla = 0;
+                    end B;
+                end D;
+            end C;
+            class M
+                A.D d(bla=4, B.bla(max=10)=5);
+                A.D.B b(bla=6);
+            end M;
+        end P;
+        """
+        ast_tree = parser.parse(txt)
+        self.assertIsNotNone(ast_tree)
+        instance_tree = tree.InstanceTree(ast_tree)
+        instance = instance_tree.instantiate("P.M")
+        self.assertIsNotNone(instance)
+        d_bla_type = instance.symbols["d"].type.symbols["bla"].type.symbols["Integer"]
+        d_bla_mod = d_bla_type.modification_environment.arguments[-1]
+        self.assertEqual(d_bla_mod.value.component.name, "value")
+        self.assertEqual(d_bla_mod.value.modifications[-1].value, 4)
+        # In d, class B is not fully instantiated,
+        # so the B.bla=5 and max=10 modifications remain in class B
+        d_b_mods = instance.symbols["d"].type.classes["B"].modification_environment.arguments
+        d_b_bla_mods = [arg for arg in d_b_mods if arg.value.component.name == "bla"]
+        value = None
+        max_ = None
+        for arg in d_b_bla_mods:
+            for mod in arg.value.modifications:
+                # Not fully instantiated, so value modifications remain as Primary
+                if isinstance(mod, ast.Primary):
+                    value = mod.value
+                else:
+                    for arg in mod.arguments:
+                        if arg.value.component.name == "max":
+                            max_ = arg.value.modifications[-1].value
+        self.assertEqual(value, 5)
+        self.assertEqual(max_, 10)
+        # In b, class B is fully instantiated, so modifications are propagated into the symbol
+        b_bla_type = instance.symbols["b"].type.symbols["bla"].type.symbols["Integer"]
+        b_bla_mod = b_bla_type.modification_environment.arguments[-1]
+        self.assertEqual(b_bla_mod.value.component.name, "value")
+        self.assertEqual(b_bla_mod.value.modifications[-1].value, 6)
+
     def test_inheritance_symbol_modifiers(self):
         with open(os.path.join(MODEL_DIR, "Inheritance.mo"), "r") as f:
             txt = f.read()

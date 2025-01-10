@@ -657,8 +657,8 @@ class ParseTest(unittest.TestCase):
         # self.assertEqual(flat_tree.classes["C3"].symbols["c.v1"].nominal.value, 10.0)
         # self.assertEqual(flat_tree.classes["C3"].symbols["c.v2"].nominal.value, 1000.0)
 
-    def test_extends_encapsulated_class_modification(self):
-        """Test modification of an inherited encapsulated class
+    def test_extends_encapsulated_class_indirect_modification(self):
+        """Test inherited encapsulated class that is modified indirectly
 
         The model is similar to the one in name_lookup_test.test_need_for_temporary_flattening
         """
@@ -677,12 +677,15 @@ class ParseTest(unittest.TestCase):
                 end D;
             end C;
             class M
-                extends A.D.B;
-                A.D d(bla=4); // Add B.bla=5 modification when fix covers not ClassModification case
+                extends A.D.B; // Modified indirectly via A
             end M;
+            class M2
+                extends A.D; // Modified indirectly via A
+            end M2;
         end P;
         """
         ast_tree = parser.parse(txt)
+        self.assertIsNotNone(ast_tree)
         instance_tree = tree.InstanceTree(ast_tree)
         instance = instance_tree.instantiate("P.M")
         self.assertIsNotNone(instance)
@@ -690,10 +693,12 @@ class ParseTest(unittest.TestCase):
         bla_mod = bla_type.modification_environment.arguments[-1]
         self.assertEqual(bla_mod.value.component.name, "value")
         self.assertEqual(bla_mod.value.modifications[-1].value, 2)
-        d_bla_type = instance.symbols["d"].type.symbols["bla"].type.symbols["Integer"]
-        d_bla_mod = d_bla_type.modification_environment.arguments[-1]
-        self.assertEqual(d_bla_mod.value.component.name, "value")
-        self.assertEqual(d_bla_mod.value.modifications[-1].value, 4)
+        instance = instance_tree.instantiate("P.M2")
+        self.assertIsNotNone(instance)
+        bla_type = instance.extends[0].symbols["bla"].type.symbols["Integer"]
+        bla_mod = bla_type.modification_environment.arguments[-1]
+        self.assertEqual(bla_mod.value.component.name, "value")
+        self.assertEqual(bla_mod.value.modifications[-1].value, 3)
 
     def test_inheritance_symbol_modifiers(self):
         with open(os.path.join(MODEL_DIR, "Inheritance.mo"), "r") as f:

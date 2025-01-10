@@ -693,14 +693,6 @@ def _find_inherited(
             )
             current_extends.remove(extends)
             if found is not None:
-                # If there are modifications, need to add to an instantiated class
-                if extends.class_modification.arguments:
-                    instance_tree = InstanceTree(found.root)
-                    modification_environment = copy.copy(extends.class_modification)
-                    found = instance_tree._instantiate_class(
-                        found, modification_environment, found.parent
-                    )
-
                 return found
         else:
             current_extends.remove(extends)

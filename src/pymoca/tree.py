@@ -290,48 +290,44 @@ class TreeWalker:
             pass
 
 
-class SearchPath:
+class TreePath(tuple):
     """A path to a class or symbol in a tree"""
 
-    def __init__(self, full_reference: Tuple[Union[ast.Class, ast.Symbol], ...]):
-        self.full_reference = full_reference
+    def __new__(cls, *args):
+        return super().__new__(cls, args)
 
     def __str__(self) -> str:
-        return CLASS_SEPARATOR.join(str(e) for e in self.full_reference)
+        return CLASS_SEPARATOR.join(str(e) for e in self)
 
     @property
     def path(self) -> Tuple[Union[ast.Class, ast.Symbol], ...]:
-        return self.full_reference[:-1]
+        return self[:-1]
 
     @property
-    def element(self) -> Union[ast.Class, ast.Symbol]:
-        return self.full_reference[-1]
-
-    @classmethod
-    def from_tuple(cls, path_tuple: Tuple[Union[ast.Class, ast.Symbol], ...]) -> "SearchPath":
-        return cls(full_reference=path_tuple)
+    def leaf(self) -> Union[ast.Class, ast.Symbol]:
+        return self[-1]
 
 
-def _build_path(element: Union[ast.Class, ast.Symbol]) -> SearchPath:
+def _build_path(element: Union[ast.Class, ast.Symbol]) -> TreePath:
     """Build path from root to element"""
     path = []
     current = element
     while current:
         path.insert(0, current)
         current = getattr(current, "parent", None)
-    return SearchPath.from_tuple(tuple(path))
+    return TreePath(*path)
 
 
-def _combine_paths(path1: SearchPath, path2: SearchPath) -> SearchPath:
+def _combine_paths(path1: TreePath, path2: TreePath) -> TreePath:
     """Combine two paths, removing duplicate connecting node"""
-    combined_path = path1.full_reference + path2.full_reference[1:]
-    return SearchPath.from_tuple(combined_path)
+    combined_path = path1 + path2[1:]
+    return TreePath(*combined_path)
 
 
 def find_name(
     name: Union[str, ast.ComponentRef],
     scope: ast.Class,
-) -> Optional[SearchPath]:
+) -> TreePath:
     """Modelica name lookup on a tree of ast.Class and ast.InstanceClass starting at scope class
 
     :param name: name to look up (can be a Class or Symbol name)
@@ -352,7 +348,7 @@ def _find_name(
     search_parent: bool = True,
     search_inherited: bool = True,
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
-) -> Optional[SearchPath]:
+) -> TreePath:
     """Internal start point for name lookup with extra parameters to control the lookup"""
     # Look for ast.Class or ast.Symbol per the MLS v3.5:
     # 1. Simple Name Lookup (spec 5.3.1)
@@ -404,7 +400,7 @@ def _find_name(
     )
 
     # Lookup rest of name (e.g. `B.C`) to complete composite name lookup
-    if found is not None and rest_of_name:
+    if found and rest_of_name:
         found = _find_rest_of_name(found, rest_of_name)
 
     # Maintaining backward compatibility by including InstanceTree (not strictly correct)
@@ -442,7 +438,7 @@ def _find_simple_name(
     search_parent: bool = True,
     search_inherited: bool = True,
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
-) -> Optional[SearchPath]:
+) -> TreePath:
     """Lookup name per Modelica spec 3.5 section 5.3.1 Simple Name Lookup"""
 
     # 0.1 Predefined types (`Real`, `Integer`, `Boolean`, `String`) (spec 4.8)
@@ -502,28 +498,27 @@ def _find_simple_name(
     # it must be a `constant`.
     if (
         found
-        and isinstance(found.element, ast.Symbol)
+        and isinstance(found.leaf, ast.Symbol)
         and current_scope != scope
-        and "constant" not in found.element.prefixes
-        and found.element.name not in InstanceTree.BUILTIN_TYPES
+        and "constant" not in found.leaf.prefixes
+        and found.leaf.name not in InstanceTree.BUILTIN_TYPES
     ):
         raise NameLookupError("Non-constant Symbol found in enclosing class")
 
     # If not found and we stopped at an encapsulated class,
     # then search predefined functions and operators in global scope
     # TODO: Add predefined functions and operators to global scope before this
-    if found is None and current_scope.encapsulated:
+    if not found and current_scope.encapsulated:
         found = _find_local(name, scope.root)
         if found and (
-            not isinstance(found.element, ast.Class)
-            or found.element.type not in ("function", "operator")
+            not isinstance(found.leaf, ast.Class) or found.leaf.type not in ("function", "operator")
         ):
-            found = None
+            found = TreePath()
 
     return found
 
 
-def _find_rest_of_name(first: SearchPath, rest_of_name: str) -> Optional[SearchPath]:
+def _find_rest_of_name(first: TreePath, rest_of_name: str) -> TreePath:
     """Lookup the `B.C` part of Composite Name Lookup (`A.B.C`) (spec 5.3.2)"""
 
     # 1. `A` is looked up using Simple Name Lookup and passed as `first` argument
@@ -537,7 +532,7 @@ def _find_rest_of_name(first: SearchPath, rest_of_name: str) -> Optional[SearchP
     #     2. `B.C` is looked up among named elements of temp flattened class,
     #     but if `A` is not a package, lookup is restricted to `encapsulated` elements only
     #     and "the class we look inside shall not be partial in a simulation model".
-    element = first.element
+    element = first.leaf
     if isinstance(element, ast.Symbol):
         # Find the symbol type
         if isinstance(element.type, ast.Class):
@@ -545,9 +540,9 @@ def _find_rest_of_name(first: SearchPath, rest_of_name: str) -> Optional[SearchP
         else:
             assert element.parent, f"Symbol {first} has no parent"
             type_class_path = _find_name(element.type, element.parent)
-            if type_class_path is None:
+            if not type_class_path:
                 raise NameLookupError(f"Lookup failed for type of symbol {first}")
-            type_class = type_class_path.element
+            type_class = type_class_path.leaf
             if not isinstance(type_class, ast.Class):
                 raise NameLookupError(f"Symbol type {type_class_path} is not a class")
         found = _find_composite_name_in_symbols(rest_of_name, type_class)
@@ -560,15 +555,15 @@ def _find_rest_of_name(first: SearchPath, rest_of_name: str) -> Optional[SearchP
             found = _find_composite_name_in_classes(rest_of_name, type_class)
             if isinstance(found, ast.Class):
                 if found.type != "function":
-                    found = None
+                    found = TreePath()
                 else:
                     # TODO: Fix for `test_function_lookup_via_array_element` + other possibilities
-                    if first.element.dimensions[0][0].value is not None:
+                    if first.leaf.dimensions[0][0].value is not None:
                         raise NameLookupError(
-                            f"Array {first.element.name} must have subscripts to lookup function {found.element.name}"
+                            f"Array {first.leaf.name} must have subscripts to lookup function {found.leaf.name}"
                         )
 
-    elif isinstance(first.element, ast.Class):
+    elif isinstance(first.leaf, ast.Class):
         found = _flatten_first_and_find_rest(first, rest_of_name)
     else:
         raise NameLookupError(f'Found unexpected node "{first!r}" during name lookup')
@@ -576,7 +571,7 @@ def _find_rest_of_name(first: SearchPath, rest_of_name: str) -> Optional[SearchP
     return found
 
 
-def _find_composite_name_in_symbols(name: str, scope: ast.Class) -> Optional[SearchPath]:
+def _find_composite_name_in_symbols(name: str, scope: ast.Class) -> TreePath:
     """Search for composite name (e.g. A.B.C) in local symbols, recursively"""
     first_name, _, next_names = name.partition(".")
     # See spec 5.3.2 bullet 2 (emphasis mine): "If the first identifier denotes
@@ -585,41 +580,39 @@ def _find_composite_name_in_symbols(name: str, scope: ast.Class) -> Optional[Sea
     # This can include inherited and imported components.
     # Look up the type (Class) within the current scope if necessary
     found = _find_name(first_name, scope, search_parent=False)
-    if found and isinstance(found.element, ast.Symbol):
+    if found and isinstance(found.leaf, ast.Symbol):
         if next_names:
-            if isinstance(found.element.type, ast.ComponentRef):
-                type_name = str(found.element.type)
+            if isinstance(found.leaf.type, ast.ComponentRef):
+                type_name = str(found.leaf.type)
                 found_type_class_path = _find_name(type_name, scope)
-                if found_type_class_path is None or isinstance(
-                    found_type_class_path.element, ast.Symbol
-                ):
+                if not found_type_class_path or isinstance(found_type_class_path.leaf, ast.Symbol):
                     scope_full_reference = str(scope.full_reference())
                     raise NameLookupError(
                         f'Symbol type "{type_name}" not found in scope "{scope_full_reference}"'
                     )
-                found_type_class = found_type_class_path.element
+                found_type_class = found_type_class_path.leaf
             else:
                 # type is already an InstanceClass
-                found_type_class = found.element.type
+                found_type_class = found.leaf.type
             # Look in symbols of the type
             found = _find_composite_name_in_symbols(next_names, found_type_class)
     else:
-        found = None
+        found = TreePath()
     return found
 
 
-def _find_composite_name_in_classes(name: str, scope: ast.Class) -> Optional[SearchPath]:
+def _find_composite_name_in_classes(name: str, scope: ast.Class) -> TreePath:
     """Search for composite name (e.g. A.B.C) in local classes, recursively"""
     first_name, _, next_names = name.partition(".")
-    found = None
+    found = TreePath()
     if first_name in scope.classes:
         found = _build_path(scope.classes[first_name])
     if found and next_names:
-        found = _find_composite_name_in_classes(next_names, found.element)
+        found = _find_composite_name_in_classes(next_names, found.leaf)
     return found
 
 
-def _flatten_first_and_find_rest(first: SearchPath, rest_of_name: str) -> Optional[SearchPath]:
+def _flatten_first_and_find_rest(first: TreePath, rest_of_name: str) -> TreePath:
     """Lookup the `B.C` part of Composite Name Lookup (`A.B.C`) where`A` is a Class"""
 
     # 3. If `A` is a Class:
@@ -645,20 +638,18 @@ def _flatten_first_and_find_rest(first: SearchPath, rest_of_name: str) -> Option
 
     # TODO: Per spec v3.5 section 5.3.2 bullet 4, class is temporarily flattened
     # For now, we use recursive name lookup in contained elements
-    found = _find_name(rest_of_name, first.element, search_parent=False)
+    found = _find_name(rest_of_name, first.leaf, search_parent=False)
 
     # Check that found meets non-package lookup requirements in spec section 5.3.2
     # The found.name test is so we only check going left to right in composite name
     # and not the other direction as we pop the recursive call stack.
     if (
-        found is not None
-        and found.element.name == _first_name(rest_of_name)
-        and first.element.type != "package"
-        and not (isinstance(found.element, ast.Class) and found.element.encapsulated)
+        found
+        and found.leaf.name == _first_name(rest_of_name)
+        and first.leaf.type != "package"
+        and not (isinstance(found.leaf, ast.Class) and found.leaf.encapsulated)
     ):
-        raise NameLookupError(
-            f"{first} is not a package so {found.element.name} must be encapsulated"
-        )
+        raise NameLookupError(f"{first} is not a package so {found.leaf.name} must be encapsulated")
 
     return found
 
@@ -670,7 +661,7 @@ def _first_name(name: str) -> str:
 def _find_local(
     name: str,
     scope: ast.Class,
-) -> Optional[SearchPath]:
+) -> TreePath:
     """Name lookup for predefined classes and contained elements"""
 
     # 1. Iteration variables
@@ -690,10 +681,10 @@ def _find_local(
     if name in scope.symbols:
         return _build_path(scope.symbols[name])
 
-    return None
+    return TreePath()
 
 
-def _find_iteration_variable(name: str, scope: ast.Class) -> Optional[ast.Symbol]:  # noqa: W0613
+def _find_iteration_variable(name: str, scope: ast.Class) -> Optional[ast.Symbol]:
     """Currently a pass"""
     # TODO: Implement find name in iteration variables
     return None
@@ -703,7 +694,7 @@ def _find_inherited(
     name: str,
     scope: ast.Class,
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
-) -> Optional[SearchPath]:
+) -> TreePath:
     """Find simple name in inherited classes"""
     for extends in scope.extends:
         # Avoid infinite recursion by keeping track of where we have been with current_extends
@@ -721,19 +712,19 @@ def _find_inherited(
             if found:
                 return _combine_paths(_build_path(scope), found)
             else:
-                return None
+                return TreePath()
 
         extends_scope = _find_name(
             extends.component,
             scope,
             current_extends=current_extends,
         )
-        if extends_scope is not None:
-            if isinstance(extends_scope.element, ast.Symbol):
+        if extends_scope:
+            if isinstance(extends_scope.leaf, ast.Symbol):
                 continue
             found = _find_name(
                 name,
-                extends_scope.element,
+                extends_scope.leaf,
                 search_parent=False,
                 current_extends=current_extends,
                 search_imports=False,
@@ -743,14 +734,14 @@ def _find_inherited(
                 return _combine_paths(extends_scope, found)
         else:
             current_extends.remove(extends)
-    return None
+    return TreePath()
 
 
 def _find_imported(
     name: str,
     scope: ast.Class,
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
-) -> Optional[SearchPath]:
+) -> TreePath:
     """Find simple name in imports per MLS v3.5 section 13.2.1"""
     # TODO: Rewrite this to work with parser rewrite of import_clause handler.
     # TODO: Can we do a scope.imports[name] = found Class or Symbol to speed up future calls?
@@ -766,7 +757,7 @@ def _find_imported(
             search_parent=False,
         )
         if found:
-            _check_import_rules(found.element, scope)
+            _check_import_rules(found.leaf, scope)
         return found
     # Unqualified imports
     if "*" in scope.imports:
@@ -782,23 +773,19 @@ def _find_imported(
                 search_parent=False,
                 current_extends=current_extends,
             )
-            # TODO: Should _check_import_rules be inside `if c is not None` check? (fix in rewrite)
             if c:
-                _check_import_rules(c.element, scope)
-            if c is not None:
+                _check_import_rules(c.leaf, scope)
                 # Store result for next lookup
                 scope.imports[name] = imported_comp_ref
                 return c
-    return None
+    return TreePath()
 
 
 def _check_import_rules(
-    element: Optional[Union[ast.Class, ast.Symbol]],
+    element: Union[ast.Class, ast.Symbol],
     scope: ast.Class,
 ) -> None:
     """Check import rules per the Modelica spec"""
-    if element is None:
-        return
     # TODO: Is `not element.parent` a sufficient check for the error message? (fix in rewrite)
     if not element.parent:
         raise NameLookupError(f"Import {element.name} must be contained in a package")
@@ -898,9 +885,9 @@ class InstanceTree(ast.Tree):
         for flattening by calling this method on the class.
         """
         class_ = find_name(class_name, self.ast_ref)
-        if class_ is None:
+        if not class_:
             raise NameLookupError(f"{class_name} not found in given tree")
-        class_ = class_.element
+        class_ = class_.leaf
         if isinstance(class_, ast.Symbol):
             raise InstantiationError(f"Found Symbol for {class_name} but need Class to instantiate")
         instance = self._instantiate_class(class_, ast.ClassModification(), self)
@@ -1057,11 +1044,11 @@ class InstanceTree(ast.Tree):
 
         extends_class = _find_name(extends.component, parent, search_inherited=False)
 
-        if extends_class is None:
+        if not extends_class:
             raise ModelicaSemanticError(
                 f"Extends name {extends.component} not found in scope {parent.full_reference()}"
             )
-        extends_class = extends_class.element
+        extends_class = extends_class.leaf
         if isinstance(extends_class, ast.Symbol):
             raise ModelicaSemanticError(
                 f"Cannot extend a Symbol: {extends.component} in {parent.full_reference()}"
@@ -1130,9 +1117,9 @@ class InstanceTree(ast.Tree):
 
         if not isinstance(symbol.type, ast.InstanceClass):
             symbol_type = find_name(symbol.type, parent)
-            if symbol_type is None:
+            if not symbol_type:
                 raise NameLookupError(f"{symbol.type} not found in {parent.full_reference()}")
-            symbol_type = symbol_type.element
+            symbol_type = symbol_type.leaf
             if isinstance(symbol_type, ast.InstanceElement):
                 extend_args = [
                     arg
@@ -1313,7 +1300,7 @@ class InstanceTree(ast.Tree):
         """
         instance_class = class_
         parent_class = instance_class.ast_ref.parent
-        if parent_class is None:
+        if not parent_class:
             raise ValueError(f"Parent of {instance_class.ast_ref} unexpectedly None")
         if isinstance(parent_class, ast.Tree):
             instance_class.parent = InstanceTree(parent_class)
@@ -1356,12 +1343,12 @@ class InstanceTree(ast.Tree):
             assert scope_class, "Redeclare scope should have been set by now"
             redeclare_name = redeclare.value.component
             redeclare_class = find_name(redeclare_name, scope_class)
-            if redeclare_class is None:
+            if not redeclare_class:
                 raise NameLookupError(
                     f"Redeclare class {redeclare_name} not found"
                     f" in scope {scope_class.full_reference()}"
                 )
-            redeclare_class = redeclare_class.element
+            redeclare_class = redeclare_class.leaf
             if isinstance(redeclare_class, ast.Symbol):
                 raise ModelicaSemanticError(
                     f"Redeclaring class {element.name}"

@@ -99,7 +99,7 @@ class SimpleNameLookupTest(unittest.TestCase):
         )
         found = find_name("x", scope)
         self.assertIsNotNone(found)
-        self.assertIsInstance(found, pymoca.ast.Symbol)
+        self.assertIsInstance(found.element, pymoca.ast.Symbol)
         # TODO: flatten and check x.value
 
         # Now go in the reverse direction, bumping into encapsulation
@@ -124,11 +124,11 @@ class SimpleNameLookupTest(unittest.TestCase):
         )
         found = lookup_composite_using_simple_only("b.a.x", scope)
         self.assertIsNotNone(found)
-        self.assertIsInstance(found, pymoca.ast.Symbol)
+        self.assertIsInstance(found.element, pymoca.ast.Symbol)
         # Now go reverse direction, looking for a compound name but not fully qualified
-        found = lookup_composite_using_simple_only("Scoping.NameLookup", found.parent)
+        found = lookup_composite_using_simple_only("Scoping.NameLookup", found.element.parent)
         self.assertIsNotNone(found)
-        self.assertIsInstance(found, pymoca.ast.Class)
+        self.assertIsInstance(found.element, pymoca.ast.Class)
         # TODO: flatten and check x.value == 2
 
     def test_enclosing_class_lookup_constant(self):

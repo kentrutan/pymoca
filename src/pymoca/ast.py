@@ -603,6 +603,7 @@ class ExtendsClause(Node):
         self.component = None  # type: Optional[ComponentRef]
         self.class_modification = None  # type: Optional[ClassModification]
         self.visibility = Visibility.PUBLIC  # type: Visibility
+        self.parent = None  # type: Optional[Class]
         super().__init__(**kwargs)
 
     def __repr__(self):

@@ -303,7 +303,10 @@ def find_name(
     see also chapter 13. This is more succinctly outlined in the "Modelica by Example"
     book https://mbe.modelica.university/components/packages/lookup/
     """
-
+    if not isinstance(name, (str, ast.ComponentRef)):
+        raise TypeError(f"name must be a string or ComponentRef, not {type(name)}")
+    if not isinstance(scope, (ast.Class, InstanceTree)):
+        raise TypeError(f"scope must be a Class or InstanceTree, not {type(scope)}")
     return _find_name(name, scope)
 
 

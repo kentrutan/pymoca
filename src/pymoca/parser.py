@@ -181,8 +181,12 @@ class ASTListener(ModelicaListener):
     def exitArgument(self, ctx: ModelicaParser.ArgumentContext):
         argument = ast.ClassModificationArgument()
         if ctx.element_modification_or_replaceable() is not None:
-            argument.value = self.ast[ctx.element_modification_or_replaceable()]
-            argument.redeclare = False
+            phrase = ctx.element_modification_or_replaceable()
+            argument.value = self.ast[phrase]
+            if phrase.element_replaceable() is not None:
+                argument.redeclare = True
+            else:
+                argument.redeclare = False
         else:
             argument.value = self.ast[ctx.element_redeclaration()]
             argument.redeclare = True
@@ -788,6 +792,8 @@ class ASTListener(ModelicaListener):
     def exitElement_redeclaration(self, ctx: ModelicaParser.Element_redeclarationContext):
         if ctx.component_clause1() is not None:
             self.ast[ctx] = self.ast[ctx.component_clause1()]
+        elif ctx.element_replaceable() is not None:
+            self.ast[ctx] = self.ast[ctx.element_replaceable()]
         else:
             self.ast[ctx] = self.ast[ctx.short_class_definition()]
         self.in_redeclaration = False

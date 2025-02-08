@@ -673,6 +673,114 @@ class ParseTest(unittest.TestCase):
         # self.assertEqual(flat_tree.classes["C3"].symbols["c.v1"].nominal.value, 10.0)
         # self.assertEqual(flat_tree.classes["C3"].symbols["c.v2"].nominal.value, 1000.0)
 
+    def test_extends_encapsulated_class_indirect_modification(self):
+        """Test inherited encapsulated class that is modified indirectly
+
+        The model is similar to the one in name_lookup_test.test_need_for_temporary_flattening
+        """
+        txt = """
+        package P
+            class A
+                // Doesn't have a class B or D itself, but gets them via C
+                extends C(D(bla=3, B(bla=2)));
+            end A;
+            class C
+                encapsulated class D
+                    constant Integer bla = 1;
+                    encapsulated class B
+                        constant Integer bla = 0;
+                    end B;
+                end D;
+            end C;
+            class M
+                extends A.D.B; // Modified indirectly via A
+            end M;
+            class M2
+                extends A.D; // Modified indirectly via A
+            end M2;
+        end P;
+        """
+        ast_tree = parser.parse(txt)
+        self.assertIsNotNone(ast_tree)
+        instance_tree = tree.InstanceTree(ast_tree)
+        instance = instance_tree.instantiate("P.M")
+        self.assertIsNotNone(instance)
+        bla_type = instance.extends[0].symbols["bla"].type.symbols["Integer"]
+        bla_mod = bla_type.modification_environment.arguments[-1]
+        self.assertEqual(bla_mod.value.component.name, "value")
+        self.assertEqual(bla_mod.value.modifications[-1].value, 2)
+        instance = instance_tree.instantiate("P.M2")
+        self.assertIsNotNone(instance)
+        bla_type = instance.extends[0].symbols["bla"].type.symbols["Integer"]
+        bla_mod = bla_type.modification_environment.arguments[-1]
+        self.assertEqual(bla_mod.value.component.name, "value")
+        self.assertEqual(bla_mod.value.modifications[-1].value, 3)
+
+    def test_multi_extends_indirect_modification(self):
+        """Test multiple levels of inheritance with modifications, direct and indirect
+
+        This example also includes redeclarations of components which is newly added."""
+        txt = """
+            package P
+                model A
+                    // Doesn't have a class D itself, but gets it via C
+                    extends C(D(replaceable Integer num=4, redeclare E b(num=5)));
+                end A;
+                model C
+                    encapsulated model D
+                        extends F(redeclare replaceable Real num=3); // Component redeclare in extends
+                        replaceable model B
+                            extends F(replaceable Real num=2); // Component redeclare in extends
+                        end B;
+                        encapsulated model F
+                            replaceable Integer num = 1;
+                        end F;
+                        B b;
+                    end D;
+                    D d;
+                end C;
+                model E
+                    replaceable Integer num = 0;
+                end E;
+                model M
+                    extends A.D; // Modified indirectly via A
+                    C.D.F e, f(redeclare Real num=6); // Component redeclare not in extends
+                end M;
+                model M2
+                    extends A.D(redeclare Real num); // Redeclare already redeclared component
+                end M2;
+            end P;
+        """
+        ast_tree = parser.parse(txt)
+        self.assertIsNotNone(ast_tree)
+        instance_tree = tree.InstanceTree(ast_tree)
+        instance = instance_tree.instantiate("P.M")
+        self.assertIsNotNone(instance)
+        num = tree.find_name("num", instance)
+        self.assertTrue(num)
+        self.assertEqual("Integer", num.type.name)
+        num_mod = num.type.symbols["Integer"].modification_environment.arguments[-1]
+        self.assertEqual(num_mod.value.component.name, "value")
+        self.assertEqual(num_mod.value.modifications[-1].value, 4)
+        b_num = tree.find_name("b.num", instance)
+        self.assertTrue(b_num)
+        self.assertEqual(b_num.type.name, "Integer")
+        b_num_mod = b_num.type.symbols["Integer"].modification_environment.arguments[-1]
+        self.assertEqual(b_num_mod.value.component.name, "value")
+        self.assertEqual(b_num_mod.value.modifications[-1].value, 5)
+        f_num = tree.find_name("f.num", instance)
+        self.assertTrue(f_num)
+        self.assertEqual(f_num.type.name, "Real")
+        f_num_mod = f_num.type.symbols["Real"].modification_environment.arguments[-1]
+        self.assertEqual(f_num_mod.value.component.name, "value")
+        self.assertAlmostEqual(f_num_mod.value.modifications[-1].value, 6.0)
+        instance_tree = tree.InstanceTree(ast_tree)
+        instance = instance_tree.instantiate("P.M2")
+        self.assertIsNotNone(instance)
+        num = tree.find_name("num", instance)
+        self.assertTrue(num)
+        self.assertEqual("Real", num.type.name)
+
     def test_inheritance_symbol_modifiers(self):
         with open(os.path.join(MODEL_DIR, "Inheritance.mo"), "r") as f:
             txt = f.read()

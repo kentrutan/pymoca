@@ -418,7 +418,7 @@ class Symbol(Node):
         self.name = ""  # type: str
         self.type = ComponentRef()  # type: Union[ComponentRef, InstanceClass]
         self.prefixes = []  # type: List[str]
-        self.redeclare = False  # type: bool
+        self.replaceable = False  # type: bool
         self.final = False  # type: bool
         self.inner = False  # type: bool
         self.outer = False  # type: bool

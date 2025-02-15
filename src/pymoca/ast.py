@@ -6,6 +6,8 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import copy
 import json
+import math
+import sys
 from collections import OrderedDict
 from enum import Enum
 from typing import List, Optional, Type, Union  # noqa: F401
@@ -1007,6 +1009,58 @@ class Tree(Class):
     """
     The root class.
     """
+
+    BUILTIN_TYPES = {
+        "Real": Symbol(
+            name="Real",
+            type=ComponentRef(name="Real"),
+            start=Primary(value=0.0),
+            min=Primary(value=-math.inf),
+            max=Primary(value=math.inf),
+            nominal=Primary(value=None),
+            fixed=Primary(value=False),  # True for parameters and constants
+            unit=Primary(value=""),
+            quantity=Primary(value=""),
+            displayUnit=Primary(value=""),
+            # TODO: unbounded from spec is missing in Symbol
+            # TODO: stateSelect from spec is missing in Symbol
+        ),
+        "Integer": Symbol(
+            name="Integer",
+            type=ComponentRef(name="Integer"),
+            start=Primary(value=0.0),
+            min=Primary(value=-sys.maxsize),
+            max=Primary(value=sys.maxsize),
+            fixed=Primary(value=False),  # True for parameters and constants
+            quantity=Primary(value=""),
+        ),
+        "Boolean": Symbol(
+            name="Boolean",
+            type=ComponentRef(name="Boolean"),
+            start=Primary(value=0.0),
+            fixed=Primary(value=False),  # True for parameters and constants
+            quantity=Primary(value=""),
+        ),
+        "String": Symbol(
+            name="String",
+            type=ComponentRef(name="String"),
+            start=Primary(value=0.0),
+            fixed=Primary(value=False),  # True for parameters and constants
+            quantity=Primary(value=""),
+        ),
+    }
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._create_builtins()
+
+    def _create_builtins(self):
+        """Add builtins to root of tree"""
+        for name, symbol in self.BUILTIN_TYPES.items():
+            type_class = Class(name=name, type=name, parent=self)
+            symbol.parent = type_class
+            type_class.symbols[name] = symbol
+            self.classes[name] = type_class
 
     def extend(self, other: "Tree") -> None:
         self._extend(other)

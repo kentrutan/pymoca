@@ -7,7 +7,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import copy  # TODO
 import logging
-import math
 import sys
 from collections import OrderedDict
 from typing import Iterable, List, Optional, Set, Tuple, Union
@@ -778,61 +777,16 @@ class InstanceTree(ast.Tree):
     operators are added to the root of the InstanceTree when it is created.
     """
 
-    BUILTIN_TYPES = {
-        "Real": ast.Symbol(
-            name="Real",
-            type=ast.ComponentRef(name="Real"),
-            start=ast.Primary(value=0.0),
-            min=ast.Primary(value=-math.inf),
-            max=ast.Primary(value=math.inf),
-            nominal=ast.Primary(value=None),
-            fixed=ast.Primary(value=False),  # True for parameters and constants
-            unit=ast.Primary(value=""),
-            quantity=ast.Primary(value=""),
-            displayUnit=ast.Primary(value=""),
-            # TODO: unbounded from spec is missing in Symbol
-            # TODO: stateSelect from spec is missing in Symbol
-        ),
-        "Integer": ast.Symbol(
-            name="Integer",
-            type=ast.ComponentRef(name="Integer"),
-            start=ast.Primary(value=0.0),
-            min=ast.Primary(value=-sys.maxsize),
-            max=ast.Primary(value=sys.maxsize),
-            fixed=ast.Primary(value=False),  # True for parameters and constants
-            quantity=ast.Primary(value=""),
-        ),
-        "Boolean": ast.Symbol(
-            name="Boolean",
-            type=ast.ComponentRef(name="Boolean"),
-            start=ast.Primary(value=0.0),
-            fixed=ast.Primary(value=False),  # True for parameters and constants
-            quantity=ast.Primary(value=""),
-        ),
-        "String": ast.Symbol(
-            name="String",
-            type=ast.ComponentRef(name="String"),
-            start=ast.Primary(value=0.0),
-            fixed=ast.Primary(value=False),  # True for parameters and constants
-            quantity=ast.Primary(value=""),
-        ),
-    }
-
     def __init__(self, ast_ref: ast.Tree, **kwargs):
         # The Class AST
         self.ast_ref = ast_ref
 
         super().__init__(**kwargs)
-        self._create_builtins()
+        self._instantiate_builtins()
 
-    def _create_builtins(self):
-        """Add builtins to root of tree"""
-        for name, symbol in self.BUILTIN_TYPES.items():
-            type_class = ast.Class(name=name, type=name, parent=self)
-            symbol.parent = type_class
-            type_class.symbols[name] = symbol
-            self.classes[name] = type_class
-        # TODO: Add built-in functions (and operators?)
+    def _instantiate_builtins(self):
+        for name, class_ in self.classes.items():
+            self.classes[name] = self._instantiate_class(class_, ast.ClassModification(), self)
 
     def instantiate(self, class_name: str) -> ast.InstanceClass:
         """Create an instance tree used in flattening
@@ -1034,7 +988,7 @@ class InstanceTree(ast.Tree):
             arg for arg in modification_environment.arguments if arg in extend_mod.arguments
         ]
 
-        if extends_instance.type in InstanceTree.BUILTIN_TYPES:
+        if extends_instance.type in self.BUILTIN_TYPES:
             if len(parent.extends) > 1:
                 raise ModelicaSemanticError(
                     "When extending a built-in class (Real, Integer, ...) "
@@ -1064,7 +1018,7 @@ class InstanceTree(ast.Tree):
         assert isinstance(symbol, ast.InstanceSymbol)
         assert isinstance(parent, ast.InstanceClass)
 
-        if symbol.name in InstanceTree.BUILTIN_TYPES:
+        if symbol.name in self.BUILTIN_TYPES:
             symbol.fully_instantiated = True
             return
 
@@ -1167,7 +1121,7 @@ class InstanceTree(ast.Tree):
             or isinstance(arg.value, ast.ShortClassDefinition)
             and arg.value.name == element.name
             or isinstance(element, ast.Symbol)
-            and element.name in InstanceTree.BUILTIN_TYPES
+            and element.name in self.BUILTIN_TYPES
         ]
 
         # Remove from passed modification_environment and add to instance

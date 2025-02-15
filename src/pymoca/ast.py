@@ -455,6 +455,7 @@ class ComponentClause(Node):
     def __init__(self, **kwargs):
         self.prefixes = []  # type: List[str]
         self.type = ComponentRef()  # type: ComponentRef
+        self.replaceable = False  # type: bool
         self.dimensions = [
             [Primary(value=None)]
         ]  # type: List[List[Union[Expression, Primary, ComponentRef]]]
@@ -539,6 +540,7 @@ class ShortClassDefinition(Node):
         self.type = ""  # type: str
         self.component = ComponentRef()  # type: ComponentRef
         self.class_modification = ClassModification()  # type: ClassModification
+        self.replaceable = False  # type: bool
         super().__init__(**kwargs)
 
     def __repr__(self):

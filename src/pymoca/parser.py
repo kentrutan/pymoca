@@ -181,9 +181,9 @@ class ASTListener(ModelicaListener):
     def exitArgument(self, ctx: ModelicaParser.ArgumentContext):
         argument = ast.ClassModificationArgument()
         if ctx.element_modification_or_replaceable() is not None:
-            phrase = ctx.element_modification_or_replaceable()
-            argument.value = self.ast[phrase]
-            if phrase.element_replaceable() is not None:
+            production = ctx.element_modification_or_replaceable()
+            argument.value = self.ast[production]
+            if production.element_replaceable() is not None:
                 argument.redeclare = True
             else:
                 argument.redeclare = False
@@ -635,6 +635,8 @@ class ASTListener(ModelicaListener):
     def exitReplaceable_element(self, ctx: ModelicaParser.Replaceable_elementContext):
         if ctx.comp_elem is not None:
             self.ast[ctx] = self.ast[ctx.comp_elem]
+            for sym in self.ast[ctx].symbol_list:
+                sym.replaceable = True
         else:
             self.ast[ctx] = self.ast[ctx.class_elem]
         self.ast[ctx].replaceable = True
@@ -775,8 +777,10 @@ class ASTListener(ModelicaListener):
     def exitElement_replaceable(self, ctx: ModelicaParser.Element_replaceableContext):
         if ctx.component_clause1() is not None:
             self.ast[ctx] = self.ast[ctx.component_clause1()]
+            self.ast[ctx].symbol_list[0].replaceable = True
         else:
             self.ast[ctx] = self.ast[ctx.short_class_definition()]
+        self.ast[ctx].replaceable = True
 
     def exitElement_modification_or_replaceable(
         self, ctx: ModelicaParser.Element_modification_or_replaceableContext

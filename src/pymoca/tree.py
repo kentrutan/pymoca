@@ -857,10 +857,21 @@ class InstanceTree(ast.Tree):
         )
 
         # 1.3. Redeclare of element itself is done
-        self._apply_class_redeclares(new_class, modification_environment)
+        redeclared = self._apply_class_redeclares(new_class, modification_environment)
+        if redeclared:
+            new_class = self._instantiate_partially(
+                new_class.ast_ref,
+                modification_environment,
+                parent,
+            )
 
         # 2.1 Partially instantiate local classes and symbols
-        if isinstance(orig_class, ast.InstanceClass) and not orig_class.fully_instantiated:
+        if (
+            isinstance(orig_class, ast.InstanceClass)
+            and not orig_class.fully_instantiated
+            or redeclared
+            and orig_class.name in self.BUILTIN_TYPES
+        ):
             from_class = new_class.ast_ref
         else:
             from_class = orig_class
@@ -950,6 +961,7 @@ class InstanceTree(ast.Tree):
     ) -> ast.InstanceClass:
         """Instantiate a single extends clause"""
 
+        # TODO: Factor out the similar code to _instantiate_symbol (both have class_modification)
         extends_class = _find_name(extends.component, parent, search_inherited=False)
 
         if extends_class is None:
@@ -1035,6 +1047,9 @@ class InstanceTree(ast.Tree):
                 symbol.modification_environment.arguments = (
                     extend_args + symbol.modification_environment.arguments
                 )
+            if symbol.replaceable:
+                symbol_type = copy.copy(symbol_type)
+                symbol_type.replaceable = True
             symbol.type = self._instantiate_class(
                 symbol_type,
                 symbol.modification_environment,
@@ -1119,11 +1134,11 @@ class InstanceTree(ast.Tree):
             arg
             for arg in modification_environment.arguments
             if isinstance(arg.value, ast.ComponentClause)
-            and arg.value.type.name == element.name
+            and element.name in (arg.value.type.name, arg.value.symbol_list[0].name)
             or isinstance(arg.value, ast.ElementModification)
-            and arg.value.component.name == element.name
+            and element.name == arg.value.component.name
             or isinstance(arg.value, ast.ShortClassDefinition)
-            and arg.value.name == element.name
+            and element.name == arg.value.name
             or isinstance(element, ast.Symbol)
             and element.name in self.BUILTIN_TYPES
         ]
@@ -1136,22 +1151,24 @@ class InstanceTree(ast.Tree):
             instance.modification_environment.arguments += apply_mod_args
 
         # Shift modifiers down
-        if instance.name not in InstanceTree.BUILTIN_TYPES:
-            if isinstance(element, ast.Symbol) and instance.ast_ref.class_modification:
-                mod = self._append_modifications(instance.ast_ref.class_modification)
-            else:
-                mod = ast.ClassModification()
+        if isinstance(element, ast.Symbol) and instance.ast_ref.class_modification:
+            mod = self._append_modifications(instance.ast_ref.class_modification)
+        else:
+            mod = ast.ClassModification()
 
-            for arg in instance.modification_environment.arguments:
-                if isinstance(arg.value, ast.ElementModification):
-                    if arg.value.component.indices != [[None]]:
-                        raise ModelicaSemanticError("Subscripting modifiers is not allowed.")
-                    if arg.value.component.child:
-                        # Move component reference down a level and apply modification
-                        # Don't stomp on original that may be used elsewhere
-                        arg = copy.copy(arg)
-                        arg.value = copy.copy(arg.value)
-                        arg.value.component = arg.value.component.child[0]
+        for arg in instance.modification_environment.arguments:
+            if isinstance(arg.value, ast.ElementModification):
+                if arg.value.component.indices != [[None]]:
+                    raise ModelicaSemanticError("Subscripting modifiers is not allowed.")
+                if arg.value.component.child:
+                    # Move component reference down a level and apply modification
+                    # Don't stomp on original that may be used elsewhere
+                    arg = copy.copy(arg)
+                    arg.value = copy.copy(arg.value)
+                    arg.value.component = arg.value.component.child[0]
+                    mod.arguments.append(arg)
+                else:
+                    if instance.name in self.BUILTIN_TYPES:
                         mod.arguments.append(arg)
                     else:
                         for sub_arg in arg.value.modifications:
@@ -1164,12 +1181,31 @@ class InstanceTree(ast.Tree):
                                 sub_arg.value = copy.copy(arg.value)
                                 sub_arg.value.component = ast.ComponentRef(name="value")
                                 mod.arguments.append(sub_arg)
-                elif isinstance(arg.value, ast.ShortClassDefinition):
-                    mod.arguments.append(arg)
-                else:
-                    raise UnimplementedError(f"{arg.value.__class__} modification")
+            elif isinstance(arg.value, ast.ShortClassDefinition):
+                mod.arguments.append(arg)
+            elif isinstance(arg.value, ast.ComponentClause):
+                # Separate component redeclare into class and sub-component modifications
+                if arg.redeclare:
+                    # Turn class redeclare into a class modification
+                    sub_arg = copy.copy(arg)
+                    sub_arg.value = ast.ShortClassDefinition(
+                        name=instance.type.name,
+                        component=arg.value.type,
+                        replaceable=arg.value.replaceable,
+                    )
+                    mod.arguments.append(sub_arg)
+                # Move component modification down a level and propagate replaceable
+                sym = arg.value.symbol_list[0]
+                if sym.class_modification is not None:
+                    for sym_mod in sym.class_modification.arguments:
+                        mod.arguments.append(sym_mod)
+                if arg.value.replaceable:
+                    # TODO: Do we need to make a copy of sym before modifying and update the symbol list of the parent?
+                    sym.replaceable = True
+            else:
+                raise UnimplementedError(f"{arg.value.__class__} modification")
 
-            instance.modification_environment = mod
+        instance.modification_environment = mod
 
         # TODO: Fix modification scope. It is often *not* the instance parent as done here!
         # Modification scope should be the parent of the class, extends, or symbol declaration
@@ -1240,16 +1276,15 @@ class InstanceTree(ast.Tree):
     ) -> bool:
         """Apply redeclare if any and remove from environment"""
 
-        redeclare = None
+        redeclares = []
         for arg in element.modification_environment.arguments:
             if not arg.redeclare:
                 continue
             if isinstance(arg.value, ast.ShortClassDefinition) and arg.value.name == element.name:
-                redeclare = arg
-                break
-        if redeclare:
-            # TODO: Remove isinstance check when Symbol.replaceable is added
-            if isinstance(element, ast.Class) and not element.replaceable:
+                redeclares.append(arg)
+        if redeclares:
+            redeclare = redeclares[-1]
+            if not element.replaceable:
                 raise ModelicaSemanticError(
                     f"Redeclaring {element.full_reference()} that is not replaceable"
                 )
@@ -1278,7 +1313,7 @@ class InstanceTree(ast.Tree):
                 redeclare.value.class_modification.arguments + modification_environment.arguments
             )
 
-        return True if redeclare else False
+        return bool(redeclares)
 
     def _copy_class_contents(
         self,

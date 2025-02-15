@@ -1068,15 +1068,17 @@ class InstanceTree(ast.Tree):
         else:
             ast_ref = element
 
+        # Create the instance and copy attributes needed in name lookup or modification
         if isinstance(element, ast.Class):
             instance = ast.InstanceClass(
                 name=element.name,
                 ast_ref=ast_ref,
                 parent=parent,
                 annotation=ast.ClassModification(),
-                replaceable=ast_ref.replaceable,
-                encapsulated=ast_ref.encapsulated,
-                partial=ast_ref.partial,
+                replaceable=element.replaceable,
+                encapsulated=element.encapsulated,
+                partial=element.partial,
+                final=element.final,
             )
 
             # TODO: Try connecting into class tree instead of doing _instantiate_parents_partially
@@ -1091,6 +1093,8 @@ class InstanceTree(ast.Tree):
                 name=element.name,
                 ast_ref=ast_ref,
                 parent=parent,
+                replaceable=element.replaceable,
+                final=element.final,
             )
 
         # Merge visibility

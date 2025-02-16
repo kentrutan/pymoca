@@ -1038,15 +1038,6 @@ class InstanceTree(ast.Tree):
             symbol_type = find_name(symbol.type, parent)
             if symbol_type is None:
                 raise NameLookupError(f"{symbol.type} not found in {parent.full_reference()}")
-            if isinstance(symbol_type, ast.InstanceElement):
-                extend_args = [
-                    arg
-                    for arg in symbol_type.modification_environment.arguments
-                    if not isinstance(arg.value, ast.ShortClassDefinition)
-                ]
-                symbol.modification_environment.arguments = (
-                    extend_args + symbol.modification_environment.arguments
-                )
             if symbol.replaceable:
                 symbol_type = copy.copy(symbol_type)
                 symbol_type.replaceable = True

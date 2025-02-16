@@ -848,8 +848,9 @@ class InstanceTree(ast.Tree):
             raise NameLookupError(f"{class_name} not found in given tree")
         if isinstance(class_, ast.Symbol):
             raise InstantiationError(f"Found Symbol for {class_name} but need Class to instantiate")
+        # # Spec says to instantiate the class with root (self) as parent, so that's what we do
         instance = self._instantiate_class(class_, ast.ClassModification(), self)
-        self._instantiate_parents_partially(instance)
+        self.classes[instance.name] = instance
         return instance
 
     def _instantiate_class(
@@ -874,7 +875,7 @@ class InstanceTree(ast.Tree):
         # Definitions
         #   - Element: Class, Component (Symbol in Pymoca), or Extends Clause
         # 1. For element itself:
-        #   1. Create an instance of the class to be instantiated ("partially instantiated element")
+        #   1. Create an instance of the element to be instantiated ("partially instantiated element")
         #   2. Modifiers are merged for the element itself (but contained references are resolved during flattening)
         #   3. Redeclare of element itself is done
         # 2. For each element (Class or Component) in the local contents of the current element:
@@ -934,6 +935,7 @@ class InstanceTree(ast.Tree):
         # See `parse_test.test_instantiation_function_input_order`
 
         # 6. Recursively instantiate symbols
+        # Spec says "local and inherited", but we already did inherited
         for symbol in new_class.symbols.values():
             self._instantiate_symbol(symbol, new_class)
 
@@ -1138,12 +1140,21 @@ class InstanceTree(ast.Tree):
         instance.visibility = min(ast_ref.visibility, parent.visibility)
 
         # Modifiers are merged for the element itself
-        # TODO: Factor out merging/applying modifiers to separate function
+        self._apply_modifications(instance, element, modification_environment)
+
+        return instance
+
+    def _apply_modifications(
+        self,
+        instance: Union[ast.InstanceClass, ast.InstanceSymbol],
+        element: Union[ast.Class, ast.Symbol],
+        modification_environment: ast.ClassModification,
+    ) -> None:
         # Modifiers are added in reverse priority so the last one in the list overrides previous ones
         # TODO: Would on-the-fly culling modifiers of same attribute be more efficient?
 
         # Apply modifications for this instance
-        instance.modification_environment.arguments = [
+        apply_mod_args = [
             arg
             for arg in modification_environment.arguments
             if isinstance(arg.value, ast.ComponentClause)
@@ -1156,18 +1167,17 @@ class InstanceTree(ast.Tree):
             and element.name in InstanceTree.BUILTIN_TYPES
         ]
 
-        # Remove applied arguments from merged modification_environment
-        if instance.modification_environment.arguments:
+        # Remove from passed modification_environment and add to instance
+        if apply_mod_args:
             modification_environment.arguments = [
-                arg
-                for arg in modification_environment.arguments
-                if arg not in instance.modification_environment.arguments
+                arg for arg in modification_environment.arguments if arg not in apply_mod_args
             ]
+            instance.modification_environment.arguments += apply_mod_args
 
         # Shift modifiers down
         if instance.name not in InstanceTree.BUILTIN_TYPES:
-            if isinstance(element, ast.Symbol) and ast_ref.class_modification:
-                mod = self._append_modifications(ast_ref.class_modification)
+            if isinstance(element, ast.Symbol) and instance.ast_ref.class_modification:
+                mod = self._append_modifications(instance.ast_ref.class_modification)
             else:
                 mod = ast.ClassModification()
 
@@ -1210,8 +1220,6 @@ class InstanceTree(ast.Tree):
                 new_arg = copy.copy(arg)
                 new_arg.scope = instance.parent
                 instance.modification_environment.arguments[index] = new_arg
-
-        return instance
 
     def _instantiate_parents_partially(
         self,

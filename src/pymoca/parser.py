@@ -197,7 +197,7 @@ class ASTListener(ModelicaListener):
             self.class_node.annotation = self.ast[ctx.comp_annotation]
 
     def exitArgument(self, ctx: ModelicaParser.ArgumentContext):
-        argument = ast.ClassModificationArgument()
+        argument = ast.ClassModificationArgument(scope=self.class_node)
         if ctx.element_modification_or_replaceable() is not None:
             argument.value = self.ast[ctx.element_modification_or_replaceable()]
             argument.redeclare = False
@@ -763,7 +763,7 @@ class ASTListener(ModelicaListener):
                     sym.class_modification = mod
                 else:
                     # Assignment of value, which we turn into a modification here.
-                    vmod_arg = ast.ClassModificationArgument()
+                    vmod_arg = ast.ClassModificationArgument(scope=self.class_node)
                     vmod_arg.value = ast.ElementModification()
                     vmod_arg.value.component = ast.ComponentRef(name="value")
                     vmod_arg.value.modifications = [mod]

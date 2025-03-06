@@ -1077,6 +1077,7 @@ def _instantiate_partially(
             name=element.name,
             ast_ref=ast_ref,
             parent=parent,
+            replaceable=element.replaceable,
             final=element.final,
         )
 

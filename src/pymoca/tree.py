@@ -1080,6 +1080,9 @@ def _instantiate_partially(
             final=element.final,
         )
 
+    # Merge visibility
+    instance.visibility = min(ast_ref.visibility, parent.visibility)
+
     # Modifiers are merged for the element itself
     _apply_modifications(instance, element, modification_environment)
 

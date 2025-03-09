@@ -963,6 +963,34 @@ class ParseTest(unittest.TestCase):
         for name in ("ir1", "ir2", "ir3", "ir4", "ir5"):
             self.assertFalse(instance.symbols[name].replaceable, f"{name} is replaceable")
 
+    def test_redeclare_component_complicated(self):
+        """Test more complicated cases of redeclaring components
+
+        This includes direct and indirect redeclarationsmultiple levels of inheritance
+        with modifications, and redeclarations of components with different types.
+        """
+
+        instance = self.parse_and_instantiate_model("RedeclareComponentComplicated.mo", "P.M")
+        expect = [
+            self.redeclare_expect("num", "Integer", 4, True),
+            self.redeclare_expect("b.num", "Integer", 5, True),
+            self.redeclare_expect("f.num", "Real", 6.0, False),
+            self.redeclare_expect("f2.num", "Integer", 1, True),
+        ]
+        self.check_redeclare_expects(instance, expect)
+
+        # Symbols themselves were declared replaceable
+        for name in ("f", "f2"):
+            self.assertTrue(instance.symbols[name].replaceable, f"{name} not replaceable")
+
+        instance = self.parse_and_instantiate_model("RedeclareComponentComplicated.mo", "P.M2")
+        expect = [
+            self.redeclare_expect("num", "Real", 7.0, False),
+            self.redeclare_expect("b.num", "Integer", 5, True),
+            self.redeclare_expect("g", "G", 8.0, False),
+        ]
+        self.check_redeclare_expects(instance, expect)
+
     def test_redeclare_component_type_compatibility(self):
         """Test type compatibility for redeclaration of components of builtin types"""
 

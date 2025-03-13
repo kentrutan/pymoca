@@ -1552,7 +1552,7 @@ class ModelicaParser ( Parser ):
         def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
             super().__init__(parent, invokingState)
             self.parser = parser
-            self.epriv = None # Element_listContext
+            self.edef = None # Element_listContext
             self.epub = None # Element_listContext
             self.epro = None # Element_listContext
             self.ext_annotation = None # AnnotationContext
@@ -1622,7 +1622,7 @@ class ModelicaParser ( Parser ):
         try:
             self.enterOuterAlt(localctx, 1)
             self.state = 274
-            localctx.epriv = self.element_list()
+            localctx.edef = self.element_list()
             self.state = 283
             self._errHandler.sync(self)
             _la = self._input.LA(1)

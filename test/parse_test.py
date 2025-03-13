@@ -568,6 +568,65 @@ class ParseTest(unittest.TestCase):
         # self.assertEqual(flat_tree.classes["M"].symbols["b.a.p"].type.name, "Integer")
         # self.assertEqual(flat_tree.classes["M"].symbols["b.a.p"].value.value, 1)
 
+    def test_visibility_in_ast(self):
+        """Test visibility is set correctly in AST elements"""
+
+        ast_tree = self.parse_model_files("Visibility.mo")
+        A = ast_tree.classes["A"]
+
+        # Test visibility of the classes
+        self.assertEqual(ast.Visibility.PUBLIC, A.visibility)
+        self.assertEqual(ast.Visibility.PROTECTED, A.classes["B"].visibility)
+        self.assertEqual(ast.Visibility.PUBLIC, A.classes["C"].visibility)
+
+        # Test symbols visibility
+        self.assertEqual(ast.Visibility.PROTECTED, A.symbols["b"].visibility)
+        self.assertEqual(ast.Visibility.PUBLIC, A.symbols["c"].visibility)
+        self.assertEqual(ast.Visibility.PUBLIC, A.symbols["d"].visibility)
+        self.assertEqual(ast.Visibility.PROTECTED, A.symbols["e"].visibility)
+        self.assertEqual(ast.Visibility.PROTECTED, A.symbols["f"].visibility)
+
+        # Test extends visibility
+        C = A.classes["C"]
+        self.assertEqual(ast.Visibility.PROTECTED, C.extends[0].visibility)
+
+        # Test visibility of public symbols in a protected class is as parsed
+        B = A.classes["B"]
+        for symbol in B.symbols.values():
+            self.assertEqual(ast.Visibility.PUBLIC, symbol.visibility)
+
+    def test_visibility_in_instance(self):
+        """Test visibility is set correctly in instance elements"""
+
+        ast_tree = self.parse_model_files("Visibility.mo")
+
+        instance = tree.instantiate("A", ast_tree)
+        # Test visibility of the classes
+        B = instance.classes["B"]
+        C = instance.classes["C"]
+        self.assertEqual(ast.Visibility.PUBLIC, instance.visibility)
+        self.assertEqual(ast.Visibility.PROTECTED, B.visibility)
+        self.assertEqual(ast.Visibility.PUBLIC, C.visibility)
+
+        # Test visibility of the symbols
+        self.assertEqual(ast.Visibility.PROTECTED, instance.symbols["b"].visibility)
+        self.assertEqual(ast.Visibility.PUBLIC, instance.symbols["c"].visibility)
+        self.assertEqual(ast.Visibility.PUBLIC, instance.symbols["d"].visibility)
+        self.assertEqual(ast.Visibility.PROTECTED, instance.symbols["e"].visibility)
+        self.assertEqual(ast.Visibility.PROTECTED, instance.symbols["f"].visibility)
+
+        # Test that we propagate visibility to symbols in a symbol type
+        for symbol in instance.symbols["b"].type.symbols.values():
+            self.assertEqual(ast.Visibility.PROTECTED, symbol.visibility)
+
+        # Test extends visibility
+        c_type_extends_B = instance.symbols["c"].type.extends[0]
+        self.assertEqual(ast.Visibility.PROTECTED, c_type_extends_B.visibility)
+
+        # Test for protected visibility in inherited symbols in a public class
+        for symbol in c_type_extends_B.symbols.values():
+            self.assertEqual(ast.Visibility.PROTECTED, symbol.visibility)
+
     def test_extends_lookup_not_in_extended(self):
         """
         Check that we do not find 'model B' in the unnamed node 'A' in the

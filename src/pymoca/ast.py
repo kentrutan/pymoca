@@ -603,6 +603,23 @@ class ExtendsClause(Node):
 class Class(Node):
     BUILTIN = ("Real", "Integer", "String", "Boolean")
 
+    # TODO: Remove use_find_name when done with new instantiation/flattening
+    FIND_CLASS = None
+    _FIND_CLASS = None
+
+    @classmethod
+    def use_find_name(cls, setting: bool):
+        """False = use find_class (default), True = use tree.find_name"""
+        if cls.FIND_CLASS is None:
+            cls.FIND_CLASS = cls.find_class
+            cls._FIND_CLASS = cls._find_class
+        if setting:
+            cls._find_class = cls.new_find_class  # noqa: F811
+            cls.find_class = cls.new_find_class  # noqa: F811
+        else:
+            cls._find_class = cls._FIND_CLASS
+            cls.find_class = cls.FIND_CLASS
+
     def __init__(self, **kwargs):
         self.name = None  # type: str
         self.imports = OrderedDict()  # type: OrderedDict[str, Union[ImportClause, ComponentRef]]
@@ -624,8 +641,11 @@ class Class(Node):
         self.annotation = []  # type: Union[Type[None], ClassModification]
         self.parent = None  # type: Class
 
+        # TODO: Remove hard-wired tree.find_name() when done with prototype
+        self.use_find_name(False)
         super().__init__(**kwargs)
 
+    # TODO: Delete _find_class and find_class if tree.find_name is accepted as permanent
     def _find_class(
         self, component_ref: ComponentRef, search_parent=True, search_imports=True
     ) -> "Class":
@@ -721,6 +741,38 @@ class Class(Node):
             c = c.copy_including_children()
 
         return c
+
+    # TODO: Delete new_find_class when done with new instantiation/flattening
+    def new_find_class(
+        self,
+        component_ref: ComponentRef,
+        copy=True,
+        check_builtin_classes=False,
+        search_imports=True,
+        search_parent=True,
+    ) -> "Class":
+        """Hook into tree.find_name for code that uses Class.find_class"""
+        from . import tree
+
+        if component_ref.name in self.BUILTIN:
+            # Just do the find_class logic for BUILTINs
+            return self.FIND_CLASS(
+                component_ref, copy=copy, check_builtin_classes=check_builtin_classes
+            )
+
+        found = tree._find_name(
+            name=component_ref,
+            scope=self,
+            search_imports=search_imports,
+            search_parent=search_parent,
+        )
+        if found is None or isinstance(found, Symbol):
+            raise ClassNotFoundError("Could not find class '{}'".format(component_ref))
+
+        if copy:
+            found = found.copy_including_children()
+
+        return found
 
     def _find_constant_symbol(self, component_ref: ComponentRef, search_parent=True) -> Symbol:
         if component_ref.child:

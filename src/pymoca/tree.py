@@ -1187,7 +1187,25 @@ def _apply_modifications(
 
     instance.modification_environment = mod
 
-    # TODO: Set modification argument scope now that we have an instance (currently is ast.Class)
+    # Modification argument scope is set in the parser as the parent of the class,
+    # extends, or symbol declaration. Update the scope from the instance tree.
+    for index, arg in enumerate(instance.modification_environment.arguments):
+        assert arg.scope is not None, "Modification argument scope should have been set by now"
+        if not isinstance(arg.scope, ast.InstanceClass):
+            # Look up the scope class in the instance tree
+            if isinstance(instance, ast.Class):
+                lookup_scope = instance
+            else:  # ast.Symbol
+                lookup_scope = instance.parent
+            instance_scope = find_name(arg.scope.name, lookup_scope)
+            if not isinstance(instance_scope, ast.InstanceClass):
+                instance_scope = _instantiate_partially(
+                    arg.scope, ast.ClassModification(), arg.scope.parent
+                )
+            # Make a copy so we don't change original AST or same arg used elsewhere
+            new_arg = copy.copy(arg)
+            new_arg.scope = instance_scope
+            instance.modification_environment.arguments[index] = new_arg
 
 
 def _instantiate_parents_partially(

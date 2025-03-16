@@ -283,6 +283,17 @@ class ParseTest(unittest.TestCase):
         t_value_mod = t_value_mods[-1]
         self.assertEqual(t_value_mod.value.modifications[-1].value, 2)
 
+    def test_instantiation_modification_scope(self):
+        """Test that modification scopes are updated to InstanceClass"""
+        ast_tree = self.parse_model_files("TreeInTree.mo")
+        instance = tree.instantiate("Tree.Tree", ast_tree)
+        self.assertIsNotNone(instance)
+
+        self.assertIn("t", instance.extends[0].symbols, "t not found in instance")
+        t = instance.extends[0].symbols["t"]
+        for mod in t.type.symbols["Integer"].modification_environment.arguments:
+            self.assertTrue(isinstance(mod.scope, ast.InstanceClass), "scope not InstanceClass")
+
     @unittest.expectedFailure  # TODO: Figure out what we're doing with InstanceTree parent/child
     def test_instantiation_tree(self):
         instance = self.parse_and_instantiate_model("InstantiationTree.mo", "TreeModel.Tree")

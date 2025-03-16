@@ -98,7 +98,7 @@ class Node:
             res = {
                 key: cls.to_json(var.__dict__[key])
                 for key in var.__dict__.keys()
-                if key not in ("parent", "scope", "__deepcopy__")
+                if key not in ("parent", "parent_instance", "scope", "__deepcopy__")
             }
         elif isinstance(var, Visibility):
             res = str(var)
@@ -1014,6 +1014,8 @@ class InstanceClass(InstanceElement, Class):
     """
 
     def __init__(self, **kwargs):
+        self.parent_instance = None  # type: Optional[InstanceClass]
+
         super().__init__(**kwargs)
 
     def __repr__(self):

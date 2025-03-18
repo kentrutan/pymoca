@@ -372,6 +372,73 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(t_mod.value.component.name, "nominal")
         self.assertAlmostEqual(t_mod.value.modifications[0].value, 2.0)
 
+    def test_instance_inherited_value_editing(self):
+        """Test that we can edit and retrieve an inherited value in an instance"""
+        instance = self.parse_and_instantiate_model("InheritanceInstantiation.mo", "B")
+        self.assertIsNotNone(instance)
+
+        def get_value_value(symbol):
+            """Get the value attribute value of given InstanceSymbol without using name lookup"""
+            mod = get_modifiers_by_name(symbol, "value")[-1]
+            mod_value = mod.value.modifications[0]
+            value = mod_value.value  # Only supports ast.Primary
+            return value
+
+        def set_value_value(symbol, value):
+            """Set the value attribute value of given InstanceSymbol without using name lookup"""
+            mod = get_modifiers_by_name(symbol, "value")[-1]
+            mod.value.modifications[0].value = value
+
+        # Modify the value of b in the instantiated class and check that we can find it again
+        # Access the value directly (without name lookup)
+        b = instance.extends[0].symbols["b"]
+        b_value_original = get_value_value(b)
+        self.assertEqual(b_value_original, 2)  # Modelica code value modification = 2
+        set_value_value(b, 3)  # Set the value to 3
+        # Retrieve the value again and check that it is now 3
+        b_value_new = get_value_value(b)
+        self.assertEqual(b_value_new, 3, "b.value not updated to 3 in original instance")
+        # Now do a name lookup and check that the value has been modified
+        b_lookup = tree.find_name("b", instance)
+        b_value_lookup = get_value_value(b_lookup)
+        self.assertEqual(b_value_lookup, 3, "b.value not updated to 3 in find_name of instance")
+
+    def test_ast_inherited_value_editing(self):
+        """Test that we can edit and retrieve an inherited value in the AST"""
+        ast_tree = self.parse_model_files("InheritanceInstantiation.mo")
+        self.assertIsNotNone(ast_tree)
+
+        def get_value_value(symbol):
+            """Get the value attribute value of given Symbol without using name lookup"""
+            self.assertIsNotNone(symbol.class_modification, f"class_modification in {symbol!r}")
+            arg = symbol.class_modification.arguments[0]  # Only supports one value argument
+            return arg.value.modifications[0].value
+
+        def set_value_value(symbol, value):
+            """Set the value attribute value of given Symbol without using name lookup"""
+            self.assertIsNotNone(symbol.class_modification, f"class_modification in {symbol}")
+            arg = symbol.class_modification.arguments[0]  # Only supports one value argument
+            arg.value.modifications[0].value = value
+
+        # Modify the value of b in the AST class and check that we can find it again
+        # We are editing the original value assignment in the base class,
+        # not the modification in the extends clause.
+        # Get the extended class directly with name lookup (not through extends)
+        extends_class_ref = ast_tree.classes["B"].extends[0].component
+        extends_class = tree.find_name(extends_class_ref, ast_tree)
+        # Access the symbol directly (without name lookup)
+        b = extends_class.symbols["b"]
+        b_value_original = get_value_value(b)
+        self.assertEqual(b_value_original, 0)  # Modelica code value assignment = 0
+        set_value_value(b, 3)  # Set the value to 3
+        # Retrieve the value again and check that it is now 3
+        b_value_new = get_value_value(b)
+        self.assertEqual(b_value_new, 3, "b.value not updated to 3 in original class")
+        # Now do a name lookup and check that the value has been modified
+        b_lookup = tree.find_name("b", ast_tree.classes["B"])
+        b_value_lookup = get_value_value(b_lookup)
+        self.assertEqual(b_value_lookup, 3, "b.value not updated to 3 in find_name of class")
+
     @unittest.skip("Only keeping first of same names not implemented yet in instantiation")
     def test_instantiation_function_input_order(self):
         """Check that only first definitions of inputs are used in function instantiation."""

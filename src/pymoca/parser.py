@@ -708,15 +708,6 @@ class ASTListener(ModelicaListener):
         self.symbol_node = sym
         self.comp_clause.symbol_list += [sym]
 
-    def enterElement_modification(self, ctx: ModelicaParser.Element_modificationContext):
-        if self.symbol_node is not None:
-            self.ast[ctx] = self.symbol_node
-        else:
-            sym = ast.Symbol(order=self.sym_count, parent=self.class_node)
-            self.sym_count += 1
-            self.ast[ctx] = sym
-            self.symbol_node = sym
-
     def exitComponent_declaration(self, ctx: ModelicaParser.Component_declarationContext):
         self.ast[ctx].comment = self.ast[ctx.comment()]
         self.symbol_node = None

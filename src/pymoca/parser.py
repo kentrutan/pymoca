@@ -11,6 +11,7 @@ import os
 import pickle
 import platform
 import sqlite3
+import sys
 import time
 from collections import OrderedDict, deque
 from datetime import timedelta
@@ -19,6 +20,8 @@ from typing import Dict, List, Optional, Union  # noqa: F401
 
 import antlr4
 import antlr4.Parser
+from antlr4 import ParserRuleContext
+from antlr4.error.ErrorListener import ErrorListener
 
 import pymoca
 
@@ -37,6 +40,45 @@ logger = logging.getLogger("pymoca")
 
 
 DEFAULT_MODEL_CACHE_DB = "model_txt_cache.db"
+
+
+class ModelicaSyntaxError(SyntaxError):
+    pass
+
+
+def syntax_error_from_ctx(
+    message: str, ctx: ParserRuleContext, file_name: str = ""
+) -> ModelicaSyntaxError:
+    """Create a ModelicaSyntaxError from an ANTLR context object"""
+    line1 = ctx.start.line
+    col1 = ctx.start.column
+    line2 = ctx.stop.line
+    col2 = ctx.stop.column
+    text = ctx.start.source[1].strdata.split()
+    error_text = text[line1 - 1]
+    for line in range(line1, line2):
+        error_text += text[line]
+    # Last two values were were added in Python 3.10, previous will ignore
+    info = file_name, line1, col1, error_text, line2, col2
+    return ModelicaSyntaxError(message, info)
+
+
+def print_syntax_error(exception: ModelicaSyntaxError, file=sys.stderr):
+    """Print a ModelicaSyntaxError in a readable format
+
+    Python itself will print a traceback with the Modelica source info,
+    but this is useful if you want to handle the exception.
+    """
+    file_name, line1, col1, error_text = exception.args[1][:4]
+    # We set the filename attribute if we have the file name,
+    # but it is not reflected in the original args, so we get it from the attribute
+    file_name = exception.filename
+    file_info = ""
+    if file_name:
+        file_info = f"{file_name}:"
+    file_info += f"{line1}:{col1}:"
+    print(f"{file_info}\n{error_text}", file=file)
+    print(f"ModelicaSyntaxError: {exception.args[0]}", file=file)
 
 
 class ModelicaFile:
@@ -796,21 +838,28 @@ def file_to_tree(f: ModelicaFile) -> ast.Tree:
     return root
 
 
-class ModelicaParserErrorListener(antlr4.error.ErrorListener.ErrorListener):
-    def __init__(self):
-        self._error = False
-        super().__init__()
+class ModelicaParserErrorListener(ErrorListener):
+    """Raise a ModelicaSyntaxError when ANTLR finds a syntax error"""
 
-    @property
-    def error(self):
-        return self._error
+    def syntaxError(self, recognizer, offending_symbol, line, column, msg, e):
+        """Handle syntax errors from both the lexer and parser"""
+        # There is probably a better way to get the text
+        if isinstance(recognizer, antlr4.Lexer):
+            text = recognizer.inputStream.strdata.split("\n")
+        else:
+            text = offending_symbol.source[1].strdata.split("\n")
+        error_text = text[line - 1]
+        # ANTLR column is 0-based, but Python is 1-based
+        column += 1
+        # End line and column were were added in Python 3.10, previous will ignore
+        # Set to same as start to get Python >= 3.10 stack trace point to the right place
+        end_line = line
+        end_column = column
+        info = "input", line, column, error_text, end_line, end_column
+        raise ModelicaSyntaxError(msg, info)
 
-    def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
-        self._error = True
-        super().syntaxError(recognizer, offendingSymbol, line, column, msg, e)
 
-
-def _parse(text: str) -> Union[ast.Tree, None]:
+def _parse(text: str) -> ast.Tree:
     """Parse Modelica code given in text"""
     input_stream = antlr4.InputStream(text)
     lexer = ModelicaLexer(input_stream)
@@ -818,10 +867,11 @@ def _parse(text: str) -> Union[ast.Tree, None]:
     parser = ModelicaParser(stream)
     # parser.buildParseTrees = False
     listener = ModelicaParserErrorListener()
+    lexer.removeErrorListeners()
+    lexer.addErrorListener(listener)
+    parser.removeErrorListeners()
     parser.addErrorListener(listener)
     parse_tree = parser.stored_definition()
-    if listener.error:
-        return None
     ast_listener = ASTListener()
     parse_walker = antlr4.ParseTreeWalker()
     parse_walker.walk(ast_listener, parse_tree)
@@ -964,7 +1014,7 @@ def parse(
     cache_expiration_days: int = 30,
     always_update_last_hit: bool = False,
     bypass_cache: bool = False,
-) -> Union[ast.Tree, None]:
+) -> ast.Tree:
     """
     Parse the Modelica code given in text and return the Abstract Syntax Tree (AST).
 
@@ -989,8 +1039,14 @@ def parse(
             performed directly. Default is False.
 
     Returns:
-        Union[ast.Tree, None]: The AST of the parsed Modelica code, or None if the
-            parsing failed.
+        ast.Tree: The AST of the parsed Modelica code
+
+    Raises:
+        ModelicaSyntaxError: If there is a syntax error in the Modelica code.
+        FileNotFoundError: If the specified cache folder does not exist.
+        OSError: If there is an error creating the cache folder.
+        sqlite3.DatabaseError: If the cache database file is corrupt.
+
     """
     if bypass_cache:
         return _parse(txt)
@@ -1097,28 +1153,45 @@ def parse(
             conn.close()
             raise
 
-        # Don't cache None that _parse() returns on syntax errors
-        if tree is not None:
-            pickled_data = pickle.dumps(tree)
+        pickled_data = pickle.dumps(tree)
 
-            # Note that we do an 'INSERT OR REPLACE' because concurrent access
-            # might mean two processes/threads try to insert an entry
-            cursor.execute("BEGIN TRANSACTION;")
-            cursor.execute(
-                "INSERT OR REPLACE INTO models (txt_hash, pymoca_version, data, last_hit) VALUES (?, ?, ?, ?)",
-                (txt_hash, pymoca_version, pickled_data, _microseconds_since_epoch()),
-            )
-            conn.commit()
+        # Note that we do an 'INSERT OR REPLACE' because concurrent access
+        # might mean two processes/threads try to insert an entry
+        cursor.execute("BEGIN TRANSACTION;")
+        cursor.execute(
+            "INSERT OR REPLACE INTO models (txt_hash, pymoca_version, data, last_hit) VALUES (?, ?, ?, ?)",
+            (txt_hash, pymoca_version, pickled_data, _microseconds_since_epoch()),
+        )
+        conn.commit()
 
     conn.close()
 
     return tree
 
 
-def parse_file(file_path: Union[str, Path]) -> Union[ast.Tree, None]:
-    """Parse given file path and return parsed ast.Tree or None if it failed"""
+def parse_file(file_path: Union[str, Path]) -> ast.Tree:
+    """Parse given file path and return parsed ast.Tree
+
+    Args:
+        file_path (str or Path): Path to the Modelica file to parse.
+    Returns:
+        ast.Tree: The Abstract Syntax Tree (AST) of the parsed Modelica code.
+    Raises:
+        FileNotFoundError: If the specified file does not exist.
+        ModelicaSyntaxError: If there is a syntax error in the Modelica code.
+        See also: parse()
+    """
     path = Path(file_path)
     if not path.exists():
         raise FileNotFoundError(f"File not found: {path}")
     txt = path.read_text(encoding="utf-8")
-    return parse(txt)
+    try:
+        ast_tree = parse(txt)
+    except ModelicaSyntaxError as exception:
+        # Add filename to the exception
+        info = (str(path),) + exception.args[1][1:]
+        raise ModelicaSyntaxError(
+            exception.msg,
+            info,
+        ) from exception
+    return ast_tree

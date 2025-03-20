@@ -115,13 +115,21 @@ class ASTListener(ModelicaListener):
 
         self.ast[ctx] = class_node
 
+    def _prevent_builtin_name(self, name: str, ctx: ParserRuleContext) -> None:
+        """Prevent the use of built-in names"""
+        if name in ast.Class.BUILTIN:
+            raise ModelicaSyntaxError(f"Predefined type {name} not allowed as identifier", ctx)
+
     def exitClass_definition(self, ctx: ModelicaParser.Class_definitionContext):
         class_node = self.class_nodes.pop()
+        self._prevent_builtin_name(class_node.name, ctx)
         self.class_node.classes[class_node.name] = class_node
 
     def exitShort_class_definition(self, ctx):
+        name = ctx.IDENT().getText()
+        self._prevent_builtin_name(name, ctx)
         self.ast[ctx] = ast.ShortClassDefinition(
-            name=ctx.IDENT().getText(),
+            name=name,
             type=ctx.class_prefixes().class_type().getText(),
             component=self.ast[ctx.component_reference()],
         )
@@ -708,6 +716,7 @@ class ASTListener(ModelicaListener):
         if self.comp_clause.dimensions is not None:
             dimensions = self.comp_clause.dimensions
         sym.name = ctx.IDENT().getText()
+        self._prevent_builtin_name(sym.name, ctx)
         sym.dimensions = dimensions
         sym.prefixes = self.comp_clause.prefixes
         sym.type = self.comp_clause.type

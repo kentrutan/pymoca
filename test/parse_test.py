@@ -155,6 +155,46 @@ class ParseTest(unittest.TestCase):
         #     raise IOError('{:s} != {:s}'.format(str(names), str(names_set)))
         self.flush()
 
+    def test_declarations_are_not_builtin_names(self):
+        """Check that declaration names are not builtin types
+
+        See MLS v3.5 section 4.8 Predefined Types and Classes
+        """
+        # Check that errors are caught in the parser
+        error_templates = (
+            # Class, model, function and type definitions
+            "class {} end {};",
+            "model {} end {};",
+            "function {} end {};",
+            "model A type {} = Real; end A;",
+            # Component declarations
+            "model A Real {}; end A;",
+            "model A Real a, {}; end A;",
+            "model A type B = {}; B {}; end A;",
+            "model A model B end B; B {}; end A;",
+            # Redeclares
+            "model A B b(redeclare Real {}); model B Real x; end B; end A;",
+            "model A B b(redeclare type {} = Integer); replaceable type B = {}; end A;",
+        )
+        for template in error_templates:
+            for name in ast.Class.BUILTIN:
+                txt = template.format(name, name)
+                with self.assertRaisesRegex(
+                    parser.ModelicaSyntaxError,
+                    f"Predefined type {name} not allowed as identifier",
+                    msg=f"for '{txt}'",
+                ):
+                    parser.parse(txt)
+
+        ok_examples = (
+            "model A parameter Integer i=1; String s=String(i); end A;",
+            "model A type E = enumeration(a, b); parameter Integer i = Integer(E.a); end A;",
+            'model A redeclare type Voltage = Real(unit="V"); end A;',
+        )
+        for txt in ok_examples:
+            ast_tree = parser.parse(txt)
+            self.assertIsNotNone(ast_tree, f"for '{txt}'")
+
     def test_inheritance(self):
         ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "InheritanceInstantiation.mo"))
         flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="C2"))

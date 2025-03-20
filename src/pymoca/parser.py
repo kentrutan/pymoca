@@ -626,6 +626,7 @@ class ASTListener(ModelicaListener):
                 import_clause.unqualified = True
         if import_clause.short_name:
             # import_clause instead of comp_ref signifies short_name
+            self._check_not_already_imported(import_clause.short_name, ctx)
             self.class_node.imports[import_clause.short_name] = import_clause
         elif import_clause.unqualified:
             # Postpone processing this uncommon case until actually needed
@@ -638,10 +639,13 @@ class ASTListener(ModelicaListener):
             # Simple case, fast lookup
             for comp in import_clause.components:
                 name = comp.to_tuple()[-1]
-                # Check for name clashes
-                if name in self.class_node.imports:
-                    raise IOError(name, "already imported")
+                self._check_not_already_imported(name, ctx)
                 self.class_node.imports[name] = comp
+
+    def _check_not_already_imported(self, import_name: str, ctx: ParserRuleContext) -> None:
+        """Check for import name clashes"""
+        if import_name in self.class_node.imports:
+            raise syntax_error_from_ctx(f"{import_name} already imported", ctx)
 
     def enterExtends_clause(self, ctx: ModelicaParser.Extends_clauseContext):
         self.in_extends_clause = True

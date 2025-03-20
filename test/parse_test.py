@@ -6,6 +6,7 @@ from __future__ import absolute_import, division, print_function, print_function
 
 import contextlib
 import enum
+import io
 import logging
 import os
 import sqlite3
@@ -330,8 +331,10 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(flat_tree.classes["E"].symbols["z.y"].nominal.value, 2.0)
 
     def test_redeclare_nested(self):
-        ast_tree = self.parse_model_files("RedeclareNestedClass.mo.fail_parse")
-        self.assertIsNone(ast_tree)
+        with self.assertRaisesRegex(
+            parser.ModelicaSyntaxError, "mismatched input '.' expecting '='"
+        ):
+            _ = self.parse_model_files("RedeclareNestedClass.mo.fail_parse")
 
     def test_extends_order(self):
         ast_tree = self.parse_model_files("ExtendsOrder.mo")
@@ -1029,6 +1032,48 @@ class ParseTest(unittest.TestCase):
                 _ = parser.parse(txt, model_cache_folder=Path(tmpdirname))
 
                 self.assertIn("Model cache database is corrupt", cm.output[0])
+
+    def test_syntax_error(self):
+        """Test ModelicaSyntaxError parse exception and related functions"""
+
+        # Lexical syntax error at first character
+        with self.assertRaisesRegex(
+            parser.ModelicaSyntaxError,
+            r"token recognition error at: '`' \(input, line 1\)",
+        ):
+            _ = parser.parse("`", bypass_cache=True)
+
+        # Syntax error at <EOF> without trailing newline
+        with self.assertRaisesRegex(
+            parser.ModelicaSyntaxError,
+            r"missing ';' at '<EOF>' \(input, line 2\)",
+        ):
+            _ = parser.parse("model A\nend A", bypass_cache=True)
+
+        # Syntax error at <EOF> with trailing newline
+        with self.assertRaisesRegex(
+            parser.ModelicaSyntaxError,
+            "missing ';' at '<EOF>' \\(input, line 3\\)",
+        ):
+            parser.parse("model A\nend A\n", bypass_cache=True)
+
+        # Syntax error in a file
+        with self.assertRaisesRegex(
+            parser.ModelicaSyntaxError,
+            r"mismatched input '.' expecting '=' \(RedeclareNestedClass.mo.fail_parse, line 21\)",
+        ) as context:
+            _ = self.parse_model_files("RedeclareNestedClass.mo.fail_parse")
+
+        # Test print_syntax_error() of previous exception
+        error_text = io.StringIO()
+        parser.print_syntax_error(context.exception, error_text)
+        expected_regex = (
+            r".*RedeclareNestedClass\.mo\.fail_parse:21:48:",
+            r"  extends D\(c.z.x\(nominal=2\), redeclare model C\.B=F\);",
+            r"ModelicaSyntaxError: mismatched input '\.' expecting '='",
+        )
+        expected_regex = "\n".join(expected_regex)
+        self.assertRegex(error_text.getvalue(), expected_regex)
 
 
 if __name__ == "__main__":

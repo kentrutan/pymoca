@@ -19,6 +19,7 @@ from typing import Dict, List, Optional, Union  # noqa: F401
 
 import antlr4
 import antlr4.Parser
+from antlr4 import ParserRuleContext
 
 import pymoca
 
@@ -37,6 +38,23 @@ logger = logging.getLogger("pymoca")
 
 
 DEFAULT_MODEL_CACHE_DB = "model_txt_cache.db"
+
+
+class ModelicaSyntaxError(SyntaxError):
+    """SyntaxError built from an ANTLR context object"""
+
+    def __init__(self, message: str, ctx: ParserRuleContext, file_name: str = ""):
+        # file_name defaults to empty because our current parser takes text str only
+        line1 = ctx.start.line
+        col1 = ctx.start.column
+        line2 = ctx.stop.line
+        col2 = ctx.stop.column
+        text = ctx.start.source[1].strdata.splitlines()
+        error_text = text[line1 - 1]
+        for line in range(line1, line2):
+            error_text += text[line]
+        # last two args were were added in Python 3.10, previous will ignore
+        super().__init__(message, line1, col1, error_text, file_name, line2, col2)
 
 
 class ModelicaFile:

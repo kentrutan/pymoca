@@ -117,7 +117,7 @@ class ASTListener(ModelicaListener):
 
     def _prevent_builtin_name(self, name: str, ctx: ParserRuleContext) -> None:
         """Prevent the use of built-in names"""
-        if name in ast.Class.BUILTIN:
+        if name in ast.Tree.BUILTIN_TYPES:
             raise ModelicaSyntaxError(f"Predefined type {name} not allowed as identifier", ctx)
 
     def exitClass_definition(self, ctx: ModelicaParser.Class_definitionContext):

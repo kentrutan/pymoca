@@ -579,26 +579,9 @@ def _find_local(
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Name lookup for predefined classes and contained elements"""
 
-    # 0. Predefined types (`Real`, `Integer`, `Boolean`, `String`) (spec 4.8)
     # 1. Iteration variables
     # 2. Classes
     # 3. Components (Symbols in Pymoca)
-
-    # 0. Predefined classes and types
-    # TODO: Refactor this when refactoring predefined classes and instantiation/flattening
-    # (it will move from here to an __init__ somewhere that creates predefined classes)
-    # For now backward compatible with Class.find_class, i.e. build it here
-    if name in ast.Class.BUILTIN:
-        type_ = name
-
-        c = ast.Class(name=type_)
-        c.type = "__builtin"
-        c.parent = scope.root
-
-        cref = ast.ComponentRef(name=type_)
-        s = ast.Symbol(name="__value", type=cref, parent=c)
-        c.symbols[s.name] = s
-        return c
 
     # 1. Iteration variables
     # TODO: Refactor when handling iteration variables (it will move up one level)

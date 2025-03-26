@@ -75,7 +75,7 @@ class ASTListener(ModelicaListener):
         self.symbol_node = None  # type: ast.Symbol
         self.eq_comment = None  # type: str
         self.sym_count = 0  # type: int
-        self.in_extends_clause = False
+        self.in_extends = False
 
     @property
     def class_node(self):
@@ -141,6 +141,9 @@ class ASTListener(ModelicaListener):
         class_node.name = ctx.IDENT()[0].getText()
         class_node.comment = self.ast[ctx.string_comment()]
 
+    def enterClass_spec_base(self, ctx: ModelicaParser.Class_spec_baseContext):
+        self.in_extends = True
+
     def exitClass_spec_base(self, ctx: ModelicaParser.Class_spec_baseContext):
         class_node = self.class_node
         class_node.name = ctx.IDENT().getText()
@@ -154,6 +157,7 @@ class ASTListener(ModelicaListener):
             component=self.ast[ctx.component_reference()], class_modification=class_modification
         )
         class_node.extends.append(extends_clause)
+        self.in_extends = False
 
     def exitComposition(self, ctx: ModelicaParser.CompositionContext):
         # Set visibility if not the default public
@@ -615,7 +619,7 @@ class ASTListener(ModelicaListener):
             raise ModelicaSyntaxError(f"{import_name} already imported", ctx)
 
     def enterExtends_clause(self, ctx: ModelicaParser.Extends_clauseContext):
-        self.in_extends_clause = True
+        self.in_extends = True
 
     def exitExtends_clause(self, ctx: ModelicaParser.Extends_clauseContext):
         if ctx.class_modification() is not None:
@@ -627,7 +631,7 @@ class ASTListener(ModelicaListener):
         )
         self.class_node.extends += [self.ast[ctx]]
 
-        self.in_extends_clause = False
+        self.in_extends = False
 
     def exitRegular_element(self, ctx: ModelicaParser.Regular_elementContext):
         if ctx.comp_elem is not None:
@@ -727,8 +731,9 @@ class ASTListener(ModelicaListener):
         sym.prefixes = self.comp_clause.prefixes
         sym.type = self.comp_clause.type
 
-        # Declarations can also occur in extends clauses, in which case we do not have to add it to the class's symbols.
-        if not self.in_extends_clause:
+        # Declarations can also occur in extends_clause and class_spec_base (also an extends),
+        # in which case we do not have to add it to the class's symbols.
+        if not (self.in_extends):
             if sym.name in self.class_node.symbols:
                 raise IOError(sym.name, "already defined")
             self.class_node.symbols[sym.name] = sym

@@ -422,7 +422,7 @@ class Symbol(Node):
         self.name = ""  # type: str
         self.type = ComponentRef()  # type: Union[ComponentRef, InstanceClass]
         self.prefixes = []  # type: List[str]
-        self.redeclare = False  # type: bool
+        self.replaceable = False  # type: bool
         self.final = False  # type: bool
         self.inner = False  # type: bool
         self.outer = False  # type: bool
@@ -457,6 +457,7 @@ class ComponentClause(Node):
     def __init__(self, **kwargs):
         self.prefixes = []  # type: List[str]
         self.type = ComponentRef()  # type: ComponentRef
+        self.replaceable = False  # type: bool
         self.dimensions = [
             [Primary(value=None)]
         ]  # type: List[List[Union[Expression, Primary, ComponentRef]]]
@@ -541,6 +542,7 @@ class ShortClassDefinition(Node):
         self.type = ""  # type: str
         self.component = ComponentRef()  # type: ComponentRef
         self.class_modification = ClassModification()  # type: ClassModification
+        self.replaceable = False  # type: bool
         super().__init__(**kwargs)
 
     def __repr__(self):

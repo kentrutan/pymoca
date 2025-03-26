@@ -446,6 +446,9 @@ class Symbol(Node):
         self.parent = None  # type: Optional[Class]
         super().__init__(**kwargs)
 
+    def full_reference(self) -> ComponentRef:
+        return element_full_reference(self)
+
     def __str__(self):
         return '{} {}, Type "{}"'.format(type(self).__name__, self.name, self.type)
 
@@ -818,19 +821,8 @@ class Class(Node):
     def find_constant_symbol(self, component_ref: ComponentRef) -> Symbol:
         return self._find_constant_symbol(component_ref)
 
-    def full_reference(self):
-        names = []
-
-        c = self
-        while True:
-            names.append(c.name)
-            if c.parent is None:
-                break
-            else:
-                c = c.parent
-
-        # Exclude the root node's name
-        return ComponentRef.from_tuple(tuple(reversed(names[:-1])))
+    def full_reference(self) -> ComponentRef:
+        return element_full_reference(self)
 
     def _extend(self, other: "Class") -> None:
         for class_name in other.classes.keys():
@@ -932,6 +924,19 @@ class Class(Node):
 
     def __str__(self):
         return '{} {}, Type "{}"'.format(type(self).__name__, self.name, self.type)
+
+
+def element_full_reference(element: Union[Class, Symbol]) -> ComponentRef:
+    """Return the fully-qualified component reference to element"""
+    names = []
+    while True:
+        names.append(element.name)
+        if element.parent is None:
+            break
+        else:
+            element = element.parent
+    # Exclude the root node's name
+    return ComponentRef.from_tuple(tuple(reversed(names[:-1])))
 
 
 class InstanceElement:

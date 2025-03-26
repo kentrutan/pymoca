@@ -109,7 +109,7 @@ class Node:
 
 class Primary(Node):
     def __init__(self, **kwargs):
-        self.value = None  # type: Union[bool, float, int, str, Type[None]]
+        self.value = None  # type: Optional[Union[bool, float, int, str]]
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -152,7 +152,9 @@ class Slice(Node):
 class ComponentRef(Node):
     def __init__(self, **kwargs):
         self.name = ""  # type: str
-        self.indices = [[None]]  # type: List[List[Union[Expression, Slice, Primary, ComponentRef]]]
+        self.indices = [
+            [None]
+        ]  # type: List[List[Optional[Union[Expression, Slice, Primary, ComponentRef]]]]
         self.child = []  # type: List[ComponentRef]
         super().__init__(**kwargs)
 
@@ -226,7 +228,7 @@ class ComponentRef(Node):
 
 class Expression(Node):
     def __init__(self, **kwargs):
-        self.operator = None  # type: Union[str, ComponentRef]
+        self.operator = None  # type: Optional[Union[str, ComponentRef]]
         self.operands = (
             []
         )  # type: List[Union[Expression, Primary, ComponentRef, Array, IfExpression]]
@@ -302,7 +304,7 @@ class WhenEquation(Node):
 class ForIndex(Node):
     def __init__(self, **kwargs):
         self.name = ""  # type: str
-        self.expression = None  # type: Union[Expression, Primary, Slice]
+        self.expression = None  # type: Optional[Union[Expression, Primary, Slice]]
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -315,7 +317,7 @@ class ForEquation(Node):
     def __init__(self, **kwargs):
         self.indices = []  # type: List[ForIndex]
         self.equations = []  # type: List[Union[Equation, ForEquation, ConnectClause]]
-        self.comment = None  # type: str
+        self.comment = None  # type: Optional[str]
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -338,7 +340,7 @@ class ConnectClause(Node):
 class AssignmentStatement(Node):
     def __init__(self, **kwargs):
         self.left = []  # type: List[ComponentRef]
-        self.right = None  # type: Union[Expression, IfExpression, Primary, ComponentRef]
+        self.right = None  # type: Optional[Union[Expression, IfExpression, Primary, ComponentRef]]
         self.comment = ""  # type: str
         super().__init__(**kwargs)
 
@@ -440,7 +442,7 @@ class Symbol(Node):
         self.id = 0  # type: int
         self.order = 0  # type: int
         self.visibility = Visibility.PUBLIC  # type: Visibility
-        self.class_modification = None  # type: ClassModification
+        self.class_modification = None  # type: Optional[ClassModification]
         self.parent = None  # type: Optional[Class]
         super().__init__(**kwargs)
 
@@ -570,8 +572,10 @@ class ClassModification(Node):
 
 class ClassModificationArgument(Node):
     def __init__(self, **kwargs):
-        self.value = []  # type: Union[ElementModification, ComponentClause, ShortClassDefinition]
-        self.scope = None  # type: InstanceClass
+        self.value = (
+            []
+        )  # type: List[Union[ElementModification, ComponentClause, ShortClassDefinition]]
+        self.scope = None  # type: Optional[InstanceClass]
         self.redeclare = False
         super().__init__(**kwargs)
 
@@ -591,8 +595,8 @@ class ClassModificationArgument(Node):
 
 class ExtendsClause(Node):
     def __init__(self, **kwargs):
-        self.component = None  # type: ComponentRef
-        self.class_modification = None  # type: ClassModification
+        self.component = None  # type: Optional[ComponentRef]
+        self.class_modification = None  # type: Optional[ClassModification]
         self.visibility = Visibility.PUBLIC  # type: Visibility
         super().__init__(**kwargs)
 
@@ -623,7 +627,7 @@ class Class(Node):
             cls.find_class = cls.FIND_CLASS
 
     def __init__(self, **kwargs):
-        self.name = None  # type: str
+        self.name = None  # type: Optional[str]
         self.imports = OrderedDict()  # type: OrderedDict[str, Union[ImportClause, ComponentRef]]
         self.extends = []  # type: List[ExtendsClause]
         self.encapsulated = False  # type: bool
@@ -641,8 +645,8 @@ class Class(Node):
             []
         )  # type: List[Union[AssignmentStatement, IfStatement, ForStatement]]
         self.statements = []  # type: List[Union[AssignmentStatement, IfStatement, ForStatement]]
-        self.annotation = []  # type: Union[Type[None], ClassModification]
-        self.parent = None  # type: Class
+        self.annotation = []  # type: List[Union[Type[None], ClassModification]]
+        self.parent = None  # type: Optional[Class]
 
         # TODO: Remove hard-wired tree.find_name() when done with prototype
         self.use_find_name(False)

@@ -161,6 +161,18 @@ class ParseTest(unittest.TestCase):
                 tree = file_tree
         return tree
 
+    def test_ast_element_full_name(self):
+        """Test fully-qualified name lookup to element and back to name"""
+        ast_tree = self.parse_model_files("TreeLookup.mo")
+        full_names = (
+            "Level1.Level2.Level3.TestPackage.TestClass",  # Class
+            "Level1.Level2.Level3.TestPackage.c",  # Symbol
+        )
+        for name in full_names:
+            element = tree.find_name(name, ast_tree)
+            self.assertIsNotNone(element)
+            self.assertEqual(ast.element_full_name(element), name)
+
     def test_aircraft(self):
         ast_tree = self.parse_model_files("Aircraft.mo")
         print("AST TREE\n", ast_tree)

@@ -94,13 +94,15 @@ class ASTListener(ModelicaListener):
         self.ast = {}  # type: Dict[ast.Node]
         self.class_nodes = deque([ast.Class()])  # type: deque[ast.Class]
         self.comp_clause = None  # type: ast.ComponentClause
+        self.comp_clause1 = None  # type: ast.ComponentClause
         self.eq_sect = None  # type: ast.EquationSection
         self.alg_sect = None  # type: ast.AlgorithmSection
-        self.symbol_node = None  # type: ast.Symbol
+        self.symbol_nodes = []  # type: List[ast.Symbol]
         self.eq_comment = None  # type: str
         self.sym_count = 0  # type: int
         self.in_extends = False
         self.in_class_spec_base = False
+        self.in_redeclaration = False
 
     @property
     def class_node(self):
@@ -224,8 +226,12 @@ class ASTListener(ModelicaListener):
             scope = self.class_node
         argument = ast.ClassModificationArgument(scope=scope)
         if ctx.element_modification_or_replaceable() is not None:
-            argument.value = self.ast[ctx.element_modification_or_replaceable()]
-            argument.redeclare = False
+            production = ctx.element_modification_or_replaceable()
+            argument.value = self.ast[production]
+            if production.element_replaceable() is not None:
+                argument.redeclare = True
+            else:
+                argument.redeclare = False
         else:
             argument.value = self.ast[ctx.element_redeclaration()]
             argument.redeclare = True
@@ -694,7 +700,7 @@ class ASTListener(ModelicaListener):
         self.ast[ctx] = ast.ComponentClause(
             prefixes=prefixes,
         )
-        self.comp_clause = self.ast[ctx]
+        self.comp_clause1 = self.ast[ctx]
 
     def exitComponent_clause(self, ctx: ModelicaParser.Component_clauseContext):
         clause = self.ast[ctx]
@@ -719,58 +725,56 @@ class ASTListener(ModelicaListener):
             s.dimensions = list(s.dimensions)
             s.prefixes = list(s.prefixes)
             s.type = copy.deepcopy(clause.type)
+        self.comp_clause = None
 
     def exitComponent_clause1(self, ctx: ModelicaParser.Component_clause1Context):
         clause = self.ast[ctx]
         clause.type.__dict__.update(self.ast[ctx.type_specifier()].__dict__)
-
-        for sym in self.comp_clause.symbol_list[1:]:
-            s = self.class_node.symbols[sym.name]
-            s.dimensions = list(s.dimensions)
-            s.prefixes = list(s.prefixes)
-            s.type = copy.deepcopy(clause.type)
+        self.comp_clause1 = None
 
     def enterComponent_declaration(self, ctx: ModelicaParser.Component_declarationContext):
         sym = ast.Symbol(order=self.sym_count, parent=self.class_node)
         self.sym_count += 1
         self.ast[ctx] = sym
-        self.symbol_node = sym
+        self.symbol_nodes.append(sym)
         self.comp_clause.symbol_list += [sym]
 
     def enterComponent_declaration1(self, ctx: ModelicaParser.Component_declaration1Context):
         sym = ast.Symbol(order=self.sym_count, parent=self.class_node)
         self.sym_count += 1
         self.ast[ctx] = sym
-        self.symbol_node = sym
-        self.comp_clause.symbol_list += [sym]
+        self.symbol_nodes.append(sym)
+        self.comp_clause1.symbol_list += [sym]
 
     def exitComponent_declaration(self, ctx: ModelicaParser.Component_declarationContext):
         self.ast[ctx].comment = self.ast[ctx.comment()]
-        self.symbol_node = None
+        self.symbol_nodes.pop()
 
     def exitComponent_declaration1(self, ctx: ModelicaParser.Component_declaration1Context):
         self.ast[ctx].comment = self.ast[ctx.comment()]
-        self.symbol_node = None
+        self.symbol_nodes.pop()
 
     def enterDeclaration(self, ctx: ModelicaParser.DeclarationContext):
-        sym = self.symbol_node
+        sym = self.symbol_nodes[-1]
         dimensions = None
-        if self.comp_clause.dimensions is not None:
-            dimensions = self.comp_clause.dimensions
+        comp_clause = self.comp_clause1 if self.comp_clause1 else self.comp_clause
+        if comp_clause.dimensions is not None:
+            dimensions = comp_clause.dimensions
         sym.name = ctx.IDENT().getText()
         self._prevent_builtin_name(sym.name, ctx)
         sym.dimensions = dimensions
-        sym.prefixes = self.comp_clause.prefixes
-        sym.type = self.comp_clause.type
+        sym.prefixes = comp_clause.prefixes
+        sym.type = comp_clause.type
 
-        # Declarations can also occur in extends clauses, in which case we do not have to add it to the class's symbols.
-        if not self.in_extends:
+        # Declarations can also occur in extends_clause, class_spec_base (also an extends),
+        # and redeclare, in which case we do not have to add it to the class's symbols.
+        if not (self.in_extends or self.in_redeclaration):
             if sym.name in self.class_node.symbols:
                 raise IOError(sym.name, "already defined")
             self.class_node.symbols[sym.name] = sym
 
     def exitDeclaration(self, ctx: ModelicaParser.DeclarationContext):
-        sym = self.symbol_node
+        sym = self.symbol_nodes[-1]
         if ctx.array_subscripts() is not None:
             sym.dimensions = [self.ast[ctx.array_subscripts()]]
         if ctx.modification() is not None:
@@ -825,11 +829,15 @@ class ASTListener(ModelicaListener):
         else:
             self.ast[ctx] = self.ast[ctx.element_replaceable()]
 
+    def enterElement_redeclaration(self, ctx: ModelicaParser.Element_redeclarationContext):
+        self.in_redeclaration = True
+
     def exitElement_redeclaration(self, ctx: ModelicaParser.Element_redeclarationContext):
         if ctx.component_clause1() is not None:
             self.ast[ctx] = self.ast[ctx.component_clause1()]
         else:
             self.ast[ctx] = self.ast[ctx.short_class_definition()]
+        self.in_redeclaration = False
 
     # COMMENTS ==============================================================
 

@@ -294,9 +294,9 @@ class ParseTest(unittest.TestCase):
         for mod in t.type.symbols["Integer"].modification_environment.arguments:
             self.assertTrue(isinstance(mod.scope, ast.InstanceClass), "scope not InstanceClass")
 
-    @unittest.expectedFailure  # TODO: Figure out what we're doing with InstanceTree parent/child
     def test_instantiation_tree(self):
-        instance = self.parse_and_instantiate_model("InstantiationTree.mo", "TreeModel.Tree")
+        fully_qualified_name = "TreeModel.Tree"
+        instance = self.parse_and_instantiate_model("InstantiationTree.mo", fully_qualified_name)
 
         # Check that we have a fully connected InstanceTree with only Instances (except BUILTINS)
         non_instances = check_instance_tree_is_all_instances(instance.root)
@@ -308,22 +308,65 @@ class ParseTest(unittest.TestCase):
         )
 
         # Check that we merged the tree correctly when instantiating parents
-        self.assertIn("TreeModel", instance.root.classes)
-        # According to the spec, the instantiated class has root as parent
+        # According to the spec, the instantiated class is inserted in root and has it as parent
+        # (at least during the instantiation process).
         self.assertIn("Tree", instance.root.classes)
+        tree_in_root = instance.root.classes["Tree"]
+        self.assertIs(tree_in_root, instance)
+        # The spec because also says the instance tree is based on the same structure as the
+        # class tree, so rather than leaving root as parent after instantiation is done,
+        # we have the class tree structure as parents.
+        element = instance
+        for name in reversed(fully_qualified_name.split(".")):
+            self.assertEqual(name, element.name)
+            element = element.parent
 
-        tree_model = instance.root.classes["TreeModel"]
-        self.assertIn("TreeTypes", tree_model.classes)
-        self.assertIn("TreeParts", tree_model.classes)
+        # TODO: Resolve what we are going to do with parent/child handling in instantiation
+        # Fully instantiating extends in name lookup populates classes in the .classes list,
+        # however partial instantiation with the TreePath method does not.
+        # This is what we expect when instantiating extends in name lookup:
+        # self.assertIn("TreeModel", instance.root.classes)
+        # tree_model = instance.root.classes["TreeModel"]
+        # self.assertIn("TreeTypes", tree_model.classes)
+        # self.assertIn("TreeParts", tree_model.classes)
 
-        tree_parts = instance.root.classes["TreeModel"].classes["TreeParts"]
-        self.assertIn("Trunk", tree_parts.classes)
-        self.assertIn("Branch", tree_parts.classes)
-        self.assertIn("Leaf", tree_parts.classes)
+        # tree_parts = instance.root.classes["TreeModel"].classes["TreeParts"]
+        # self.assertIn("Trunk", tree_parts.classes)
+        # self.assertIn("Branch", tree_parts.classes)
+        # self.assertIn("Leaf", tree_parts.classes)
+
+        # This is what we expect from the TreePath method.
+        # Only classes partially instantiated during the recursive instantiation are
+        # present. Also, we can only follow parents. Children are not updated due to the
+        # potential for multiple instances of the same class. The equivalent to this in
+        # the method where we instantiate extends in name lookup is to create a
+        # different InstanceTree (root) for each instance. Tree has no classes of its
+        # own. The classes are in the extends TreeParts.Trunk that need to be partially
+        # or fully instantiated.
+        tree_extends = tree_in_root.extends[0]
+        self.assertEqual("TreeParts", tree_extends.parent.name)
+        self.assertEqual("TreeModel", tree_extends.parent.parent.name)
+        self.assertIn("Wood", tree_extends.classes)
+        wood = tree_extends.classes["Wood"]
+        self.assertEqual(wood.parent.name, "")  # Unnamed extends node
+        self.assertEqual(wood.parent.parent.name, "TreeParts")
+        self.assertEqual(wood.parent.parent.parent.name, "TreeModel")
+        # TreeModel is not added to root.classes
+        self.assertNotIn("TreeModel", instance.root.classes)
+
+        # Tests parents of local symbols
+        b = instance.symbols["b"]
+        self.assertEqual(b.type.name, "Branch")
+        self.assertEqual(b.type.parent.name, "TreeParts")
+        self.assertEqual(b.type.parent.parent.name, "TreeModel")
+        l_var = instance.symbols["l"]
+        self.assertEqual(l_var.type.name, "Leaf")
+        self.assertEqual(l_var.type.parent.name, "TreeParts")
+        self.assertEqual(l_var.type.parent.parent.name, "TreeModel")
 
         # Check that we instantiated the tree correctly
         # First check that all symbols are present
-        self.assertListEqual(sorted(instance.symbols), ["b", "l", "w"])
+        self.assertListEqual(sorted(instance.symbols), ["b", "l", "l2", "w"])
         self.assertIn("t", instance.extends[0].symbols)
         # Check redeclare of w
         w = instance.symbols["w"]
@@ -343,6 +386,12 @@ class ParseTest(unittest.TestCase):
         l_c_mod = l_c.type.extends[0].symbols["Integer"].modification_environment.arguments[-1]
         self.assertEqual(l_c_mod.value.component.name, "value")
         self.assertEqual(l_c_mod.value.modifications[0].value, 1)
+        # Check modification of l2.c (l2 is same type as l, different instance and modification)
+        l_c = instance.symbols["l2"].type.symbols["c"]
+        self.assertEqual(l_c.type.extends[0].ast_ref.name, "Integer")
+        l_c_mod = l_c.type.extends[0].symbols["Integer"].modification_environment.arguments[-1]
+        self.assertEqual(l_c_mod.value.component.name, "value")
+        self.assertEqual(l_c_mod.value.modifications[0].value, 2)
         # Check inherited symbol t redeclare
         t = instance.extends[0].symbols["t"]
         self.assertEqual(t.type.ast_ref.name, "Maple")

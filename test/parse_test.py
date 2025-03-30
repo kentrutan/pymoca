@@ -16,6 +16,7 @@ import tempfile
 import threading
 import time
 import unittest
+from collections import namedtuple
 from pathlib import Path
 
 import pymoca
@@ -884,6 +885,147 @@ class ParseTest(unittest.TestCase):
         flat_tree = tree.flatten(ast_tree, comp_ref)
 
         self.assertEqual(flat_tree.classes["E"].symbols["c.x"].nominal.value, 2.0)
+
+    def test_nonreplaceable_component_contains_replaceable(self):
+        """Test that nonreplaceable components can contain replaceable components"""
+
+        self.parse_and_instantiate_model("NonReplaceableContainsReplaceable.mo", "P.Test")
+
+    def test_extends_transitively_nonreplaceable_error(self):
+        """Test that extends should fail with a replaceable in the hierarchy"""
+
+        # TODO: Specify regex
+        with self.assertRaisesRegex(
+            tree.ModelicaSemanticError,
+            "In P.Outer extends InnerModel, InnerModel and parents cannot be replaceable",
+        ):
+            self.parse_and_instantiate_model("NonReplaceableContainsReplaceable.mo", "P.TestFail")
+
+    redeclare_expect = namedtuple("redeclare_expect", ["name", "type", "value", "replaceable"])
+
+    def check_redeclare_expects(self, instance, expects):
+        """Check that the redeclare expectations are met in the given instance"""
+        for name, type_, value, replaceable in expects:
+            x = tree.find_name(name, instance)
+            self.assertIsNotNone(x, f"{name} not found in instance")
+            self.assertTrue(x.replaceable == replaceable, f"for {name}")
+            self.assertEqual(x.type.name, type_, f"{name} not redeclared correctly")
+            x_value_args = get_modifiers_by_name(x, "value")
+            self.assertTrue(len(x_value_args) > 0, f"{name} missing value modification")
+            value_mod = x_value_args[-1].value.modifications[0]
+            if isinstance(value_mod, ast.Expression):
+                self.assertIn(
+                    value_mod.operator, ("-", "+"), "test supports only unary +/- operator"
+                )
+                self.assertEqual(
+                    len(value_mod.operands), 1, "test supports only unary +/- operator"
+                )
+                multiplier = -1 if value_mod.operator == "-" else 1
+                value_mod_value = multiplier * value_mod.operands[0].value
+            elif isinstance(value_mod, ast.Primary):
+                value_mod_value = value_mod.value
+            else:
+                self.fail(f"test does not support value modification type {type(value_mod)}")
+            self.assertEqual(value_mod_value, value, f"for {name}")
+
+    def test_redeclare_component_in_extends(self):
+        """Test redeclaration of components in extends clause"""
+
+        instance = self.parse_and_instantiate_model("RedeclareComponentInExtends.mo", "M")
+
+        expect = [
+            self.redeclare_expect("M.d1.x", "Integer", 1, False),
+            self.redeclare_expect("M.d2.x", "Integer", 2, False),
+            self.redeclare_expect("M.d3.x", "Integer", 3.0, True),
+            self.redeclare_expect("M.d4.x", "Integer", 4.0, True),
+            self.redeclare_expect("M.d5.x", "String", "5", True),
+        ]
+        self.check_redeclare_expects(instance, expect)
+
+        # Symbols themselves were not declared replaceable
+        for name in ("d1", "d2", "d3", "d4", "d5"):
+            self.assertFalse(instance.symbols[name].replaceable)
+
+    def test_redeclare_component_in_declaration(self):
+        """Test redeclaration of components in component declaration"""
+        instance = self.parse_and_instantiate_model("RedeclareComponentInDeclaration.mo", "M")
+
+        expect = [
+            self.redeclare_expect("M.ir1.x", "Real", 1.0, False),
+            self.redeclare_expect("M.ir2.x", "Real", 2.0, False),
+            self.redeclare_expect("M.ir3.x", "Real", 3.0, True),
+            self.redeclare_expect("M.ir4.x", "Real", 4.0, True),
+            self.redeclare_expect("M.ir5.x", "Real", 5.0, True),
+        ]
+        self.check_redeclare_expects(instance, expect)
+
+        # Symbols themselves were not declared replaceable
+        for name in ("ir1", "ir2", "ir3", "ir4", "ir5"):
+            self.assertFalse(instance.symbols[name].replaceable, f"{name} is replaceable")
+
+    def test_redeclare_component_type_compatibility(self):
+        """Test type compatibility for redeclaration of components of builtin types"""
+
+        # TODO: Update when new flattening is implemented
+        # For now we expect the values from the base class modifications.
+        # Flattening should catch the value assignment errors noted in the model
+        # when the modifiers are flattened.
+
+        instance = self.parse_and_instantiate_model("RedeclareTypeCompatibility.mo", "M")
+        expect = [
+            self.redeclare_expect("b2i.x", "Integer", True, True),
+            self.redeclare_expect("b2r.x", "Real", True, True),
+            self.redeclare_expect("b2s.x", "String", True, True),
+            self.redeclare_expect("i2r.x", "Real", -1, True),
+            self.redeclare_expect("i2s.x", "String", -1, True),
+            self.redeclare_expect("r2i.x", "Integer", 3.5, True),
+            self.redeclare_expect("r2b.x", "Boolean", 3.5, True),
+            self.redeclare_expect("r2s.x", "String", 3.5, True),
+            self.redeclare_expect("sr2b.x", "Boolean", 3.5, True),
+            self.redeclare_expect("sr2i.x", "Integer", 3.5, True),
+            self.redeclare_expect("ss2r.x", "Real", "foo", True),
+            self.redeclare_expect("ss2rv.x", "Real", 3.5, True),
+        ]
+        self.check_redeclare_expects(instance, expect)
+
+    def test_redeclare_class_with_symbol_error(self):
+        """Test redeclaration of a class with a symbol is disallowed"""
+
+        txt = """
+            model A
+                model B
+                    replaceable model C
+                        Real c;
+                    end C;
+                    C b;
+                end B;
+                B a;
+                B b(redeclare model C = a); // Error: redeclare class C with component a
+            end A;
+        """
+        ast_tree = parser.parse(txt)
+        with self.assertRaisesRegex(
+            tree.ModelicaSemanticError, "Redeclaring C with component a in scope A"
+        ):
+            _ = tree.instantiate("A", ast_tree)
+
+    def test_missing_redeclare_class_error(self):
+        """Test redeclaration with a class that can't be found"""
+
+        txt = """
+            model A
+                model B
+                    replaceable model C
+                        Real c;
+                    end C;
+                    C b;
+                end B;
+                B b(redeclare model C = D); // Error: D doesn't exist
+            end A;
+        """
+        ast_tree = parser.parse(txt)
+        with self.assertRaisesRegex(tree.NameLookupError, "Redeclare class D not found in scope A"):
+            _ = tree.instantiate("A", ast_tree)
 
     def test_redeclare_in_extends(self):
         instance = self.parse_and_instantiate_model("RedeclareInExtends.mo", "ChannelZ")

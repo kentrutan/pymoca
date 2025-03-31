@@ -77,18 +77,14 @@ class ParseTest(unittest.TestCase):
         time.sleep(0.1)
 
     def test_aircraft(self):
-        with open(os.path.join(MODEL_DIR, "Aircraft.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "Aircraft.mo"))
         print("AST TREE\n", ast_tree)
         flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="Aircraft"))
         print("AST TREE FLAT\n", flat_tree)
         self.flush()
 
     def test_bouncing_ball(self):
-        with open(os.path.join(MODEL_DIR, "BouncingBall.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "BouncingBall.mo"))
         print("AST TREE\n", ast_tree)
         flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="BouncingBall"))
         print(flat_tree)
@@ -96,9 +92,7 @@ class ParseTest(unittest.TestCase):
         self.flush()
 
     def test_deep_copy_timeout(self):
-        with open(os.path.join(MODEL_DIR, "DeepCopyTimeout.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "DeepCopyTimeout.mo"))
 
         # Start a background thread which will run the flattening, such that
         # we can kill it if takes to long.
@@ -124,45 +118,36 @@ class ParseTest(unittest.TestCase):
         self.assertFalse(thread.is_alive(), msg="Timeout occurred")
 
     def test_estimator(self):
-        with open(os.path.join(MODEL_DIR, "./Estimator.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "./Estimator.mo"))
         print("AST TREE\n", ast_tree)
         flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="Estimator"))
         print("AST TREE FLAT\n", flat_tree)
         self.flush()
 
     def test_spring(self):
-        with open(os.path.join(MODEL_DIR, "Spring.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "Spring.mo"))
         print("AST TREE\n", ast_tree)
         flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="Spring"))
         print("AST TREE FLAT\n", flat_tree)
         self.flush()
 
     def test_spring_system(self):
-        with open(os.path.join(MODEL_DIR, "SpringSystem.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "SpringSystem.mo"))
         print("AST TREE\n", ast_tree)
         flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="SpringSystem"))
         print("AST TREE FLAT\n", flat_tree)
         self.flush()
 
     def test_duplicate_state(self):
-        with open(os.path.join(MODEL_DIR, "DuplicateState.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "DuplicateState.mo"))
         print("AST TREE\n", ast_tree)
         flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="DuplicateState"))
         print("AST TREE FLAT\n", flat_tree)
         self.flush()
 
     def test_connector(self):
-        with open(os.path.join(MODEL_DIR, "Connector.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)  # noqa: F841
+        # ast_tree =
+        parser.parse_file(os.path.join(MODEL_DIR, "Connector.mo"))
         # states = ast_tree.classes['Aircraft'].states
         # names = sorted([state.name for state in states])
         # names_set = sorted(list(set(names)))
@@ -171,9 +156,7 @@ class ParseTest(unittest.TestCase):
         self.flush()
 
     def test_inheritance(self):
-        with open(os.path.join(MODEL_DIR, "InheritanceInstantiation.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "InheritanceInstantiation.mo"))
         flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="C2"))
 
         self.assertEqual(flat_tree.classes["C2"].symbols["bcomp1.b"].value.value, 3.0)
@@ -181,26 +164,20 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(flat_tree.classes["C2"].symbols["bcomp3.b"].value.value, 2.0)
 
     def test_nested_classes(self):
-        with open(os.path.join(MODEL_DIR, "NestedClasses.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "NestedClasses.mo"))
         flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="C2"))
 
         self.assertEqual(flat_tree.classes["C2"].symbols["v1"].nominal.value, 1000.0)
         self.assertEqual(flat_tree.classes["C2"].symbols["v2"].nominal.value, 1000.0)
 
     def test_inheritance_symbol_modifiers(self):
-        with open(os.path.join(MODEL_DIR, "Inheritance.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "Inheritance.mo"))
         flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="Sub"))
 
         self.assertEqual(flat_tree.classes["Sub"].symbols["x"].max.value, 30.0)
 
     def test_extends_modification(self):
-        with open(os.path.join(MODEL_DIR, "ExtendsModification.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "ExtendsModification.mo"))
         flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="MainModel"))
 
         self.assertEqual(flat_tree.classes["MainModel"].symbols["e.HQ.H"].min.name, "e.H_b")
@@ -219,9 +196,7 @@ class ParseTest(unittest.TestCase):
             flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name=c))  # noqa: F841
 
     def test_tree_lookup(self):
-        with open(os.path.join(MODEL_DIR, "TreeLookup.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "TreeLookup.mo"))
 
         # The class we want to flatten. We first have to turn it into a
         # full-fledged ComponentRef.
@@ -235,9 +210,7 @@ class ParseTest(unittest.TestCase):
         self.assertIn("b", flat_tree.classes["Level1.Level2.Level3.Test"].symbols.keys())
 
     def test_function_pull(self):
-        with open(os.path.join(MODEL_DIR, "FunctionPull.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "FunctionPull.mo"))
 
         class_name = "Level1.Level2.Level3.Function5"
         comp_ref = ast.ComponentRef.from_string(class_name)
@@ -276,9 +249,7 @@ class ParseTest(unittest.TestCase):
         )
 
     def test_nested_symbol_modification(self):
-        with open(os.path.join(MODEL_DIR, "NestedSymbolModification.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "NestedSymbolModification.mo"))
 
         class_name = "E"
         comp_ref = ast.ComponentRef.from_string(class_name)
@@ -288,9 +259,7 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(flat_tree.classes["E"].symbols["c.x"].nominal.value, 2.0)
 
     def test_redeclare_in_extends(self):
-        with open(os.path.join(MODEL_DIR, "RedeclareInExtends.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "RedeclareInExtends.mo"))
 
         class_name = "ChannelZ"
         comp_ref = ast.ComponentRef.from_string(class_name)
@@ -300,9 +269,7 @@ class ParseTest(unittest.TestCase):
         self.assertIn("down.Z", flat_tree.classes["ChannelZ"].symbols)
 
     def test_redeclaration_scope(self):
-        with open(os.path.join(MODEL_DIR, "RedeclarationScope.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "RedeclarationScope.mo"))
 
         class_name = "ChannelZ"
         comp_ref = ast.ComponentRef.from_string(class_name)
@@ -313,9 +280,7 @@ class ParseTest(unittest.TestCase):
         self.assertIn("c.down.A", flat_tree.classes["ChannelZ"].symbols)
 
     def test_redeclaration_scope_alternative(self):
-        with open(os.path.join(MODEL_DIR, "RedeclarationScopeAlternative.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "RedeclarationScopeAlternative.mo"))
 
         class_name = "ChannelZ"
         comp_ref = ast.ComponentRef.from_string(class_name)
@@ -326,9 +291,7 @@ class ParseTest(unittest.TestCase):
         self.assertIn("c.down.A", flat_tree.classes["ChannelZ"].symbols)
 
     def test_extends_redeclareable(self):
-        with open(os.path.join(MODEL_DIR, "ExtendsRedeclareable.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "ExtendsRedeclareable.mo"))
 
         class_name = "E"
         comp_ref = ast.ComponentRef.from_string(class_name)
@@ -339,16 +302,11 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(flat_tree.classes["E"].symbols["z.y"].nominal.value, 2.0)
 
     def test_redeclare_nested(self):
-        with open(os.path.join(MODEL_DIR, "RedeclareNestedClass.mo.fail_parse"), "r") as f:
-            txt = f.read()
-
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "RedeclareNestedClass.mo.fail_parse"))
         self.assertIsNone(ast_tree)
 
     def test_extends_order(self):
-        with open(os.path.join(MODEL_DIR, "ExtendsOrder.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "ExtendsOrder.mo"))
 
         class_name = "P.M"
         comp_ref = ast.ComponentRef.from_string(class_name)
@@ -358,9 +316,7 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(flat_tree.classes["P.M"].symbols["at.m"].value.value, 0.0)
 
     def test_constant_references(self):
-        with open(os.path.join(MODEL_DIR, "ConstantReferences.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "ConstantReferences.mo"))
 
         class_name = "b"
         comp_ref = ast.ComponentRef.from_string(class_name)
@@ -371,9 +327,7 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(flat_tree.classes["b"].symbols["M2.m.f"].value.value, 3.0)
 
     def test_parameter_modification_scope(self):
-        with open(os.path.join(MODEL_DIR, "ParameterScope.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "ParameterScope.mo"))
 
         class_name = "ScopeTest"
         comp_ref = ast.ComponentRef.from_string(class_name)
@@ -383,9 +337,7 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(flat_tree.classes["ScopeTest"].symbols["nc.p"].value.name, "p")
 
     def test_custom_units(self):
-        with open(os.path.join(MODEL_DIR, "CustomUnits.mo"), "r") as f:
-            txt = f.read()
-        ast_tree = parser.parse(txt)
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "CustomUnits.mo"))
 
         class_name = "A"
         comp_ref = ast.ComponentRef.from_string(class_name)
@@ -495,17 +447,16 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(len(symbols["itest"].value.expressions[0].operands), 1)
         self.assertEqual(len(symbols["itest"].value.expressions[1].operands), 1)
 
-    def parse_file(self, pathname):
-        "Parse given full path name and return parsed ast.Tree"
-        with open(pathname, "r") as mo_file:
-            txt = mo_file.read()
-        return parser.parse(txt)
+    def test_parse_nonexistent_file_error(self):
+        """Test parse_file on non-existent file raises an error"""
+        with self.assertRaisesRegex(FileNotFoundError, "File not found: NonExistentFile.mo"):
+            parser.parse_file("NonExistentFile.mo")
 
     def parse_model_files(self, *pathnames):
         "Parse given files from MODEL_DIR and return parsed ast.Tree"
         tree = None
         for path in pathnames:
-            file_tree = self.parse_file(os.path.join(MODEL_DIR, path))
+            file_tree = parser.parse_file(os.path.join(MODEL_DIR, path))
             if tree:
                 tree.extend(file_tree)
             else:
@@ -521,7 +472,7 @@ class ParseTest(unittest.TestCase):
         for pathname in pathnames:
             split_path = pathname.split("/")
             full_path = os.path.join(directory, *split_path)
-            file_tree = self.parse_file(full_path)
+            file_tree = parser.parse_file(full_path)
             self.assertIsNotNone(file_tree, "Parse failed: " + full_path)
             if tree:
                 tree.extend(file_tree)
@@ -563,8 +514,8 @@ class ParseTest(unittest.TestCase):
     # Import tests from the Modelica Compliance library (mostly the shouldPass=true cases)
     def parse_imports_file(self, pathname):
         "Parse given path relative to IMPORTS_DIR and return parsed ast.Tree"
-        arg_ast = self.parse_file(os.path.join(IMPORTS_DIR, pathname))
-        icon_ast = self.parse_file(os.path.join(COMPLIANCE_DIR, "Icons.mo"))
+        arg_ast = parser.parse_file(os.path.join(IMPORTS_DIR, pathname))
+        icon_ast = parser.parse_file(os.path.join(COMPLIANCE_DIR, "Icons.mo"))
         icon_ast.extend(arg_ast)
         return icon_ast
 
@@ -752,7 +703,7 @@ class ParseTest(unittest.TestCase):
 
     def test_basemodelica_scalarized(self):
         """Test parsing BaseModelica example with scalar varables"""
-        ast_tree = self.parse_file(os.path.join(MODEL_DIR, "BaseModelicaScalarized.mo"))
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "BaseModelicaScalarized.mo"))
         self.assertIsNotNone(ast_tree)
         class_name = "'ManglingTest'"
         comp_ref = ast.ComponentRef.from_string(class_name)
@@ -771,7 +722,7 @@ class ParseTest(unittest.TestCase):
 
     def test_basemodelica_hierarchical(self):
         """Test parsing BaseModelica example with array variables"""
-        ast_tree = self.parse_file(os.path.join(MODEL_DIR, "BaseModelicaHierarchical.mo"))
+        ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "BaseModelicaHierarchical.mo"))
         self.assertIsNotNone(ast_tree)
         class_name = "'ManglingTest'"
         comp_ref = ast.ComponentRef.from_string(class_name)

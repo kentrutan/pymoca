@@ -1113,3 +1113,12 @@ def parse(
     conn.close()
 
     return tree
+
+
+def parse_file(file_path: Union[str, Path]) -> Union[ast.Tree, None]:
+    """Parse given file path and return parsed ast.Tree or None if it failed"""
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
+    txt = path.read_text(encoding="utf-8")
+    return parse(txt)

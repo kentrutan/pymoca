@@ -9,7 +9,7 @@ import copy  # TODO
 import logging
 import sys
 from collections import OrderedDict
-from typing import Iterable, List, Optional, Set, Tuple, Union
+from typing import Iterable, List, Optional, Set, Tuple, Union, cast
 
 import numpy as np
 
@@ -1437,6 +1437,322 @@ def _copy_symbol_contents(to_symbol: ast.InstanceSymbol) -> None:
         )
     ):
         setattr(to_symbol, attr_name, getattr(from_symbol, attr_name))
+
+
+class FlatInstanceClass:
+    """A flat instance, containing only what's created during flattening
+
+    :param instance: The instance class that is being flattened
+
+    TODO: Make DRY with ast.Class and ast.InstanceClass (common attributes)
+    """
+
+    def __init__(
+        self,
+        instance: ast.InstanceClass,
+    ):
+        self.name = _flatten_name(instance)  # type: str
+        self.instance = instance  # type: ast.InstanceClass
+        self.comment = instance.comment  # type: str
+        self.symbols = {}  # type: Dict[str, ast.InstanceSymbol]
+        self.functions = {}  # type: Dict[str, ast.InstanceClass]
+        self.initial_equations = []  # type: List[Union[ast.Equation, ast.ForEquation]]
+        self.equations = []  # type: List[Union[ast.Equation, ast.ForEquation, ast.ConnectClause]]
+        self.initial_statements = (
+            []
+        )  # type: List[Union[ast.AssignmentStatement, ast.IfStatement, ast.ForStatement]]
+        self.statements = (
+            []
+        )  # type: List[Union[ast.AssignmentStatement, ast.IfStatement, ast.ForStatement]]
+        self.annotation = None  # type: Optional[ast.ClassModification]
+
+
+def flatten_instance(
+    instance: ast.InstanceClass,
+) -> FlatInstanceClass:
+    """Flatten an instance class
+
+    :param instance: The instance class to flatten
+    :return: The flattened instance class
+    """
+    if not isinstance(instance, ast.InstanceClass):
+        raise TypeError(f"Expected InstanceClass, got {type(instance)}")
+
+    flat_instance = FlatInstanceClass(instance)
+    _flatten_instance(instance, flat_instance)
+    return flat_instance
+
+
+def _flatten_instance(
+    instance: ast.InstanceClass,
+    flat_instance: FlatInstanceClass,
+    prefix: str = "",
+    keep_connectors: bool = False,
+) -> None:
+    """Flatten an instance class
+
+    :param instance: The instance class to flatten
+    :param flat_instance: The flattened instance class
+    :param prefix: The prefix for the current instance
+    :param keep_connectors: Whether to keep connectors in the flattened instance
+    :return: The flattened instance class
+
+    The passed instance may be updated by fully instantiating elements as needed.
+    We allow the top-level flattened instance to retain connectors so that we can
+    flatten a set of components and connect them together later.
+    """
+    # Outline of spec 3.5 section 5.6.2 *Generation of the flat equation system*:
+    # Definitions/Notes:
+    #   - Simple Type: Integer, Real, Boolean, String, enumeration, Clock, or External
+    #     Object
+    #   - Mark steps TODO that we will postpone on the first pass
+    #
+    # 1 Recursively walk the tree, beginning at the class to be flattened, and process
+    # components with the following items used throughout:
+    # * A. "all references by name in conditional declarations, modifications, dimension
+    #   definitions, annotations, equations and algorithms are resolved to the real
+    #   instance to which they are referring to ... [Either the referenced instance
+    #   belongs to the model to be simulated the path starts at the model itself, or if
+    #   not, it starts at the unnamed root of the instance tree, e.g. in case of a
+    #   constant in a package.]"
+    # * B. Names are replaced by the global unique identifier of the instance "[This
+    #   identifier is normally constructed from the names of the instances along a path
+    #   in the instance tree (and omitting the unnamed nodes of extends clauses),
+    #   separated by dots. Either the referenced instance belongs to the model to be
+    #   simulated the path starts at the model itself, or if not, it starts at the
+    #   unnamed root of the instance tree, e.g. in case of a constant in a package.]"
+    # * C. Classes and symbols are instantiated as needed (if not a fully instantiated instance)
+    # * D. Classes are ignored unless needed by components
+    # * E. Function calls encountered in the above are processed as needed: (TODO)
+    #   - Fill the call with default arguments (section 12.4.1)
+    #   - Look up the function in the instance tree
+    #   - Recursively flatten the function call
+    #   - Add to the list of functions
+    #
+    # 1.1 Insert components into the variables list
+    # 1.2 Evaluate the conditional declaration expression and mark the declaration for
+    #     deletion (TODO)
+    # 1.3 Resolve dimensions, including enclosing instances (TODO)
+    # 1.4 Resolve modifications of value attributes of simple types and records (TODO: records)
+    # 1.5 Resolve modifications of other attributes of simple types
+    # 1.6 Recursively "handle" non-simple types
+    # 1.7 Resolve references in equations and algorithms
+    # 1.8 Recursively "handle" unnamed extends instances
+    # 1.9 Check that all references now point to a valid instance (not conditionally false)
+    #
+    # 2 Generate connect equations for all connections in the flattened tree
+    #
+    # 3 Process transitions in the flattened tree (TODO)
+
+    # 1 Recursively walk the tree, beginning at the class to be flattened
+    for name, symbol in list(instance.symbols.items()):
+
+        # Steps A-D
+        flat_name = prefix + "." + name if prefix else name
+        flat_symbol = copy.copy(symbol)
+        if symbol.type.name in InstanceTree.BUILTIN_TYPES:
+            flat_symbol.name = flat_name
+            flat_instance.symbols[flat_name] = flat_symbol
+
+        # 1.2 Evaluate the conditional declaration expression and mark the declaration for
+        #     deletion (TODO)
+        _evaluate_conditional_declarations(flat_symbol, flat_instance)
+
+        # 1.3 Resolve dimensions, including enclosing instances
+        _resolve_dimensions(flat_symbol, flat_instance)
+
+        # 1.4 Resolve modifications of value attributes of simple types and records
+        # 1.5 Resolve modifications of other attributes of simple types
+        if flat_symbol.type.name in InstanceTree.BUILTIN_TYPES or flat_symbol.type == "record":
+            _resolve_modifications(flat_symbol, flat_instance)
+        else:
+            # 1.6 Recursively "handle" non-simple types
+            if isinstance(flat_symbol.type, ast.ComponentRef):
+                resolved_symbol_type = _resolve_name(flat_symbol.type, instance, flat_instance)
+            else:
+                resolved_symbol_type = flat_symbol.type
+            resolved_symbol_type = cast(ast.InstanceClass, resolved_symbol_type)
+            _flatten_instance(resolved_symbol_type, flat_instance, flat_name, keep_connectors=True)
+
+    # 1.7 Resolve references in equations and algorithms
+    _resolve_equation_and_algorithm_references(flat_instance)
+
+    # 1.8 Recursively "handle" unnamed extends instances
+    for extends in instance.extends:
+        _flatten_instance(extends, flat_instance, flat_instance.name, keep_connectors=True)
+
+    # 1.9 Check that all references now point to a valid instance (not conditionally false)
+    _check_all_references_valid(flat_instance)
+
+    # 2. Generate connect equations for all connections in the flattened tree
+    if not keep_connectors:
+        _generate_connect_equations(flat_instance)
+
+    # 3. Process transitions in the flattened tree
+    _process_transitions(flat_instance)
+
+
+def _evaluate_conditional_declarations(symbol: ast.InstanceSymbol, parent: FlatInstanceClass):
+    # TODO: 1.2 Evaluate the conditional declaration expression
+    pass
+
+
+def _resolve_dimensions(symbol: ast.InstanceSymbol, parent: FlatInstanceClass):
+    # TODO: 1.3 Resolve dimensions, including enclosing instances
+    pass
+
+
+def _resolve_modifications(symbol: ast.InstanceSymbol, parent: FlatInstanceClass) -> None:
+    """Resolve modifications of a symbol
+    :param symbol: The symbol to resolve modifications for
+    :return: None
+    """
+    # TODO: Resolve modifications of records
+    if symbol.type == "record":
+        raise NotImplementedError("Record modifications not implemented yet")
+
+    for arg in symbol.type.symbols[symbol.type.name].modification_environment.arguments:
+        assert isinstance(arg.value, ast.ElementModification)
+        if arg.value.component == "value" and symbol.type == "record":
+            # TODO: record value modification
+            continue
+        _resolve_modification_attribute(symbol, parent, arg)
+
+
+def _resolve_modification_attribute(
+    symbol: ast.InstanceSymbol,
+    parent: FlatInstanceClass,
+    arg: ast.ClassModificationArgument,
+):
+    # The spec says the modifications are resolved by creating equations, but we are
+    # going to set the symbol attributes now and create equations for them in another
+    # pass.
+    # Process the various ElementModification types
+    # type: List[Union[Primary, Expression, ClassModification, Array, ComponentRef]]
+    mod = cast(ast.ElementModification, arg.value)
+    value = mod.modifications[0]
+    assert not isinstance(value, ast.ClassModification)
+    if isinstance(value, ast.Primary):
+        value = value.value
+    elif isinstance(value, ast.ComponentRef):
+        assert isinstance(symbol.parent, ast.InstanceClass)
+        value = _resolve_name(value, symbol.parent, parent)
+        value = cast(ast.InstanceSymbol, value)
+    elif isinstance(value, ast.Array):
+        # TODO: Handle array modifications
+        raise NotImplementedError("Array modifications not implemented yet")
+        # value = _resolve_array(value, symbol.parent, parent)
+    elif isinstance(value, ast.Expression):
+        # TODO: Handle expression modifications
+        raise NotImplementedError("Expression modifications not implemented yet")
+        # value = _resolve_expression(value, symbol.parent, parent)
+
+    setattr(symbol, mod.component.name, value)
+
+
+def _resolve_equation_and_algorithm_references(flat_instance: FlatInstanceClass):
+    # TODO: 1.7 Resolve references in equations and algorithms
+    pass
+
+
+def _check_all_references_valid(flat_instance: FlatInstanceClass):
+    # TODO: 1.9 Check that all references now point to a valid instance (not conditionally false)
+    pass
+
+
+def _generate_connect_equations(flat_instance: FlatInstanceClass):
+    # TODO: 2. Generate connect equations for all connections in the flattened tree
+    pass
+
+
+def _process_transitions(flat_instance: FlatInstanceClass):
+    # TODO: 3. Process transitions in the flattened tree
+    pass
+
+
+def _flatten_name(
+    instance: Union[ast.InstanceClass, ast.InstanceSymbol], remove_prefix: str = ""
+) -> str:
+    """Flatten the instance full_reference() into a name str
+
+    :param instance: The instance having the name to flatten
+    :param remove_prefix: The prefix to remove from the name
+    :return: The flattened name
+    """
+    assert instance.ast_ref is not None
+    global_ref = instance.ast_ref.full_reference()
+    for name in remove_prefix.split("."):
+        if global_ref.name != name:
+            break
+        global_ref = global_ref.child[0]
+    return str(global_ref)
+
+
+def _resolve_name(
+    name: Union[str, ast.ComponentRef],
+    scope: ast.InstanceClass,
+    flat_instance: FlatInstanceClass,
+) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
+    """Flatten and resolve a name reference"""
+    # * A. "all references by name in conditional declarations, modifications, dimension
+    #   definitions, annotations, equations and algorithms are resolved to the real
+    #   instance to which they are referring to ... [Either the referenced instance
+    #   belongs to the model to be simulated the path starts at the model itself, or if
+    #   not, it starts at the unnamed root of the instance tree, e.g. in case of a
+    #   constant in a package.]"
+    # * B. Names are replaced by the global unique identifier of the instance "[This
+    #   identifier is normally constructed from the names of the instances along a path
+    #   in the instance tree (and omitting the unnamed nodes of extends clauses),
+    #   separated by dots. Either the referenced instance belongs to the model to be
+    #   simulated the path starts at the model itself, or if not, it starts at the
+    #   unnamed root of the instance tree, e.g. in case of a constant in a package.]"
+    # * C. Classes and symbols are instantiated as needed (if not a fully instantiated instance)
+    # * D. Classes are ignored unless needed by components
+    # * E. Function calls encountered in the above are processed as needed: (TODO)
+    #   - Fill the call with default arguments (section 12.4.1)
+    #   - Look up the function in the instance tree
+    #   - Recursively flatten the function call
+    #   - Add to the list of functions
+
+    if not scope.fully_instantiated:
+        # Fully instantiate the scope class to get instantiated symbol
+        scope = _instantiate_class(scope, ast.ClassModification(), scope.parent)
+
+    found = _find_name(name, scope)
+    if found is None:
+        raise NameLookupError(f"Unable to resolve {name} in scope {scope.full_reference()}")
+    is_symbol = isinstance(found, ast.Symbol)
+
+    flat_name = _flatten_name(found, flat_instance.name)
+    if flat_name in flat_instance.symbols:
+        # Return the already-resolved symbol
+        return flat_instance.symbols[flat_name]
+
+    if not isinstance(found, ast.InstanceElement) or not found.fully_instantiated:
+        if isinstance(found, ast.Class):
+            found = _instantiate_class_update_parent(found)
+        else:  # ast.Symbol or subtype
+            # TODO: Implement direct instantiation of symbols
+            # Fully instantiate the symbol parent class to get instantiated symbol
+            assert found.parent is not None
+            found.parent = _instantiate_class_update_parent(found.parent)
+            found = found.parent.symbols[found.name]
+
+    flat_instance.symbols[flat_name] = found
+
+    return found
+
+
+def _instantiate_class_update_parent(
+    class_: Union[ast.Class, ast.InstanceClass]
+) -> ast.InstanceClass:
+    assert class_.parent is not None
+    instance = _instantiate_class(class_, ast.ClassModification(), class_.parent)
+    # Update the instance tree with the fully instantiated class
+    assert instance.name is not None
+    assert instance.parent is not None
+    instance.parent.classes[instance.name] = instance
+    return instance
 
 
 def flatten_extends(

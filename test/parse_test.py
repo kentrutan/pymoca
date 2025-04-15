@@ -230,11 +230,12 @@ class ParseTest(unittest.TestCase):
         self.flush()
 
     def test_spring_system(self):
-        ast_tree = self.parse_model_files("SpringSystem.mo")
-        print("AST TREE\n", ast_tree)
-        flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="SpringSystem"))
-        print("AST TREE FLAT\n", flat_tree)
-        self.flush()
+        instance = self.parse_and_instantiate_model(
+            "SpringSystemExample.mo", "Example.SpringSystem"
+        )
+        flat_tree = tree.flatten_instance(instance)
+        for name in ["spring.x", "spring.f", "damper.v", "damper.f", "damper.c"]:
+            self.assertIn(name, flat_tree.symbols, f"Name not flattened: {name}")
 
     def test_duplicate_state(self):
         ast_tree = self.parse_model_files("DuplicateState.mo")

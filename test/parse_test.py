@@ -229,14 +229,6 @@ class ParseTest(unittest.TestCase):
         print("AST TREE FLAT\n", flat_tree)
         self.flush()
 
-    def test_spring_system(self):
-        instance = self.parse_and_instantiate_model(
-            "SpringSystemExample.mo", "Example.SpringSystem"
-        )
-        flat_tree = tree.flatten_instance(instance)
-        for name in ["spring.x", "spring.f", "damper.v", "damper.f", "damper.c"]:
-            self.assertIn(name, flat_tree.symbols, f"Name not flattened: {name}")
-
     def test_duplicate_state(self):
         ast_tree = self.parse_model_files("DuplicateState.mo")
         print("AST TREE\n", ast_tree)
@@ -1264,6 +1256,31 @@ class ParseTest(unittest.TestCase):
             parser.ModelicaSyntaxError, "mismatched input '.' expecting '='"
         ):
             _ = self.parse_model_files("RedeclareNestedClass.mo.fail_parse")
+
+    def test_flattening_inheritance_tree(self):
+        """Test flattening multi-level class hierarchy with modifications but no equations"""
+        instance = self.parse_and_instantiate_model("InstantiationTree.mo", "TreeModel.Tree")
+        flat_tree = tree.flatten_instance(instance)
+        expect = (
+            ("w", "nominal", 2.0),
+            ("b.t", "nominal", 1.0),
+            ("l.c", "value", 1),
+            ("l2.c", "value", 2),
+            ("t", "nominal", 2.0),
+        )
+        for name, attr, value in expect:
+            self.assertIn(name, flat_tree.symbols)
+            symbol = flat_tree.symbols[name]
+            self.assertEqual(getattr(symbol, attr), value)
+
+    def test_flattening_spring_system(self):
+        """Test flattening of a simple class hierarchy with equations"""
+        instance = self.parse_and_instantiate_model(
+            "SpringSystemExample.mo", "Example.SpringSystem"
+        )
+        flat_tree = tree.flatten_instance(instance)
+        for name in ("spring.x", "spring.f", "damper.v", "damper.f", "damper.c"):
+            self.assertIn(name, flat_tree.symbols, f"Name not flattened: {name}")
 
     # TODO: Remove xFail decoration when new flattening is implemented
     @unittest.expectedFailure  # Parser setting modification argument scope breaks old flattening

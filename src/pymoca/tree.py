@@ -15,8 +15,6 @@ import numpy as np
 
 from . import ast
 
-CLASS_SEPARATOR = "."
-
 logger = logging.getLogger("pymoca")
 
 
@@ -575,7 +573,7 @@ def flatten_symbols(class_: ast.InstanceClass, instance_name="") -> ast.Class:
 
     # append period to non empty instance_name
     if instance_name != "":
-        instance_prefix = instance_name + CLASS_SEPARATOR
+        instance_prefix = instance_name + "."
     else:
         instance_prefix = instance_name
 
@@ -743,7 +741,7 @@ class ComponentRefFlattener(TreeListener):
         c = tree
         while len(c.child) > 0:
             c = c.child[0]
-            new_name += CLASS_SEPARATOR + c.name
+            new_name += "." + c.name
 
         # If the flattened name exists in the container, use it.
         # Otherwise, skip this reference.
@@ -1061,8 +1059,8 @@ def expand_connectors(node: ast.Class) -> None:
                 flat_class_left = flatten_class(class_left)
 
                 for connector_variable in flat_class_left.symbols.values():
-                    left_name = equation.left.name + CLASS_SEPARATOR + connector_variable.name
-                    right_name = equation.right.name + CLASS_SEPARATOR + connector_variable.name
+                    left_name = equation.left.name + "." + connector_variable.name
+                    right_name = equation.right.name + "." + connector_variable.name
                     left = ast.ComponentRef(
                         name=left_name,
                         indices=equation.left.indices + connector_variable.type.indices,

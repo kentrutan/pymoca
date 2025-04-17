@@ -859,12 +859,13 @@ class ModelicaParserErrorListener(ErrorListener):
         raise ModelicaSyntaxError(msg, info)
 
 
-def _parse(text: str) -> ast.Tree:
+def _parse(text: str, trace: bool = False) -> ast.Tree:
     """Parse Modelica code given in text"""
     input_stream = antlr4.InputStream(text)
     lexer = ModelicaLexer(input_stream)
     stream = antlr4.CommonTokenStream(lexer)
     parser = ModelicaParser(stream)
+    parser.setTrace(trace)
     # parser.buildParseTrees = False
     listener = ModelicaParserErrorListener()
     lexer.removeErrorListeners()
@@ -1009,6 +1010,7 @@ def _get_default_cache_path() -> Path:
 def parse(
     txt: str,
     /,
+    trace: bool = False,
     model_cache_folder: Optional[Path] = None,
     cache_db: str = DEFAULT_MODEL_CACHE_DB,
     cache_expiration_days: int = 30,
@@ -1025,6 +1027,8 @@ def parse(
 
     Args:
         txt (str): The Modelica code to parse.
+        trace (bool, optional): If True, the parser will print debug information. Default
+            is False
         model_cache_folder (Path, optional): The folder where the cache database is
             stored. If not provided, a default location based on the operating system is
             used.
@@ -1049,7 +1053,7 @@ def parse(
 
     """
     if bypass_cache:
-        return _parse(txt)
+        return _parse(txt, trace=trace)
 
     pymoca_version = pymoca.__version__
 
@@ -1057,7 +1061,7 @@ def parse(
     # code can't be uniquely identified.
     if pymoca_version.endswith(".dirty"):
         logger.debug("Bypassing cache because working directory is dirty")
-        return _parse(txt)
+        return _parse(txt, trace=trace)
 
     if model_cache_folder is not None:
         db_folder = model_cache_folder
@@ -1148,7 +1152,7 @@ def parse(
         # We get here if we didn't find anything in the cache, or if the
         # unpickling of the cache failed
         try:
-            tree = _parse(txt)
+            tree = _parse(txt, trace=trace)
         except Exception:
             conn.close()
             raise
@@ -1169,24 +1173,27 @@ def parse(
     return tree
 
 
-def parse_file(file_path: Union[str, Path]) -> ast.Tree:
+def parse_file(file_path: Union[str, Path], trace: bool = False) -> ast.Tree:
     """Parse given file path and return parsed ast.Tree
 
     Args:
         file_path (str or Path): Path to the Modelica file to parse.
+        trace (bool, optional): If True, print a trace of the parse for debugging purposes.
     Returns:
         ast.Tree: The Abstract Syntax Tree (AST) of the parsed Modelica code.
     Raises:
         FileNotFoundError: If the specified file does not exist.
         ModelicaSyntaxError: If there is a syntax error in the Modelica code.
         See also: parse()
+
+    If you need control of the parse cache, use parse() instead.
     """
     path = Path(file_path)
     if not path.exists():
         raise FileNotFoundError(f"File not found: {path}")
     txt = path.read_text(encoding="utf-8")
     try:
-        ast_tree = parse(txt)
+        ast_tree = parse(txt, trace=trace)
     except ModelicaSyntaxError as exception:
         # Add filename to the exception
         info = (str(path),) + exception.args[1][1:]

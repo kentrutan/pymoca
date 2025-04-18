@@ -1191,24 +1191,37 @@ def _apply_modifications(
 
     instance.modification_environment = mod
 
+    _update_modification_argument_scopes(instance)
+
+
+def _update_modification_argument_scopes(
+    instance: Union[ast.InstanceClass, ast.InstanceSymbol],
+) -> None:
+    """Update the scopes of modification arguments to the instance tree
+    :param instance: The instance to update
+    :param lookup_scope: The scope to start name lookup
+    """
     # Modification argument scope is set in the parser as the parent of the class,
     # extends, or symbol declaration. Update the scope from the instance tree.
     for index, arg in enumerate(instance.modification_environment.arguments):
         assert arg.scope is not None, "Modification argument scope should have been set by now"
-        if not isinstance(arg.scope, ast.InstanceClass):
-            # Look up the scope class in the instance tree
-            if isinstance(instance, ast.Class):
-                lookup_scope = instance
-            else:  # ast.Symbol
-                lookup_scope = instance.parent
-            instance_scope = find_name(arg.scope.name, lookup_scope)
-            if not isinstance(instance_scope, ast.InstanceClass):
-                instance_scope = _instantiate_partially(
-                    arg.scope, ast.ClassModification(), arg.scope.parent
+        if not isinstance(arg.scope, (ast.InstanceClass, InstanceTree)):
+            global_name = arg.scope.full_reference()
+            # Start scope for name lookup is the current instance (or parent in case of symbol)
+            start_scope = instance if not isinstance(instance, ast.Symbol) else instance.parent
+            arg_scope = _find_name(global_name, start_scope, check_encapsulated=False)
+
+            if arg_scope is None or not isinstance(arg_scope, ast.InstanceClass):
+                arg_scope = _instantiate_partially(
+                    arg.scope,
+                    ast.ClassModification(),
+                    arg.scope.parent,
                 )
+                _instantiate_parents_partially(arg_scope)
+
             # Make a copy so we don't change original AST or same arg used elsewhere
             new_arg = copy.copy(arg)
-            new_arg.scope = instance_scope
+            new_arg.scope = arg_scope
             instance.modification_environment.arguments[index] = new_arg
 
 

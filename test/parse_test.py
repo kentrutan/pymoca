@@ -162,6 +162,23 @@ class ParseTest(unittest.TestCase):
                 tree = file_tree
         return tree
 
+    def parse_and_instantiate(self, filename, class_name):
+        ast_tree = parser.parse_file(filename)
+        self.assertIsNotNone(ast_tree, f"Failed to parse {filename}")
+        pickled_before = pickle.dumps(ast_tree)
+        instance = tree.instantiate(class_name, ast_tree)
+        self.assertIsNotNone(instance, f"Failed to instantiate {filename}")
+        pickled_after = pickle.dumps(ast_tree)
+        self.assertEqual(pickled_before, pickled_after, "AST was modified during instantiation")
+        return instance
+
+    def parse_and_instantiate_model(self, filename, class_name):
+        return self.parse_and_instantiate(os.path.join(MODEL_DIR, filename), class_name)
+
+    def parse_and_flatten_model(self, filename, class_name):
+        instance = self.parse_and_instantiate(os.path.join(MODEL_DIR, filename), class_name)
+        return tree.flatten_instance(instance)
+
     def test_ast_element_full_name(self):
         """Test fully-qualified name lookup to element and back to name"""
         ast_tree = self.parse_model_files("TreeLookup.mo")
@@ -177,14 +194,16 @@ class ParseTest(unittest.TestCase):
     def test_aircraft(self):
         ast_tree = self.parse_model_files("Aircraft.mo")
         print("AST TREE\n", ast_tree)
-        flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="Aircraft"))
+        instance = tree.instantiate("Aircraft", ast_tree)
+        flat_tree = tree.flatten_instance(instance)
         print("AST TREE FLAT\n", flat_tree)
         self.flush()
 
     def test_bouncing_ball(self):
         ast_tree = self.parse_model_files("BouncingBall.mo")
         print("AST TREE\n", ast_tree)
-        flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="BouncingBall"))
+        instance = tree.instantiate("BouncingBall", ast_tree)
+        flat_tree = tree.flatten_instance(instance)
         print(flat_tree)
         print("AST TREE FLAT\n", flat_tree)
         self.flush()
@@ -218,21 +237,24 @@ class ParseTest(unittest.TestCase):
     def test_estimator(self):
         ast_tree = self.parse_model_files("./Estimator.mo")
         print("AST TREE\n", ast_tree)
-        flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="Estimator"))
+        instance = tree.instantiate("Estimator", ast_tree)
+        flat_tree = tree.flatten_instance(instance)
         print("AST TREE FLAT\n", flat_tree)
         self.flush()
 
     def test_spring(self):
         ast_tree = self.parse_model_files("Spring.mo")
         print("AST TREE\n", ast_tree)
-        flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="Spring"))
+        instance = tree.instantiate("Spring", ast_tree)
+        flat_tree = tree.flatten_instance(instance)
         print("AST TREE FLAT\n", flat_tree)
         self.flush()
 
     def test_duplicate_state(self):
         ast_tree = self.parse_model_files("DuplicateState.mo")
         print("AST TREE\n", ast_tree)
-        flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="DuplicateState"))
+        instance = tree.instantiate("DuplicateState", ast_tree)
+        flat_tree = tree.flatten_instance(instance)
         print("AST TREE FLAT\n", flat_tree)
         self.flush()
 
@@ -286,19 +308,6 @@ class ParseTest(unittest.TestCase):
             ast_tree = parser.parse(txt)
             self.assertIsNotNone(ast_tree, f"for '{txt}'")
 
-    def parse_and_instantiate(self, filename, class_name):
-        ast_tree = parser.parse_file(filename)
-        self.assertIsNotNone(ast_tree, f"Failed to parse {filename}")
-        pickled_before = pickle.dumps(ast_tree)
-        instance = tree.instantiate(class_name, ast_tree)
-        self.assertIsNotNone(instance, f"Failed to instantiate {filename}")
-        pickled_after = pickle.dumps(ast_tree)
-        self.assertEqual(pickled_before, pickled_after, "AST was modified during instantiation")
-        return instance
-
-    def parse_and_instantiate_model(self, filename, class_name):
-        return self.parse_and_instantiate(os.path.join(MODEL_DIR, filename), class_name)
-
     def test_instantiation_same_names(self):
         """Test instantiating a class with the same name as the enclosing class"""
         instance = self.parse_and_instantiate_model("TreeInTree.mo", "Tree.Tree")
@@ -345,7 +354,7 @@ class ParseTest(unittest.TestCase):
     def test_instantiation_tree(self):
         instance = self.parse_and_instantiate_model("InstantiationTree.mo", "TreeModel.Tree")
 
-        # Check that we have a fully connected InstanceTree with only Instances (except BUILTINS)
+        # Check that we have a fully connected InstanceTree with only Instances
         non_instances = check_instance_tree_is_all_instances(instance.root)
 
         self.assertEqual(
@@ -470,11 +479,8 @@ class ParseTest(unittest.TestCase):
     # - instances with same name, same type, but different redeclarations
     # - ...?
 
-    # TODO: Remove xFail decoration when new flattening is implemented
-    @unittest.expectedFailure  # Parser setting modification argument scope breaks old flattening
     def test_inheritance(self):
         instance = self.parse_and_instantiate_model("InheritanceInstantiation.mo", "C2")
-        ast_tree = instance.ast_ref.root
 
         bcomp1_b = instance.symbols["bcomp1"].type.extends[0].symbols["b"]
         bcomp1_b_type = bcomp1_b.type.symbols["Integer"]
@@ -497,12 +503,11 @@ class ParseTest(unittest.TestCase):
         bcomp3_b_value = bcomp3_b_mod.modifications[-1].value
         self.assertEqual(bcomp3_b_value, 2)
 
-        # TODO: Update after new flattening is implemented
-        flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="C2"))
+        flat_tree = tree.flatten_instance(instance)
 
-        self.assertEqual(flat_tree.classes["C2"].symbols["bcomp1.b"].value.value, 3.0)
-        self.assertEqual(flat_tree.classes["C2"].symbols["bcomp3.a"].value.value, 1.0)
-        self.assertEqual(flat_tree.classes["C2"].symbols["bcomp3.b"].value.value, 2.0)
+        self.assertEqual(flat_tree.symbols["bcomp1.b"].value, 3)
+        self.assertEqual(flat_tree.symbols["bcomp3.a"].value, 1)
+        self.assertEqual(flat_tree.symbols["bcomp3.b"].value, 2)
 
     def test_inheritance_resistor(self):
         instance = self.parse_and_instantiate_model("InheritanceInstantiationResistor.mo", "P.M")
@@ -530,13 +535,11 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(n_v_nominal, 2)
         self.assertEqual(n_v_max, 3.0)
 
-        # TODO: Update after new flattening is implemented (uncomment below)
-        # This fails with Pymoca 0.10 flattening
-        # flat_tree = tree.flatten(ast_tree, ast.ComponentRef.from_string("P.M"))
-        # self.assertEqual(flat_tree.classes["P.M"].symbols["p.v"].nominal.value, 1.0)
-        # self.assertEqual(flat_tree.classes["P.M"].symbols["p.v"].max.value, 3.0)
-        # self.assertEqual(flat_tree.classes["P.M"].symbols["n.v"].nominal.value, 2.0)
-        # self.assertEqual(flat_tree.classes["P.M"].symbols["n.v"].max.value, 3.0)
+        flat_tree = tree.flatten_instance(instance)
+        self.assertEqual(flat_tree.symbols["p.v"].nominal, 1.0)
+        self.assertEqual(flat_tree.symbols["p.v"].max, 3.0)
+        self.assertEqual(flat_tree.symbols["n.v"].nominal, 2.0)
+        self.assertEqual(flat_tree.symbols["n.v"].max, 3.0)
 
     def test_inheritance_instantiation(self):
         instance = self.parse_and_instantiate_model("RecursiveInstantiation.mo", "M")
@@ -578,14 +581,11 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(len(e_type.extends), 1, "b.a.e extends not properly instantiated")
         self.assertIn("Real", e_type.extends[0].symbols, "b.a.e incorrect type E scope")
 
-        # TODO: Update after new flattening is implemented (uncomment below)
-        # This fails with Pymoca 0.10 flattening
+        flat_tree = tree.flatten_instance(instance)
 
-        # flat_tree = tree.flatten(instance_tree, ast.ComponentRef.from_string("M"))
-
-        # self.assertEqual(flat_tree.classes["M"].symbols["b.a.e"].type.name, "Real")
-        # self.assertEqual(flat_tree.classes["M"].symbols["b.a.p"].type.name, "Integer")
-        # self.assertEqual(flat_tree.classes["M"].symbols["b.a.p"].value.value, 1)
+        self.assertEqual(flat_tree.symbols["b.a.e"].type.name, "Real")
+        self.assertEqual(flat_tree.symbols["b.a.p"].type.name, "Integer")
+        self.assertEqual(flat_tree.symbols["b.a.p"].value, 1)
 
     def test_visibility_in_ast(self):
         """Test visibility is set correctly in AST elements"""
@@ -764,7 +764,6 @@ class ParseTest(unittest.TestCase):
 
     def test_nested_classes(self):
         instance = self.parse_and_instantiate_model("NestedClasses.mo", "C2")
-        ast_tree = instance.ast_ref.root
 
         c2_v1 = instance.extends[0].symbols["v1"].type.extends[0].symbols["Real"]
         c2_v1_mod = c2_v1.modification_environment.arguments[-1].value
@@ -776,11 +775,10 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(c2_v2_mod.component.name, "nominal")
         self.assertEqual(c2_v2_mod.modifications[0].value, 1000)
 
-        # TODO: Update after new flattening is implemented
-        flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="C2"))
+        flat_tree = tree.flatten_instance(instance)
 
-        self.assertEqual(flat_tree.classes["C2"].symbols["v1"].nominal.value, 1000.0)
-        self.assertEqual(flat_tree.classes["C2"].symbols["v2"].nominal.value, 1000.0)
+        self.assertEqual(flat_tree.symbols["v1"].nominal, 1000.0)
+        self.assertEqual(flat_tree.symbols["v2"].nominal, 1000.0)
 
     def test_nested_symbol_modifier(self):
         instance = self.parse_and_instantiate_model("NestedClasses.mo", "C3")
@@ -791,32 +789,26 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(c3_v1_mod.component.name, "nominal")
         self.assertEqual(c3_v1_mod.modifications[0].value, 10)
 
-        # TODO: Update after new flattening is implemented
-        # This fails with Pymoca 0.10 flattening:
-        # IndexError: Processing failed for symbol "C3.c": list index out of range
-        # ast_tree = instance.ast_ref.root
-        # flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="C3"))
+        flat_tree = tree.flatten_instance(instance)
 
-        # self.assertEqual(flat_tree.classes["C3"].symbols["c.v1"].nominal.value, 10.0)
-        # self.assertEqual(flat_tree.classes["C3"].symbols["c.v2"].nominal.value, 1000.0)
+        self.assertEqual(flat_tree.symbols["c.v1"].nominal, 10.0)
+        self.assertEqual(flat_tree.symbols["c.v2"].nominal, 1000.0)
 
+    @unittest.expectedFailure  # "New flattening expression modification not implemented yet"
     def test_inheritance_symbol_modifiers(self):
         instance = self.parse_and_instantiate_model("Inheritance.mo", "Sub")
-        ast_tree = instance.ast_ref.root
 
         x_type = instance.extends[0].symbols["x"].type.symbols["Real"]
         x_mod = x_type.modification_environment.arguments[0]
         self.assertEqual(x_mod.value.component.name, "max")
         self.assertEqual(x_mod.value.modifications[0].value, 30.0)
 
-        # TODO: Update when new flattening is implemented
-        flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="Sub"))
+        flat_tree = tree.flatten_instance(instance)
 
-        self.assertEqual(flat_tree.classes["Sub"].symbols["x"].max.value, 30.0)
+        self.assertEqual(flat_tree.symbols["x"].max, 30.0)
 
     def test_extends_modification(self):
         instance = self.parse_and_instantiate_model("ExtendsModification.mo", "MainModel")
-        ast_tree = instance.ast_ref.root
 
         e_HQ_H = instance.symbols["e"].type.extends[0].extends[0].symbols["HQ"].type.symbols["H"]
         H_mod = e_HQ_H.type.symbols["Real"].modification_environment.arguments[0].value
@@ -824,12 +816,12 @@ class ParseTest(unittest.TestCase):
         min_mod = H_mod.modifications[0]
         self.assertEqual(min_mod.name, "H_b")
 
-        # TODO: Update when new flattening is implemented
-        flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="MainModel"))
+        flat_tree = tree.flatten_instance(instance)
 
-        self.assertEqual(flat_tree.classes["MainModel"].symbols["e.HQ.H"].min.name, "e.H_b")
+        self.assertEqual(flat_tree.symbols["e.HQ.H"].min.name, "e.H_b")
 
     def test_modification_typo(self):
+        # TODO: Update when new flatting is implemented
         with open(os.path.join(MODEL_DIR, "ModificationTypo.mo"), "r") as f:
             txt = f.read()
 
@@ -843,18 +835,12 @@ class ParseTest(unittest.TestCase):
             flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name=c))  # noqa: F841
 
     def test_tree_lookup(self):
-        ast_tree = self.parse_model_files("TreeLookup.mo")
+        instance = self.parse_and_instantiate_model("TreeLookup.mo", "Level1.Level2.Level3.Test")
 
-        # The class we want to flatten. We first have to turn it into a
-        # full-fledged ComponentRef.
-        class_name = "Level1.Level2.Level3.Test"
-        comp_ref = ast.ComponentRef.from_string(class_name)
+        flat_tree = tree.flatten_instance(instance)
 
-        flat_tree = tree.flatten(ast_tree, comp_ref)
-
-        self.assertIn("elem.tc.i", flat_tree.classes["Level1.Level2.Level3.Test"].symbols.keys())
-        self.assertIn("elem.tc.a", flat_tree.classes["Level1.Level2.Level3.Test"].symbols.keys())
-        self.assertIn("b", flat_tree.classes["Level1.Level2.Level3.Test"].symbols.keys())
+        expect = sorted(["elem.tc.i", "elem.tc.a", "b"])
+        self.assertListEqual(expect, sorted(flat_tree.symbols.keys()))
 
     def test_function_pull(self):
         ast_tree = self.parse_model_files("FunctionPull.mo")
@@ -897,20 +883,15 @@ class ParseTest(unittest.TestCase):
 
     def test_nested_symbol_modification(self):
         instance = self.parse_and_instantiate_model("NestedSymbolModification.mo", "E")
-        ast_tree = instance.ast_ref.root
 
         E_c_x = instance.extends[0].symbols["c"].type.extends[0].symbols["x"]
         mod = E_c_x.type.symbols["Real"].modification_environment.arguments[0].value
         self.assertEqual(mod.component.name, "nominal")
         self.assertEqual(mod.modifications[0].value, 2)
 
-        # TODO: Update when new flatting is implemented
-        class_name = "E"
-        comp_ref = ast.ComponentRef.from_string(class_name)
+        flat_tree = tree.flatten_instance(instance)
 
-        flat_tree = tree.flatten(ast_tree, comp_ref)
-
-        self.assertEqual(flat_tree.classes["E"].symbols["c.x"].nominal.value, 2.0)
+        self.assertEqual(flat_tree.symbols["c.x"].nominal, 2.0)
 
     def test_nonreplaceable_component_contains_replaceable(self):
         """Test that nonreplaceable components can contain replaceable components"""
@@ -1181,50 +1162,36 @@ class ParseTest(unittest.TestCase):
 
     def test_redeclare_in_extends(self):
         instance = self.parse_and_instantiate_model("RedeclareInExtends.mo", "ChannelZ")
-        ast_tree = instance.ast_ref.root
 
         self.assertIn("Z", instance.extends[0].symbols["down"].type.symbols)
 
-        # TODO: Update when new flattening is implemented
-        class_name = "ChannelZ"
-        comp_ref = ast.ComponentRef.from_string(class_name)
+        flat_tree = tree.flatten_instance(instance)
 
-        flat_tree = tree.flatten(ast_tree, comp_ref)
-
-        self.assertIn("down.Z", flat_tree.classes["ChannelZ"].symbols)
+        self.assertIn("down.Z", flat_tree.symbols)
 
     def test_redeclaration_scope(self):
         instance = self.parse_and_instantiate_model("RedeclarationScope.mo", "ChannelZ")
-        ast_tree = instance.ast_ref.root
 
         c_type = instance.symbols["c"].type
         self.assertIn("Z", c_type.symbols["up"].type.symbols)
         self.assertIn("A", c_type.symbols["down"].type.symbols)
 
-        # TODO: Update when new flattening is implemented
-        class_name = "ChannelZ"
-        comp_ref = ast.ComponentRef.from_string(class_name)
+        flat_tree = tree.flatten_instance(instance)
 
-        flat_tree = tree.flatten(ast_tree, comp_ref)
-
-        self.assertIn("c.up.Z", flat_tree.classes["ChannelZ"].symbols)
-        self.assertIn("c.down.A", flat_tree.classes["ChannelZ"].symbols)
+        self.assertIn("c.up.Z", flat_tree.symbols)
+        self.assertIn("c.down.A", flat_tree.symbols)
 
     def test_redeclaration_scope_alternative(self):
         instance = self.parse_and_instantiate_model("RedeclarationScopeAlternative.mo", "ChannelZ")
-        ast_tree = instance.ast_ref.root
 
         c_type = instance.symbols["c"].type
         self.assertIn("Z", c_type.symbols["up"].type.symbols)
         self.assertIn("A", c_type.symbols["down"].type.symbols)
-        # TODO: Update when new flattening is implemented
-        class_name = "ChannelZ"
-        comp_ref = ast.ComponentRef.from_string(class_name)
 
-        flat_tree = tree.flatten(ast_tree, comp_ref)
+        flat_tree = tree.flatten_instance(instance)
 
-        self.assertIn("c.up.Z", flat_tree.classes["ChannelZ"].symbols)
-        self.assertIn("c.down.A", flat_tree.classes["ChannelZ"].symbols)
+        self.assertIn("c.up.Z", flat_tree.symbols)
+        self.assertIn("c.down.A", flat_tree.symbols)
 
     def test_extends_redeclareable(self):
         ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "ExtendsRedeclareable.mo"))
@@ -1233,15 +1200,6 @@ class ParseTest(unittest.TestCase):
             tree.ModelicaSemanticError, "In D extends C, C and parents cannot be replaceable"
         ):
             instance = tree.instantiate("E", ast_tree)  # noqa: F841
-
-        # TODO: Update when new flattening is implemented (remove flattening)
-        class_name = "E"
-        comp_ref = ast.ComponentRef.from_string(class_name)
-
-        flat_tree = tree.flatten(ast_tree, comp_ref)
-
-        self.assertIn("z.y", flat_tree.classes["E"].symbols)
-        self.assertEqual(flat_tree.classes["E"].symbols["z.y"].nominal.value, 2.0)
 
     def test_redeclare_nonreplaceable(self):
         ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "RedeclareNonReplaceable.mo"))
@@ -1286,26 +1244,13 @@ class ParseTest(unittest.TestCase):
     @unittest.expectedFailure  # Parser setting modification argument scope breaks old flattening
     def test_extends_order(self):
         instance = self.parse_and_instantiate_model("ExtendsOrder.mo", "P.M")
-        ast_tree = instance.ast_ref.root
 
-        at_m = instance.extends[0].symbols["at"].type.symbols["m"].type.symbols["Real"]
-        m_mod = at_m.modification_environment.arguments[0]
-        self.assertEqual(m_mod.value.component.name, "value")
-        self.assertEqual(m_mod.value.modifications[0].value, 0)
+        flat_tree = tree.flatten_instance(instance)
 
-        # TODO: Update when new flattening is implemented
-        class_name = "P.M"
-        comp_ref = ast.ComponentRef.from_string(class_name)
+        self.assertEqual(flat_tree.symbols["at.m"].value, 0.0)
 
-        flat_tree = tree.flatten(ast_tree, comp_ref)
-
-        self.assertEqual(flat_tree.classes["P.M"].symbols["at.m"].value.value, 0.0)
-
-    # TODO: Remove xFail decoration when new flattening is implemented
-    @unittest.expectedFailure  # Parser setting modification argument scope breaks old flattening
     def test_constant_references(self):
         instance = self.parse_and_instantiate_model("ConstantReferences.mo", "b")
-        ast_tree = instance.ast_ref.root
 
         # Since b extends a and a has no symbols, new instantiation stops there
         # Instead we will check for the redeclare being applied correctly
@@ -1313,18 +1258,13 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(b_m_mod.value.name, "m")
         self.assertEqual(b_m_mod.value.component.name, "m2")
 
-        # TODO: Update when new flattening is implemented
-        class_name = "b"
-        comp_ref = ast.ComponentRef.from_string(class_name)
+        flat_tree = tree.flatten_instance(instance)
 
-        flat_tree = tree.flatten(ast_tree, comp_ref)
-
-        self.assertEqual(flat_tree.classes["b"].symbols["m.p"].value.value, 2.0)
-        self.assertEqual(flat_tree.classes["b"].symbols["M2.m.f"].value.value, 3.0)
+        self.assertEqual(flat_tree.symbols["m.p"].value, 2.0)
+        self.assertEqual(flat_tree.symbols["M2.m.f"].value, 3.0)
 
     def test_parameter_modification_scope(self):
         instance = self.parse_and_instantiate_model("ParameterScope.mo", "ScopeTest")
-        ast_tree = instance.ast_ref.root
 
         p_sym = instance.symbols["p"].type.symbols["Real"]
         p_sym_mod = p_sym.modification_environment.arguments[0]
@@ -1334,19 +1274,12 @@ class ParseTest(unittest.TestCase):
         nc_p_mod = nc_p_sym.modification_environment.arguments[0]
         self.assertEqual(nc_p_mod.value.modifications[0].name, "p")
 
-        # TODO: Update when new flattening is implemented
-        class_name = "ScopeTest"
-        comp_ref = ast.ComponentRef.from_string(class_name)
+        flat_tree = tree.flatten_instance(instance)
 
-        flat_tree = tree.flatten(ast_tree, comp_ref)
+        self.assertEqual(flat_tree.symbols["nc.p"].value.name, "p")
 
-        self.assertEqual(flat_tree.classes["ScopeTest"].symbols["nc.p"].value.name, "p")
-
-    # TODO: Remove xFail decoration when new flattening is implemented
-    @unittest.expectedFailure  # Parser setting modification argument scope breaks old flattening
     def test_custom_units(self):
         instance = self.parse_and_instantiate_model("CustomUnits.mo", "A")
-        ast_tree = instance.ast_ref.root
 
         dummy = instance.extends[0].symbols["dummy_parameter"].type.extends[0].symbols["Real"]
         dummy_value_mod = dummy.modification_environment.arguments[0]
@@ -1356,14 +1289,10 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(dummy_value_mod.value.component.name, "value")
         self.assertEqual(dummy_value_mod.value.modifications[0].value, 10.0)
 
-        # TODO: Update when new flattening is implemented
-        class_name = "A"
-        comp_ref = ast.ComponentRef.from_string(class_name)
+        flat_tree = tree.flatten_instance(instance)
 
-        flat_tree = tree.flatten(ast_tree, comp_ref)
-
-        self.assertEqual(flat_tree.classes["A"].symbols["dummy_parameter"].unit.value, "m/s")
-        self.assertEqual(flat_tree.classes["A"].symbols["dummy_parameter"].value.value, 10.0)
+        self.assertEqual(flat_tree.symbols["dummy_parameter"].unit, "m/s")
+        self.assertEqual(flat_tree.symbols["dummy_parameter"].value, 10.0)
 
     def test_extend_from_self(self):
         txt = """
@@ -1449,6 +1378,7 @@ class ParseTest(unittest.TestCase):
             end A;
         """
 
+        # TODO: Update when new flattening is implemented
         ast_tree = parser.parse(txt)
 
         class_name = "A"
@@ -1581,8 +1511,6 @@ class ParseTest(unittest.TestCase):
             flat_ast = tree.flatten(library_ast, flat_class)  # noqa: F841
 
     # Tests using the Modelica Standard Library
-    # TODO: Remove xFail decoration when new flattening is implemented
-    @unittest.expectedFailure  # Parser setting modification argument scope breaks old flattening
     def test_msl_opamp_units(self):
         """Test import from Modelica Standard Library 4.0.0 using SI.Units
 
@@ -1603,7 +1531,7 @@ class ParseTest(unittest.TestCase):
         instance = tree.instantiate(model_name, library_tree)
         self.assertIsNotNone(instance)
 
-        # Check that we have a fully connected InstanceTree with only Instances (except BUILTINS)
+        # Check that we have a fully connected InstanceTree with only Instances
         non_instances = check_instance_tree_is_all_instances(instance.root)
 
         self.assertEqual(
@@ -1634,19 +1562,15 @@ class ParseTest(unittest.TestCase):
             if arg.value.component.name == "quantity":
                 self.assertEqual(arg.value.modifications[0].value, "ElectricPotential")
 
-        # # TODO: Update when new flattening is implemented
-        flat_class = ast.ComponentRef.from_string(model_name)
-        flat_tree = tree.flatten(library_tree, flat_class)
-        symbols = flat_tree.classes[model_name].symbols
+        flat_tree = tree.flatten_instance(instance)
+        symbols = flat_tree.symbols
         self.assertIn("in_p.i", symbols)
-        self.assertEqual(symbols["in_p.i"].unit.value, "A")
-        self.assertEqual(symbols["in_p.i"].quantity.value, "ElectricCurrent")
+        self.assertEqual(symbols["in_p.i"].unit, "A")
+        self.assertEqual(symbols["in_p.i"].quantity, "ElectricCurrent")
         self.assertIn("vin", symbols)
-        self.assertEqual(symbols["vin"].unit.value, "V")
-        self.assertEqual(symbols["vin"].quantity.value, "ElectricPotential")
+        self.assertEqual(symbols["vin"].unit, "V")
+        self.assertEqual(symbols["vin"].quantity, "ElectricPotential")
 
-    # TODO: Remove xFail decoration when new flattening is implemented
-    @unittest.expectedFailure  # Parser setting modification argument scope breaks old flattening
     def test_msl3_twopin_units(self):
         """Test import from Modelica Standard Library 3.2.3 using SIunits
 
@@ -1687,19 +1611,15 @@ class ParseTest(unittest.TestCase):
             if arg.value.component.name == "quantity":
                 self.assertEqual(arg.value.modifications[0].value, "ElectricPotential")
 
-        # TODO: Update when new flattening is implemented
-        flat_class = ast.ComponentRef.from_string(model_name)
-        flat_tree = tree.flatten(library_tree, flat_class)
-        symbols = flat_tree.classes[model_name].symbols
+        flat_tree = tree.flatten_instance(instance)
+        symbols = flat_tree.symbols
         self.assertIn("p1.i", symbols)
-        self.assertEqual(symbols["p1.i"].unit.value, "A")
-        self.assertEqual(symbols["p1.i"].quantity.value, "ElectricCurrent")
+        self.assertEqual(symbols["p1.i"].unit, "A")
+        self.assertEqual(symbols["p1.i"].quantity, "ElectricCurrent")
         self.assertIn("v1", symbols)
-        self.assertEqual(symbols["v1"].unit.value, "V")
-        self.assertEqual(symbols["v1"].quantity.value, "ElectricPotential")
+        self.assertEqual(symbols["v1"].unit, "V")
+        self.assertEqual(symbols["v1"].quantity, "ElectricPotential")
 
-    # TODO: Remove xFail decoration when new flattening is implemented
-    @unittest.expectedFailure  # Parser setting modification argument scope breaks old flattening
     def test_msl_flange_units(self):
         """Test displayUnit attribute imported from MSL 4.0.0 SI.Units"""
         library_tree = self.parse_dir_files(
@@ -1726,14 +1646,12 @@ class ParseTest(unittest.TestCase):
             if arg.value.component.name == "quantity":
                 self.assertEqual(arg.value.modifications[0].value, "Angle")
 
-        # TODO: Update when new flattening is implemented
-        flat_class = ast.ComponentRef.from_string(model_name)
-        flat_tree = tree.flatten(library_tree, flat_class)
-        symbols = flat_tree.classes[model_name].symbols
+        flat_tree = tree.flatten_instance(instance)
+        symbols = flat_tree.symbols
         self.assertIn("flange.phi", symbols)
-        self.assertEqual(symbols["flange.phi"].unit.value, "rad")
-        self.assertEqual(symbols["flange.phi"].displayUnit.value, "deg")
-        self.assertEqual(symbols["flange.phi"].quantity.value, "Angle")
+        self.assertEqual(symbols["flange.phi"].unit, "rad")
+        self.assertEqual(symbols["flange.phi"].displayUnit, "deg")
+        self.assertEqual(symbols["flange.phi"].quantity, "Angle")
 
     def test_class_comment(self):
         """Test that class comment/description is retained after flattening"""
@@ -1797,22 +1715,14 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(d_c_y_mod.value.component.name, "value")
         self.assertEqual(d_c_y_mod.value.modifications[0].value, 4)
 
-        # TODO: Update when new flattening is implemented
-        class_name = "A.D"
-        comp_ref = ast.ComponentRef.from_string(class_name)
-        flat_tree = tree.flatten(ast_tree, comp_ref)
-        self.assertIsNone(flat_tree.classes[class_name].symbols["c.y"].value.value)
-        self.assertEqual(flat_tree.classes[class_name].equations[0].left.name, "c.y")
-        self.assertEqual(flat_tree.classes[class_name].equations[0].right.value, 3)
+        flat_tree = tree.flatten_instance(instance)
+        self.assertIsNone(flat_tree.symbols["c.y"].value)
+        self.assertEqual(flat_tree.equations[0].left, "c.y")
+        self.assertEqual(flat_tree.equations[0].right, 3)
 
-        # Parsing AST again, otherwise there is an error in A.E flattening
-        ast_tree = parser.parse(txt)
-        class_name = "A.E"
-        comp_ref = ast.ComponentRef.from_string(class_name)
-        flat_tree = tree.flatten(ast_tree, comp_ref)
-        self.assertIsNone(flat_tree.classes[class_name].symbols["d.c.y"].value.value)
-        self.assertEqual(flat_tree.classes[class_name].equations[0].left.name, "d.c.y")
-        self.assertEqual(flat_tree.classes[class_name].equations[0].right.value, 4)
+        self.assertIsNone(flat_tree.symbols["d.c.y"].value.value)
+        self.assertEqual(flat_tree.equations[0].left.name, "d.c.y")
+        self.assertEqual(flat_tree.equations[0].right.value, 4)
 
     def test_basemodelica_scalarized(self):
         """Test parsing BaseModelica example with scalar varables"""

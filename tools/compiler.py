@@ -57,12 +57,17 @@ def parse_file(path: Path) -> Union[pymoca.ast.Tree, None]:
     ast = None
     try:
         log.info("Parsing %s ...", path)
-        with path.open(encoding="utf-8") as file:
-            ast = pymoca.parser.parse(file.read())
-        if ast is None:
-            log.error('Syntax error in file "%s"', path)
-        elif log.level == logging.DEBUG:
-            log.debug(json.dumps(ast.to_json(ast), indent=2))
+        try:
+            ast = pymoca.parser.parse_file(path)
+        except pymoca.parser.ModelicaSyntaxError as err:
+            pymoca.parser.print_syntax_error(err)
+            if log.level in (logging.DEBUG, logging.INFO):
+                log.exception('Syntax error in file "%s"', path)
+            else:
+                log.error('Syntax error in file "%s": %s', path, err)
+        else:
+            if log.level == logging.DEBUG:
+                log.debug(json.dumps(ast.to_json(ast), indent=2))
     # KeyError and AttributeError are problems in ASTListener
     except (KeyError, AttributeError, OSError):
         if log.level in (logging.DEBUG, logging.INFO):

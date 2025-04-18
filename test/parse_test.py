@@ -1240,8 +1240,22 @@ class ParseTest(unittest.TestCase):
         for name in ("spring.x", "spring.f", "damper.v", "damper.f", "damper.c"):
             self.assertIn(name, flat_tree.symbols, f"Name not flattened: {name}")
 
-    # TODO: Remove xFail decoration when new flattening is implemented
-    @unittest.expectedFailure  # Parser setting modification argument scope breaks old flattening
+    def test_flattening_modification_scope(self):
+        """Test for correct scope for references and values of modifications"""
+        # TODO: Revisit this when global name lookup is implemented (see model)
+        instance = self.parse_and_instantiate_model("ModificationScope.mo", "A")
+        flat_tree = tree.flatten_instance(instance)
+        # Check that the modifications are in the correct scope
+        expect = (
+            ("a", 3),
+            ("b", 3),
+            ("c", 3),
+            ("d", 1),
+        )
+        for symbol, value in expect:
+            self.assertEqual(flat_tree.symbols[symbol].value, value)
+
+    @unittest.expectedFailure  # "New flattening expression modification not implemented yet"
     def test_extends_order(self):
         instance = self.parse_and_instantiate_model("ExtendsOrder.mo", "P.M")
 

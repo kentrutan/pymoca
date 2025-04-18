@@ -1596,7 +1596,14 @@ def _resolve_modifications(symbol: ast.InstanceSymbol, parent: ast.Class) -> Non
     if "record" in symbol.prefixes:
         raise NotImplementedError("Record modifications not implemented yet")
 
-    for arg in symbol.modification_environment.arguments:
+    # TODO: Instantiation should move type class modifications down to the builtin
+    if isinstance(symbol.type, ast.ComponentRef):
+        # type class, modifications at this level
+        modification_environment = symbol.modification_environment
+    else:
+        modification_environment = symbol.type.symbols[symbol.type.name].modification_environment
+
+    for arg in modification_environment.arguments:
         assert isinstance(arg.value, ast.ElementModification)
         if arg.value.component == "value" and "record" in symbol.prefixes:
             # TODO: record value modification
@@ -1655,7 +1662,8 @@ def _process_transitions(flat_class: ast.InstanceClass):
 
 
 def _flatten_name(
-    instance: Union[ast.InstanceClass, ast.InstanceSymbol], remove_prefix: str = ""
+    element: Union[ast.Class, ast.InstanceClass, ast.Symbol, ast.InstanceSymbol],
+    remove_prefix: str = "",
 ) -> str:
     """Flatten the instance full_reference() into a name str
 
@@ -1663,8 +1671,11 @@ def _flatten_name(
     :param remove_prefix: The prefix to remove from the name
     :return: The flattened name
     """
-    assert instance.ast_ref is not None
-    global_ref = instance.ast_ref.full_reference()
+    if isinstance(element, ast.InstanceElement):
+        assert element.ast_ref is not None
+        global_ref = element.ast_ref.full_reference()
+    else:
+        global_ref = element.full_reference()
     for name in remove_prefix.split("."):
         if global_ref.name != name:
             break

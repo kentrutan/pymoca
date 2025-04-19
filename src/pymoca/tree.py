@@ -1070,11 +1070,6 @@ def _instantiate_extends_single(
     modification_environment.arguments = [
         arg for arg in modification_environment.arguments if arg in modifications.arguments
     ]
-    parent_instance.modification_environment.arguments = [
-        arg
-        for arg in parent_instance.modification_environment.arguments
-        if arg in modifications.arguments
-    ]
 
     if extends_instance.type in InstanceTree.BUILTIN_TYPES:
         if len(parent_instance.extends) > 1:

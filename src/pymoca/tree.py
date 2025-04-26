@@ -1288,12 +1288,6 @@ def _apply_redeclares(
             f"Redeclaring {element.name}{if_symbol_msg} with component {redeclare_name}"
             f" in scope {scope_class.full_reference()}"
         )
-    if isinstance(element, ast.Symbol):
-        ast_ref = redeclare.symbol_list[0]
-    elif isinstance(redeclare_class, ast.InstanceClass):
-        ast_ref = redeclare_class.ast_ref
-    else:
-        ast_ref = redeclare_class
     apply_args = []
     if isinstance(redeclare, ast.ShortClassDefinition):
         apply_args = redeclare.class_modification.arguments
@@ -1302,7 +1296,7 @@ def _apply_redeclares(
             apply_args = redeclare.symbol_list[0].class_modification.arguments
     modification_environment.arguments = modification_environment.arguments + apply_args
     redeclared_element = _instantiate_partially(
-        ast_ref,
+        redeclare_class,
         modification_environment,
         element.parent,
     )

@@ -309,6 +309,7 @@ def _find_name(
     search_imports: bool = True,
     search_parent: bool = True,
     search_inherited: bool = True,
+    check_encapsulated: bool = True,
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Internal start point for name lookup with extra parameters to control the lookup"""
@@ -357,12 +358,13 @@ def _find_name(
         search_imports=search_imports,
         search_parent=search_parent,
         search_inherited=search_inherited,
+        check_encapsulated=check_encapsulated,
         current_extends=current_extends,
     )
 
     # Lookup rest of name (e.g. `B.C`) to complete composite name lookup
     if found is not None and rest_of_name:
-        found = _find_rest_of_name(found, rest_of_name)
+        found = _find_rest_of_name(found, rest_of_name, check_encapsulated=check_encapsulated)
 
     # Maintaining backward compatibility by including InstanceTree (not strictly correct)
     # TODO: Remove InstanceTree to make spec compliant and fix test/models
@@ -374,6 +376,7 @@ def _find_name(
             search_imports=search_imports,
             search_parent=search_parent,
             search_inherited=search_inherited,
+            check_encapsulated=check_encapsulated,
             current_extends=current_extends,
         )
 
@@ -398,6 +401,7 @@ def _find_simple_name(
     search_imports: bool = True,
     search_parent: bool = True,
     search_inherited: bool = True,
+    check_encapsulated: bool = True,
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Lookup name per Modelica spec 3.5 section 5.3.1 Simple Name Lookup"""
@@ -462,7 +466,7 @@ def _find_simple_name(
 
 
 def _find_rest_of_name(
-    first: Union[ast.Class, ast.Symbol], rest_of_name: str
+    first: Union[ast.Class, ast.Symbol], rest_of_name: str, check_encapsulated: bool = True
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Lookup the `B.C` part of Composite Name Lookup (`A.B.C`) (spec 5.3.2)"""
 
@@ -482,7 +486,7 @@ def _find_rest_of_name(
         if isinstance(first.type, ast.Class):
             type_class = first.type
         else:
-            type_class = _find_name(first.type, first.parent)
+            type_class = _find_name(first.type, first.parent, check_encapsulated=check_encapsulated)
             if type_class is None:
                 full_ref = str(first.parent.full_reference()) + "." + first.name
                 raise NameLookupError(f"Lookup failed for type of symbol {full_ref}")
@@ -505,7 +509,7 @@ def _find_rest_of_name(
                         )
 
     elif isinstance(first, ast.Class):
-        found = _flatten_first_and_find_rest(first, rest_of_name)
+        found = _flatten_first_and_find_rest(first, rest_of_name, check_encapsulated)
     else:
         raise NameLookupError(f'Found unexpected node "{first!r}" during name lookup')
 
@@ -553,7 +557,7 @@ def _find_composite_name_in_classes(name: str, scope: ast.Class) -> Optional[ast
 
 
 def _flatten_first_and_find_rest(
-    first: ast.Class, rest_of_name: str
+    first: ast.Class, rest_of_name: str, check_encapsulated: bool
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Lookup the `B.C` part of Composite Name Lookup (`A.B.C`) where`A` is a Class"""
 
@@ -580,13 +584,16 @@ def _flatten_first_and_find_rest(
 
     # TODO: Per spec v3.5 section 5.3.2 bullet 4, class is temporarily flattened
     # For now, we use recursive name lookup in contained elements
-    found = _find_name(rest_of_name, first, search_parent=False)
+    found = _find_name(
+        rest_of_name, first, search_parent=False, check_encapsulated=check_encapsulated
+    )
 
     # Check that found meets non-package lookup requirements in spec section 5.3.2
     # The found.name test is so we only check going left to right in composite name
     # and not the other direction as we pop the recursive call stack.
     if (
-        found is not None
+        check_encapsulated
+        and found is not None
         and found.name == _first_name(rest_of_name)
         and first.type != "package"
         and not (isinstance(found, ast.Class) and found.encapsulated)

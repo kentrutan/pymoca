@@ -1587,9 +1587,10 @@ def _resolve_dimensions(symbol: ast.InstanceSymbol, parent: ast.Class):
     pass
 
 
-def _resolve_modifications(symbol: ast.InstanceSymbol, parent: ast.Class) -> None:
+def _resolve_modifications(symbol: ast.InstanceSymbol, flat_class: ast.InstanceClass) -> None:
     """Resolve modifications of a symbol
     :param symbol: The symbol to resolve modifications for
+    :param flat_class: The flattened class
     :return: None
     """
     # TODO: Resolve modifications of records

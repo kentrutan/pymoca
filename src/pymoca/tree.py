@@ -789,18 +789,16 @@ def instantiate(class_name: str, class_tree: ast.Tree) -> ast.InstanceClass:
     `False`. If so, these cases will need to be fully instantiated
     for flattening by calling this function on the class.
     """
-    instance_tree = InstanceTree(class_tree)
     class_ = find_name(class_name, class_tree)
     if class_ is None:
         raise NameLookupError(f"{class_name} not found in given tree")
     if isinstance(class_, ast.Symbol):
         raise InstantiationError(f"Found Symbol for {class_name} but need Class to instantiate")
     # Spec v 3.5 section 5.6.1.3 says the instance tree root is parent in the top-level call
+    instance_tree = InstanceTree(class_tree)
     # That section also says the instance should be stored in the parent
+    # so _instantiate_class does this
     instance = _instantiate_class(class_, ast.ClassModification(), instance_tree)
-    instance_tree.classes[instance.name] = instance
-    # We instantiate the parents so full_reference() gives the original tree
-    _instantiate_parents_partially(instance)
     return instance
 
 
@@ -848,6 +846,7 @@ def _instantiate_class(
         modification_environment,
         parent,
     )
+    parent.classes[new_class.name] = new_class
 
     # 1.3. Redeclare of element itself is done
     new_class = _apply_redeclares(new_class, modification_environment)

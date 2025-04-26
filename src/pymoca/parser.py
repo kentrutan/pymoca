@@ -133,7 +133,7 @@ class ASTListener(ModelicaListener):
         self.ast[ctx] = class_node
 
     def enterClass_definition(self, ctx: ModelicaParser.Class_definitionContext):
-        class_node = ast.Class()
+        class_node = ast.Class(name=ctx.getText())  # Temporary name to help debugging parsing
         class_node.encapsulated = ctx.ENCAPSULATED() is not None
         class_node.partial = ctx.class_prefixes().PARTIAL() is not None
         class_node.type = ctx.class_prefixes().class_type().getText()

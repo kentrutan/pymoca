@@ -789,18 +789,16 @@ def instantiate(class_name: str, class_tree: ast.Tree) -> ast.InstanceClass:
     `False`. If so, these cases will need to be fully instantiated
     for flattening by calling this function on the class.
     """
-    instance_tree = InstanceTree(class_tree)
     class_ = find_name(class_name, class_tree)
     if class_ is None:
         raise NameLookupError(f"{class_name} not found in given tree")
     if isinstance(class_, ast.Symbol):
         raise InstantiationError(f"Found Symbol for {class_name} but need Class to instantiate")
     # Spec v 3.5 section 5.6.1.3 says the instance tree root is parent in the top-level call
+    instance_tree = InstanceTree(class_tree)
     # That section also says the instance should be stored in the parent
+    # so _instantiate_class does this
     instance = _instantiate_class(class_, ast.ClassModification(), instance_tree)
-    instance_tree.classes[instance.name] = instance
-    # We instantiate the parents so full_reference() gives the original tree
-    _instantiate_parents_partially(instance)
     return instance
 
 
@@ -848,6 +846,8 @@ def _instantiate_class(
         modification_environment,
         parent,
     )
+    if isinstance(parent, (ast.InstanceClass, InstanceTree)):
+        parent.classes[new_class.name] = new_class
 
     # 1.3. Redeclare of element itself is done
     new_class = _apply_redeclares(new_class, modification_environment)
@@ -1289,12 +1289,6 @@ def _apply_redeclares(
             f"Redeclaring {element.name}{if_symbol_msg} with component {redeclare_name}"
             f" in scope {scope_class.full_reference()}"
         )
-    if isinstance(element, ast.Symbol):
-        ast_ref = redeclare.symbol_list[0]
-    elif isinstance(redeclare_class, ast.InstanceClass):
-        ast_ref = redeclare_class.ast_ref
-    else:
-        ast_ref = redeclare_class
     apply_args = []
     if isinstance(redeclare, ast.ShortClassDefinition):
         apply_args = redeclare.class_modification.arguments
@@ -1303,7 +1297,7 @@ def _apply_redeclares(
             apply_args = redeclare.symbol_list[0].class_modification.arguments
     modification_environment.arguments = modification_environment.arguments + apply_args
     redeclared_element = _instantiate_partially(
-        ast_ref,
+        redeclare_class,
         modification_environment,
         element.parent,
     )

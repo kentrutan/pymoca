@@ -27,7 +27,7 @@ model b
   extends a(redeclare package m = m2);
   Real x;
   parameter Real y = m.p;
-  parameter Real z = P0.p[0];
+  parameter Real z = P0.p[1];
   Real w;
   Real g;
 equation

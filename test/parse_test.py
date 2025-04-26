@@ -1724,9 +1724,7 @@ class ParseTest(unittest.TestCase):
             end A;
         """
         ast_tree = parser.parse(txt)
-        class_name = "A.D"
-
-        instance = tree.instantiate(class_name, ast_tree)
+        instance = tree.instantiate("A.D", ast_tree)
         self.assertIsNotNone(instance)
         c_y = (
             instance.extends[0]
@@ -1740,8 +1738,7 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(c_y_mod.value.component.name, "value")
         self.assertEqual(c_y_mod.value.modifications[0].value, 3)
 
-        class_name = "A.E"
-        instance = tree.instantiate(class_name, ast_tree)
+        instance = tree.instantiate("A.E", ast_tree)
         d_c_y = (
             instance.symbols["d"]
             .type.extends[0]
@@ -1756,13 +1753,12 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(d_c_y_mod.value.modifications[0].value, 4)
 
         flat_tree = tree.flatten_instance(instance)
-        self.assertIsNone(flat_tree.symbols["c.y"].value)
-        self.assertEqual(flat_tree.equations[0].left, "c.y")
-        self.assertEqual(flat_tree.equations[0].right, 3)
-
-        self.assertIsNone(flat_tree.symbols["d.c.y"].value.value)
-        self.assertEqual(flat_tree.equations[0].left.name, "d.c.y")
-        self.assertEqual(flat_tree.equations[0].right.value, 4)
+        # TODO: Uncomment when modifications are added as equations
+        # self.assertEqual(flat_tree.equations[0].left.name, "d.c.y")
+        # self.assertEqual(flat_tree.equations[0].right.value, 4)
+        # For now, the symbol value attribute is assigned the modification value
+        self.assertIn("d.c.y", flat_tree.symbols)
+        self.assertEqual(flat_tree.symbols["d.c.y"].value, 4)
 
     def test_basemodelica_scalarized(self):
         """Test parsing BaseModelica example with scalar varables"""

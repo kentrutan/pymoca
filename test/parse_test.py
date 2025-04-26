@@ -1243,20 +1243,33 @@ class ParseTest(unittest.TestCase):
 
     def test_flattening_modification_scope(self):
         """Test for correct scope for references and values of modifications"""
-        # TODO: Revisit this when global name lookup is implemented (see model)
         instance = self.parse_and_instantiate_model("ModificationScope.mo", "A")
         flat_tree = tree.flatten_instance(instance)
-        # Check that the modifications are in the correct scope
-        expect = (
-            ("a", 3),
-            ("b", 3),
-            ("c", 3),
-            ("d", 1),
+        # Check that the symbol value set by modifications have the right value and scope
+        expect = (  # symbol_name, value_type, value, value_parent_name
+            ("R", "literal", 3.0, None),  # Literal has no value parent
+            ("a.R", "symbol", "R", "A"),
+            ("b.R", "symbol", "R", "A"),
+            ("c.R", "symbol", "R", "A"),
+            ("d.R", "symbol", "R", ""),  # Unnamed extends node is parent
         )
-        for symbol, value in expect:
-            self.assertEqual(flat_tree.symbols[symbol].value, value)
+        for symbol_name, value_type, value, value_parent_name in expect:
+            symbol_value = flat_tree.symbols[symbol_name].value
+            if value_type == "literal":
+                self.assertEqual(symbol_value, value, "Wrong value for symbol: " + symbol_name)
+            elif value_type == "symbol":
+                # Check that we have the correct reference for symbolic values
+                self.assertIsInstance(symbol_value, ast.Symbol)
+                self.assertEqual(symbol_value.name, value, "Wrong value for symbol: " + symbol_name)
+                # Check that we have the correct scope for symbolic values
+                self.assertEqual(
+                    symbol_value.parent.name,
+                    value_parent_name,
+                    "Wrong value scope for symbol: " + symbol_name,
+                )
+            else:
+                raise AssertionError(f"Unexpected value type in test: {value_type}")
 
-    @unittest.expectedFailure  # "New flattening expression modification not implemented yet"
     def test_extends_order(self):
         instance = self.parse_and_instantiate_model("ExtendsOrder.mo", "P.M")
 

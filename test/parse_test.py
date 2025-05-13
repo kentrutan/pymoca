@@ -994,6 +994,97 @@ class ParseTest(unittest.TestCase):
                 self.fail(f"test does not support value modification type {type(value_mod)}")
             self.assertEqual(value_mod_value, value, f"for {name}")
 
+    def test_lookup_needs_instantiation(self):
+        """Test that demonstrates the need for instantiation in name lookup
+
+        Example taken from Modelica MCP 0019 discussion leading to
+        Modelica Spec 3.4 Chapter 5 changes.
+        """
+
+        # Instantiation should fail without instantiation in composite name lookup
+        instance = self.parse_and_instantiate_model("InstantiationInLookup.mo", "MyModel")
+        self.check_redeclare_expects(instance, [self.redeclare_expect("x", "Real", 2.0, False)])
+
+    def test_instantiation_lookup_scope(self):
+        """Test lookup during instantiation
+
+        Example taken from ModelicaSpecification issues discussion on
+        Modelica Spec 3.4 Chapter 5 changes.
+        """
+
+        instance = self.parse_and_instantiate_model("InstantiationLookupScope.mo", "M")
+        x_type = instance.symbols["m"].type.symbols["x"].type
+        self.assertEqual(x_type.name, "R")
+        # Check that m.x type R is from M.B.R, not M.R
+        self.assertTrue(len(x_type.extends), "Incorrect R scope")
+        x_type_extends = x_type.extends[0]
+        self.assertIn("Real", x_type_extends.symbols)
+        self.assertEqual(x_type_extends.symbols["Real"].dimensions[0], 3)
+
+    def test_instantiation_lookup_scope_with_modifications(self):
+        """Test lookup during instantiation with modifications
+
+        Example taken from ModelicaSpecification issues discussion on
+        Modelica Spec 3.4 Chapter 5 changes.
+        """
+
+        instance = self.parse_and_instantiate_model("LexicalVsInstanceScope.mo", "P.C")
+        self.check_redeclare_expects(instance, [self.redeclare_expect("n", "Integer", 3, False)])
+
+    def test_flattening_redeclare_nested_class(self):
+        """Test flattening of a model redeclaring a nested class in an extends clause"""
+
+        # Instantiation should fail if the type lookup fails
+        instance = self.parse_and_instantiate_model("FlatteningRedeclareNested.mo", "P.M")
+
+        expect = [
+            self.redeclare_expect("at.m", "Real", 0.0, False),
+            self.redeclare_expect("bt.m", "Real", 0.0, False),
+        ]
+        self.check_redeclare_expects(instance, expect)
+
+    def test_flattening_redeclare_class_extends(self):
+        """Test redeclare class extends construct"""
+
+        _ = self.parse_and_instantiate_model("RedeclareClassExtends.mo", "P.TestOK")
+
+        # TODO: Test equations
+
+        with self.assertRaisesRegex(tree.ModelicaSemanticError, "TODO: FILL IN ERROR MESSAGE"):
+            _ = self.parse_and_instantiate_model("RedeclareClassExtends.mo", "P.TestFail")
+
+    def test_redeclare_class(self):
+        """Test redeclaration of class of contained components"""
+
+        instance = self.parse_and_instantiate_model("RedeclareClass.mo", "Package.Model")
+
+        expect = [
+            self.redeclare_expect("b0.b", "Boolean", False, False),
+            self.redeclare_expect("b1.b", "Integer", 3, False),
+            self.redeclare_expect("b2.b", "Boolean", False, False),
+        ]
+        self.check_redeclare_expects(instance, expect)
+
+        # Symbols themselves were not declared replaceable
+        for name in ("d1", "d2", "d3"):
+            self.assertFalse(instance.symbols[name].replaceable)
+
+    def test_redeclare_components(self):
+        """Test redeclaration of components of same type"""
+
+        instance = self.parse_and_instantiate_model("RedeclareComponents.mo", "Package.Model")
+
+        expect = [
+            self.redeclare_expect("M.b1.x", "Integer", 1, False),
+            self.redeclare_expect("M.b2.x", "Integer", 2, False),
+            self.redeclare_expect("M.b0.x", "Real", 0.0, True),
+        ]
+        self.check_redeclare_expects(instance, expect)
+
+        # Symbols themselves were not declared replaceable
+        for name in ("d1", "d2", "d3"):
+            self.assertFalse(instance.symbols[name].replaceable)
+
     def test_redeclare_component_in_extends(self):
         """Test redeclaration of components in extends clause"""
 

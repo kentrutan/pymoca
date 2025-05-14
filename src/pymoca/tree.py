@@ -1096,12 +1096,6 @@ def _instantiate_partially(
             final=element.final,
         )
 
-        # TODO: Try connecting into class tree instead of doing _instantiate_parents_partially
-        # Mirror class tree for name lookup in the InstanceTree
-        # TODO: Is there a better way to maintain the path to root for all classes?
-        # if not isinstance(parent, (InstanceTree, ast.InstanceClass)):
-        #     _instantiate_parents_partially(instance)
-
     else:
         # TODO: Try using Symbol (and Symbol.class_modification) instead of InstanceSymbol
         instance = ast.InstanceSymbol(
@@ -1220,57 +1214,11 @@ def _update_modification_argument_scopes(
                     ast.ClassModification(),
                     arg.scope.parent,
                 )
-                _instantiate_parents_partially(arg_scope)
 
             # Make a copy so we don't change original AST or same arg used elsewhere
             new_arg = copy.copy(arg)
             new_arg.scope = arg_scope
             instance.modification_environment.arguments[index] = new_arg
-
-
-def _instantiate_parents_partially(
-    class_: ast.InstanceClass,
-) -> None:
-    self = _instantiate_parents_partially
-    ALREADY_CALLED_VAR = "_instantiate_parents_partially_in_progress"
-
-    # Use a static variable to detect the recursion
-    if hasattr(self, ALREADY_CALLED_VAR):
-        # Continue the recursion upwards
-        _instantiate_parents_partially_helper(class_)
-    else:
-        setattr(self, ALREADY_CALLED_VAR, True)
-
-        # Call below results in a different `class_.root` than current
-        _instantiate_parents_partially_helper(class_)
-
-        # And now we merge the tree. Note that we then only do this once,
-        # for the first call to this function. Also update the parent refs.
-        class_.root.extend(class_.root)
-
-        delattr(self, ALREADY_CALLED_VAR)
-
-
-def _instantiate_parents_partially_helper(
-    class_: ast.InstanceClass,
-) -> None:
-    """Partially instantiate parents up to root and connect to given instance tree
-
-    This ensures names can be found in the instance tree.
-    """
-    instance_class = class_
-    parent_class = instance_class.ast_ref.parent
-    if parent_class is None:
-        raise ValueError(f"Parent of {instance_class.ast_ref} unexpectedly None")
-    if isinstance(parent_class, ast.Tree):
-        instance_class.parent = InstanceTree(parent_class)
-        instance_class.parent.classes[instance_class.name] = instance_class
-        return
-    parent_instance = _instantiate_partially(
-        parent_class, ast.ClassModification(), parent_class.parent
-    )
-    instance_class.parent = parent_instance
-    parent_instance.classes[instance_class.name] = instance_class
 
 
 def _append_modifications(*mods: ast.ClassModification) -> ast.ClassModification:

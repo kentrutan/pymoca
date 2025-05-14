@@ -779,8 +779,10 @@ class InstanceTree(ast.Tree):
     def _instantiate_builtins(self):
         """Add instantiated built-in types to the instance tree"""
         # TODO: Add built-in functions and operators
+        builtin_instances = OrderedDict()
         for name, class_ in self.classes.items():
-            self.classes[name] = _instantiate_class(class_, ast.ClassModification(), self)
+            builtin_instances[name] = _instantiate_class(class_, ast.ClassModification(), self)
+        self.classes.update(builtin_instances)
 
 
 def instantiate(class_name: str, class_tree: ast.Tree) -> ast.InstanceClass:

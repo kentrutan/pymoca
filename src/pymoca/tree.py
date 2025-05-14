@@ -855,7 +855,8 @@ def _instantiate_class(
         modification_environment,
         parent,
     )
-    parent.classes[new_class.name] = new_class
+    if isinstance(parent, (ast.InstanceClass, InstanceTree)):
+        parent.classes[new_class.name] = new_class
 
     # 1.3. Redeclare of element itself is done
     new_class = _apply_redeclares(new_class, modification_environment)

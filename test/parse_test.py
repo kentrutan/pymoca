@@ -305,7 +305,7 @@ class ParseTest(unittest.TestCase):
         t_value_mod = t_value_mods[-1]
         self.assertEqual(t_value_mod.value.modifications[-1].value, 2)
 
-    def test_instantiation_modification_scope(self):
+    def test_instantiation_modification_scope_instance_class(self):
         """Test that modification scopes are updated to InstanceClass"""
         ast_tree = self.parse_model_files("TreeInTree.mo")
         instance = tree.instantiate("Tree.Tree", ast_tree)
@@ -315,6 +315,26 @@ class ParseTest(unittest.TestCase):
         t = instance.extends[0].symbols["t"]
         for mod in t.type.symbols["Integer"].modification_environment.arguments:
             self.assertTrue(isinstance(mod.scope, ast.InstanceClass), "scope not InstanceClass")
+
+    def test_instantiation_modification_scope_spec_example(self):
+        """Test scopes of modification references and values with example from spec"""
+
+        instance = self.parse_and_instantiate_model("ModificationScope.mo", "B")  # noqa: F841
+        pass
+        # TODO: Update after new flattening is implemented (uncomment below)
+        # OMC gives the following output:
+        #     parameter Real R = 3.0;
+        #     parameter Real a.R = 4.0;
+        #     parameter Real b.R = R;
+        #     parameter Real c.R = R;
+        #     parameter Real d.R = d.R;
+        #     constant Real d.c = 84.0;
+        #     parameter Real e.R = R;
+        #     parameter Real f.R = R;
+        #     parameter Real g.R = R;
+        #     parameter Real h.R = 42.0;
+        #     parameter Real i.R = R;
+        #     parameter Real j.R = 2.0;
 
     @unittest.expectedFailure  # TODO: Figure out what we're doing with InstanceTree parent/child
     def test_instantiation_tree(self):

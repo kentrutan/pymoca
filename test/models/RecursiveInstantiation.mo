@@ -18,3 +18,9 @@ model M
 
     type E = Real;
 end M;
+
+// OMC 1.25.0 -i=M gives:
+// class M
+//   Real b.a.e;
+//   parameter Integer b.a.p = 1;
+// end M;

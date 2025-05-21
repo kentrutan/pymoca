@@ -855,10 +855,8 @@ def _instantiate_class(
         parent = parent_instance
 
     # 1.1. Partially instantiate the element itself and 1.2 merge modifiers
-    if (
-        orig_class.name not in parent_instance.classes
-        or not update_parent
-        or not isinstance(orig_class, ast.InstanceClass)
+    if orig_class.name not in parent_instance.classes or not isinstance(
+        orig_class, ast.InstanceClass
     ):
         new_class = _instantiate_partially(
             orig_class,
@@ -874,7 +872,6 @@ def _instantiate_class(
         elif new_class.fully_instantiated:
             return new_class
 
-    # if update_parent:
     parent_instance.classes[new_class.name] = new_class
 
     # 1.3. Redeclare of element itself is done

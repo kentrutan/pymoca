@@ -571,8 +571,16 @@ def _flatten_first_and_find_rest(
     #     is left to the caller.
 
     # TODO: Per spec v3.5 section 5.3.2 bullet 4, class is temporarily *flattened*
-    # Prevent overwriting any original classes with temporary classes by copying parent
-    temporary_parent = copy.copy(first.parent)
+    # Before we have flattening implemented, bootstrap with temporary instantiation
+    # Prevent overwriting any original classes with temporary classes
+    if isinstance(first.parent, (ast.InstanceClass, InstanceTree)):
+        temporary_parent = copy.copy(first.parent)
+    elif isinstance(first.parent, ast.Tree):
+        temporary_parent = InstanceTree(first.parent)
+    else:
+        temporary_parent = _instantiate_partially(
+            first.parent, ast.ClassModification(), first.parent.parent
+        )
     instance = _instantiate_class(first, ast.ClassModification(), temporary_parent, first.parent)
 
     found = _find_name(

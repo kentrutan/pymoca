@@ -335,7 +335,7 @@ def _find_name(
     #         evaluated as a scalar from an array and `B` and `C` are classes, it is a
     #         non-operator function call.
     #     3. If `A` is a Class:
-    #         1. `A` is temporarily flattened without modifiers
+    #         1. `A` is temporarily flattened without modifiers of this class
     #         2. `B.C` is looked up among named elements of temp flattened class,
     #         but if `A` is not a package, lookup is restricted to `encapsulated` elements
     #         only and "the class we look inside shall not be partial in a simulation
@@ -477,7 +477,7 @@ def _find_rest_of_name(
     #     evaluated as a scalar from an array and `B` and `C` are classes,
     #     it is a non-operator function call.
     # 3. If `A` is a Class:
-    #     1. `A` is temporarily flattened without modifiers
+    #     1. `A` is temporarily flattened without modifiers of this class
     #     2. `B.C` is looked up among named elements of temp flattened class,
     #     but if `A` is not a package, lookup is restricted to `encapsulated` elements only
     #     and "the class we look inside shall not be partial in a simulation model".
@@ -562,7 +562,7 @@ def _flatten_first_and_find_rest(
     """Lookup the `B.C` part of Composite Name Lookup (`A.B.C`) where`A` is a Class"""
 
     # 3. If `A` is a Class:
-    #     1. `A` is temporarily flattened without modifiers
+    #     1. `A` is temporarily flattened without modifiers of this class
     #     2. `B.C` is looked up among named elements of temp flattened class,
     #     but if `A` is not a package, lookup is restricted to `encapsulated` elements only
     #     and "the class we look inside shall not be partial in a simulation model".

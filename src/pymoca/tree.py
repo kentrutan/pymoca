@@ -798,21 +798,25 @@ def instantiate(class_name: str, class_tree: ast.Tree) -> ast.InstanceClass:
     instance_tree = InstanceTree(class_tree)
     # That section also says the instance should be stored in the parent
     # so _instantiate_class does this
-    instance = _instantiate_class(class_, ast.ClassModification(), instance_tree)
+    instance = _instantiate_class(class_, ast.ClassModification(), instance_tree, class_.parent)
     return instance
 
 
 def _instantiate_class(
     orig_class: Union[ast.Class, ast.InstanceClass],
     modification_environment: ast.ClassModification,
-    parent: Union[ast.Class, ast.InstanceClass],
+    parent_instance: Union[ast.Class, ast.InstanceClass],
+    parent: Union[ast.Class, ast.InstanceClass, None] = None,
+    update_parent: bool = True,
 ) -> ast.InstanceClass:
     """Instantiate a class
 
     :param orig_class: The class to be instantiated
     :param modification_environment: The modification environment of the class
         instance
-    :param parent: The parent class of the class instance
+    :param parent_instance: The parent class this class is contained in
+    :param parent: The lexical scope of the class instance
+    :param update_parent: If True, the parent class will be updated with the instantiated class
     :return: The instantiated class
 
     Implements the instantiation rules per Modelica Language Specification version
@@ -839,18 +843,34 @@ def _instantiate_class(
 
     # TODO: Can we shortcut the partial instantiation of a partial instance with a copy/modify?
     # TODO: Investigate reuse of instantiated elements or parts of elements (mentioned in spec)
+    if parent is None:
+        parent = parent_instance
 
     # 1.1. Partially instantiate the element itself and 1.2 merge modifiers
-    new_class = _instantiate_partially(
-        orig_class,
-        modification_environment,
-        parent,
-    )
-    if isinstance(parent, (ast.InstanceClass, InstanceTree)):
-        parent.classes[new_class.name] = new_class
+    if (
+        orig_class.name not in parent_instance.classes
+        or not update_parent
+        or not isinstance(orig_class, ast.InstanceClass)
+    ):
+        new_class = _instantiate_partially(
+            orig_class,
+            modification_environment,
+            parent,
+        )
+    else:
+        # Class already at least partially instantiated
+        new_class = parent_instance.classes[orig_class.name]
+        new_class = copy.copy(new_class)
+        if modification_environment.arguments:
+            _apply_modifications(new_class, orig_class, modification_environment)
+        elif new_class.fully_instantiated:
+            return new_class
+
+    # if update_parent:
+    parent_instance.classes[new_class.name] = new_class
 
     # 1.3. Redeclare of element itself is done
-    new_class = _apply_redeclares(new_class, modification_environment)
+    new_class = _apply_redeclares(new_class, modification_environment, parent_instance)
 
     # 2.1 Partially instantiate local classes and symbols
     if (
@@ -861,11 +881,16 @@ def _instantiate_class(
         from_class = new_class.ast_ref
     else:
         from_class = orig_class
+    if new_class.name in parent.classes:
+        scope = parent.classes[new_class.name]
+    else:
+        # FIXME: Figure out why 'D' is not in parent.classes after redeclare in test_inheritance_instantiation
+        pass
     for name, class_ in from_class.classes.items():
         instance = _instantiate_partially(
             class_,
             modification_environment,
-            new_class,
+            scope,
         )
         new_class.classes[name] = instance
 
@@ -873,7 +898,7 @@ def _instantiate_class(
         instance = _instantiate_partially(
             symbol,
             modification_environment,
-            new_class,
+            scope,
         )
         new_class.symbols[name] = instance
 
@@ -881,7 +906,9 @@ def _instantiate_class(
     _copy_class_contents(new_class, copy_extends=True)
 
     # 3. Instantiate extends and 4. Check extends class lookup
-    new_class.extends = _instantiate_extends(new_class.extends, modification_environment, new_class)
+    new_class.extends = _instantiate_extends(
+        new_class.extends, modification_environment, new_class, scope
+    )
 
     # TODO: Step 5: Check and cull elements with same name in _instantiate_class
     # See `parse_test.test_instantiation_function_input_order`
@@ -889,7 +916,7 @@ def _instantiate_class(
     # 6. Recursively instantiate symbols
     # Spec says "local and inherited", but we already did inherited
     for symbol in new_class.symbols.values():
-        _instantiate_symbol(symbol, new_class)
+        _instantiate_symbol(symbol, new_class, scope)
 
     new_class.fully_instantiated = True
 
@@ -899,6 +926,7 @@ def _instantiate_class(
 def _instantiate_extends(
     extends_list: List[ast.ExtendsClause],
     modification_environment: ast.ClassModification,
+    parent_instance: ast.InstanceClass,
     parent: ast.InstanceClass,
 ) -> List[ast.InstanceClass]:
     """Instantiate extends clauses"""
@@ -908,7 +936,9 @@ def _instantiate_extends(
     extends_list = extends_list.copy()
 
     for index, extends in enumerate(extends_list):
-        extends_instance = _instantiate_extends_single(extends, modification_environment, parent)
+        extends_instance = _instantiate_extends_single(
+            extends, modification_environment, parent_instance, parent
+        )
         extends_list[index] = extends_instance
 
     # Check we do not extend from any symbols/classes inherited
@@ -927,7 +957,7 @@ def _instantiate_extends(
             }
             if extends_name in other_names:
                 raise ModelicaSemanticError(
-                    f"Cannot extend '{parent.full_reference()}' with '{extends_component_ref}'; "
+                    f"Cannot extend '{parent_instance.full_reference()}' with '{extends_component_ref}'; "
                     f"'{extends_name}' also exists in names inherited from '{other_class.ast_ref.name}'"
                 )
 
@@ -937,22 +967,23 @@ def _instantiate_extends(
 def _instantiate_extends_single(
     extends: ast.ExtendsClause,
     modification_environment: ast.ClassModification,
+    parent_instance: ast.InstanceClass,
     parent: ast.InstanceClass,
 ) -> ast.InstanceClass:
     """Instantiate a single extends clause"""
 
     # TODO: Factor out the similar code to _instantiate_symbol (both have class_modification)
-    extends_class = _find_name(extends.component, parent, search_inherited=False)
+    extends_class = _find_name(extends.component, parent_instance, search_inherited=False)
 
     if extends_class is None:
         raise ModelicaSemanticError(
-            f"Extends name {extends.component} not found in scope {parent.full_reference()}"
+            f"Extends name {extends.component} not found in scope {parent_instance.full_reference()}"
         )
     if isinstance(extends_class, ast.Symbol):
         raise ModelicaSemanticError(
-            f"Cannot extend a Symbol: {extends.component} in {parent.full_reference()}"
+            f"Cannot extend a Symbol: {extends.component} in {parent_instance.full_reference()}"
         )
-    if str(extends_class.full_reference()) == str(parent.full_reference()):
+    if str(extends_class.full_reference()) == str(parent_instance.full_reference()):
         raise ModelicaSemanticError(
             f"Cannot extend class '{extends_class.full_reference()}' with itself"
         )
@@ -967,7 +998,9 @@ def _instantiate_extends_single(
         extends.class_modification,
         modification_environment,
     )
-    extends_instance = _instantiate_class(extends_class, extend_mod, extends_class.parent)
+    extends_instance = _instantiate_class(
+        extends_class, extend_mod, parent_instance, extends_class.parent, update_parent=False
+    )
     # Extends nodes are "unnamed" per the spec
     extends_instance.name = ""
     # Imports are not inherited
@@ -981,7 +1014,7 @@ def _instantiate_extends_single(
     ]
 
     if extends_instance.type in InstanceTree.BUILTIN_TYPES:
-        if len(parent.extends) > 1:
+        if len(parent_instance.extends) > 1:
             raise ModelicaSemanticError(
                 "When extending a built-in class (Real, Integer, ...) "
                 "you cannot extend other classes as well"
@@ -1004,12 +1037,13 @@ def _is_transitively_replaceable(class_: ast.Class) -> bool:
 
 def _instantiate_symbol(
     symbol: ast.InstanceSymbol,
+    parent_instance: ast.InstanceClass,
     parent: ast.InstanceClass,
 ) -> None:
     """Instantiate given symbol"""
 
     assert isinstance(symbol, ast.InstanceSymbol)
-    assert isinstance(parent, ast.InstanceClass)
+    assert isinstance(parent_instance, ast.InstanceClass)
 
     if symbol.name in InstanceTree.BUILTIN_TYPES:
         symbol.fully_instantiated = True
@@ -1017,7 +1051,7 @@ def _instantiate_symbol(
 
     symbol_before_redeclare = symbol
     modification_environment = symbol.modification_environment
-    symbol = _apply_redeclares(symbol, modification_environment)
+    symbol = _apply_redeclares(symbol, modification_environment, parent_instance)
 
     instantiated = False
     if not isinstance(symbol.type, ast.InstanceClass):
@@ -1025,12 +1059,12 @@ def _instantiate_symbol(
         if symbol is not symbol_before_redeclare:
             type_parent = symbol.ast_ref.parent
         else:
-            type_parent = parent
+            type_parent = parent_instance
         symbol_type = find_name(symbol.type, type_parent)
         if symbol_type is None:
             raise NameLookupError(
                 f"Type {symbol.type} of symbol {symbol.name} "
-                f"not found in {parent.full_reference()}"
+                f"not found in {type_parent.full_reference()}"
             )
         if symbol.replaceable:
             symbol_type = copy.copy(symbol_type)
@@ -1038,7 +1072,9 @@ def _instantiate_symbol(
         symbol.type = _instantiate_class(
             symbol_type,
             modification_environment,
+            parent_instance,
             symbol_type.parent,
+            update_parent=False,
         )
         instantiated = True
 
@@ -1223,6 +1259,7 @@ def _append_modifications(*mods: ast.ClassModification) -> ast.ClassModification
 def _apply_redeclares(
     element: Union[ast.InstanceClass, ast.InstanceSymbol],
     modification_environment: ast.ClassModification,
+    parent_instance: ast.InstanceClass,
 ) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
     """Apply redeclare if any and remove from environment
 
@@ -1278,11 +1315,11 @@ def _apply_redeclares(
     redeclared_element = _instantiate_partially(
         redeclare_class,
         modification_environment,
-        element.parent,
+        redeclare_class.parent,
     )
     redeclared_element.replaceable = redeclare.replaceable
     if isinstance(redeclared_element, ast.InstanceSymbol):
-        redeclared_element.parent.symbols[redeclared_element.name] = redeclared_element
+        parent_instance.symbols[redeclared_element.name] = redeclared_element
 
     return redeclared_element
 

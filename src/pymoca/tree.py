@@ -804,9 +804,9 @@ def instantiate(class_name: str, class_tree: ast.Tree) -> ast.InstanceClass:
         raise InstantiationError(f"Found Symbol for {class_name} but need Class to instantiate")
     # Spec v 3.5 section 5.6.1.3 says the instance tree root is parent in the top-level call
     instance_tree = InstanceTree(class_tree)
-    # That section also says the instance should be stored in the parent
+    # That section also says the instance should be stored in the parent instance
     # so _instantiate_class does this
-    instance = _instantiate_class(class_, ast.ClassModification(), instance_tree, class_.parent)
+    instance = _instantiate_class(class_, ast.ClassModification(), instance_tree)
     return instance
 
 
@@ -863,16 +863,19 @@ def _instantiate_class(
             modification_environment,
             parent,
         )
+        parent_instance.classes[new_class.name] = new_class
     else:
         # Class already at least partially instantiated
         new_class = parent_instance.classes[orig_class.name]
-        new_class = copy.copy(new_class)
         if modification_environment.arguments:
+            new_class = copy.copy(new_class)
             _apply_modifications(new_class, orig_class, modification_environment)
+            # Dont' update lexical parent if modified
         elif new_class.fully_instantiated:
             return new_class
-
-    parent_instance.classes[new_class.name] = new_class
+        else:
+            # Update the lexical parent with the unmodified class
+            parent.classes[new_class.name] = new_class
 
     # 1.3. Redeclare of element itself is done
     new_class = _apply_redeclares(new_class, modification_environment, parent_instance)

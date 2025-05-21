@@ -1232,7 +1232,9 @@ def _update_modification_argument_scopes(
         if not isinstance(arg.scope, (ast.InstanceClass, InstanceTree)):
             global_name = arg.scope.full_reference()
             # Start scope for name lookup is the current instance (or parent in case of symbol)
-            start_scope = instance if not isinstance(instance, ast.Symbol) else instance.parent
+            start_scope = (
+                instance.root if not isinstance(instance, ast.Symbol) else instance.parent.root
+            )
             arg_scope = _find_name(global_name, start_scope, check_encapsulated=False)
 
             if arg_scope is None or not isinstance(arg_scope, ast.InstanceClass):

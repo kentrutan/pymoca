@@ -570,22 +570,13 @@ def _flatten_first_and_find_rest(
     #     Checking "the class we look inside shall not be partial in a simulation model"
     #     is left to the caller.
 
-    # Spec Section 5.3.2, 4th bullet (`A` is a class):
-    # "If the identifier denotes a class, that class is temporarily
-    # flattened (as if instantiating a component without modifiers of this
-    # class, see section 7.2.2) and using the enclosing classes of the
-    # denoted class. The rest of the name (e.g., B or B.C) is looked up
-    # among the declared named elements of the temporary flattened class. If
-    # the class does not satisfy the requirements for a package, the lookup
-    # is restricted to encapsulated elements only. The class we look inside
-    # shall not be partial in a simulation model."
-    # Why do we have to temporarily flatten the class? Flattening requires name lookup
-    # and with this name lookup requires flattening. Yikes! Can it be simplified?
+    # TODO: Per spec v3.5 section 5.3.2 bullet 4, class is temporarily *flattened*
+    # Prevent overwriting any original classes with temporary classes by copying parent
+    temporary_parent = copy.copy(first.parent)
+    instance = _instantiate_class(first, ast.ClassModification(), temporary_parent, first.parent)
 
-    # TODO: Per spec v3.5 section 5.3.2 bullet 4, class is temporarily flattened
-    # For now, we use recursive name lookup in contained elements
     found = _find_name(
-        rest_of_name, first, search_parent=False, check_encapsulated=check_encapsulated
+        rest_of_name, instance, search_parent=False, check_encapsulated=check_encapsulated
     )
 
     # Check that found meets non-package lookup requirements in spec section 5.3.2

@@ -864,6 +864,12 @@ def _instantiate_class(
             parent,
         )
         parent_instance.classes[new_class.name] = new_class
+        if (
+            isinstance(parent, (ast.InstanceClass, InstanceTree))
+            and not new_class.modification_environment.arguments
+        ):
+            # Update the lexical parent instance with the new unmodified instance class
+            parent.classes[new_class.name] = new_class
     else:
         # Class already at least partially instantiated
         new_class = parent_instance.classes[orig_class.name]
@@ -873,9 +879,6 @@ def _instantiate_class(
             # Dont' update lexical parent if modified
         elif new_class.fully_instantiated:
             return new_class
-        else:
-            # Update the lexical parent with the unmodified class
-            parent.classes[new_class.name] = new_class
 
     # 1.3. Redeclare of element itself is done
     new_class = _apply_redeclares(new_class, modification_environment, parent_instance)

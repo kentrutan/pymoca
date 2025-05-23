@@ -1251,19 +1251,40 @@ def _update_modification_argument_scopes(
     for index, arg in enumerate(instance.modification_environment.arguments):
         assert arg.scope is not None, "Modification argument scope should have been set by now"
         if not isinstance(arg.scope, (ast.InstanceClass, InstanceTree)):
-            global_name = arg.scope.full_reference()
-            # Start scope for name lookup is the current instance (or parent in case of symbol)
-            start_scope = (
-                instance.root if not isinstance(instance, ast.Symbol) else instance.parent.root
-            )
-            arg_scope = _find_name(global_name, start_scope, check_encapsulated=False)
+            # Since we are in the instance tree, we can find the scope without name lookup
+            # but we need to traverse upward only
+            arg_scope_tuple = arg.scope.full_reference().to_tuple()
+            len_scope_tuple = len(arg_scope_tuple)
+            arg_scope = None
+            for scope_index, name in enumerate(reversed(arg_scope_tuple)):
+                scope = instance.parent
+                while scope is not None:
+                    if scope.name == name:
+                        end_index = len_scope_tuple - scope_index
+                        if scope.full_reference().to_tuple() == arg_scope_tuple[:end_index]:
+                            # Found the correct scope
+                            arg_scope = scope
+                            break
+                    scope = scope.parent
+                if arg_scope is not None:
+                    if scope_index:
+                        # We found a scope outside the current branch so traverse back down
+                        for child_name in arg_scope_tuple[scope_index:]:
+                            if child_name in scope.classes:
+                                scope = scope.classes[child_name]
+                            else:
+                                raise AssertionError(
+                                    f"Modification scope {arg.scope.full_reference()} not found relative to {instance.full_reference()}"
+                                )
+                            arg_scope = scope
+                    break
 
-            if arg_scope is None or not isinstance(arg_scope, ast.InstanceClass):
-                arg_scope = _instantiate_partially(
-                    arg.scope,
-                    ast.ClassModification(),
-                    arg.scope.parent,
-                )
+            # if arg_scope is None or not isinstance(arg_scope, ast.InstanceClass):
+            #     arg_scope = _instantiate_partially(
+            #         arg.scope,
+            #         ast.ClassModification(),
+            #         arg.scope.parent,
+            #     )
 
             # Make a copy so we don't change original AST or same arg used elsewhere
             new_arg = copy.copy(arg)

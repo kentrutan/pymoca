@@ -1077,20 +1077,15 @@ def _instantiate_symbol(
         return
 
     modification_environment = symbol.modification_environment
-    redeclared = _apply_redeclares(symbol, modification_environment, parent_instance)
+    _apply_redeclares(symbol, modification_environment, parent_instance)
 
     instantiated = False
     if not isinstance(symbol.type, ast.InstanceClass):
-        # Symbol type parent is symbol.ast_ref.parent if redeclared
-        if redeclared:
-            type_parent = symbol.ast_ref.parent
-        else:
-            type_parent = parent_instance
-        symbol_type = find_name(symbol.type, type_parent)
+        symbol_type = find_name(symbol.type, parent_instance)
         if symbol_type is None:
             raise NameLookupError(
                 f"Type {symbol.type} of symbol {symbol.name} "
-                f"not found in {type_parent.full_reference()}"
+                f"not found in {parent_instance.full_reference()}"
             )
         if symbol.replaceable:
             symbol_type = copy.copy(symbol_type)
@@ -1351,7 +1346,8 @@ def _apply_redeclares(
         redeclare_class.parent,
     )
     redeclare_class.replaceable = redeclare.replaceable
-    parent_instance.extends.insert(0, redeclare_class)
+    redeclared = element if isinstance(element, ast.InstanceClass) else element.type
+    redeclared.extends.insert(0, redeclare_class)
 
     return True
 

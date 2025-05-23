@@ -617,10 +617,12 @@ class ParseTest(unittest.TestCase):
         self.assertIn("b", instance.symbols)
         b_type = instance.symbols["b"].type
         self.assertIn("a", b_type.symbols)
-        a_type = b_type.symbols["a"].type
-        self.assertEqual(a_type.ast_ref.name, "D", "model A not properly redeclared in b")
-        self.assertIn("p", a_type.symbols)
-        p = a_type.symbols["p"]
+        a_extends_names = [extends.ast_ref.name for extends in b_type.symbols["a"].type.extends]
+        self.assertIn("D", a_extends_names, "model A not properly redeclared in b")
+        a_extends_D_index = a_extends_names.index("D")
+        a_extends_D = b_type.symbols["a"].type.extends[a_extends_D_index]
+        self.assertIn("p", a_extends_D.symbols)
+        p = a_extends_D.symbols["p"]
         self.assertIn("parameter", p.prefixes)
         self.assertTrue(isinstance(p.type, ast.InstanceClass), "b.a.p not properly instantiated")
         self.assertEqual(p.type.name, "E")
@@ -630,8 +632,8 @@ class ParseTest(unittest.TestCase):
         p_int_symbol_modification = p_int_symbol.modification_environment.arguments[0]
         p_int_symbol_value = p_int_symbol_modification.value.modifications[0].value
         self.assertEqual(p_int_symbol_value, 1, "b.a.p=1 modification not applied")
-        self.assertEqual(len(a_type.extends), 1, "b.a extends not properly instantiated")
-        a_extends_D_extends_C = a_type.extends[0]
+        self.assertEqual(len(a_extends_D.extends), 1, "b.a extends not properly instantiated")
+        a_extends_D_extends_C = a_extends_D.extends[0]
         self.assertIn("e", a_extends_D_extends_C.symbols)
         b_a_e = a_extends_D_extends_C.symbols["e"]
         e_type = b_a_e.type

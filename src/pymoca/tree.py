@@ -1244,15 +1244,14 @@ def _update_modification_argument_scopes(
 ) -> None:
     """Update the scopes of modification arguments to the instance tree
     :param instance: The instance to update
-    :param lookup_scope: The scope to start name lookup
     """
     # Modification argument scope is set in the parser as the parent of the class,
-    # extends, or symbol declaration. Update the scope from the instance tree.
-    for index, arg in enumerate(instance.modification_environment.arguments):
+    # extends, or symbol declaration. Update the scope to an instance if it exists.
+    for arg_index, arg in enumerate(instance.modification_environment.arguments):
         assert arg.scope is not None, "Modification argument scope should have been set by now"
         if not isinstance(arg.scope, (ast.InstanceClass, InstanceTree)):
-            # Since we are in the instance tree, we can find the scope without name lookup
-            # but we need to traverse upward only
+            # Since we are in the instance tree, we can find the scope without name
+            # lookup. This avoids infinite recursion with instantiation in name lookup.
             arg_scope_tuple = arg.scope.full_reference().to_tuple()
             len_scope_tuple = len(arg_scope_tuple)
             arg_scope = None
@@ -1262,34 +1261,46 @@ def _update_modification_argument_scopes(
                     if scope.name == name:
                         end_index = len_scope_tuple - scope_index
                         if scope.full_reference().to_tuple() == arg_scope_tuple[:end_index]:
-                            # Found the correct scope
-                            arg_scope = scope
-                            break
+                            # Found a matching scope path, but we stop only if an instance
+                            if isinstance(scope, ast.InstanceElement):
+                                arg_scope = scope
+                                break
                     scope = scope.parent
                 if arg_scope is not None:
                     if scope_index:
                         # We found a scope outside the current branch so traverse back down
                         for child_name in arg_scope_tuple[scope_index:]:
-                            if child_name in scope.classes:
-                                scope = scope.classes[child_name]
-                            else:
-                                raise AssertionError(
-                                    f"Modification scope {arg.scope.full_reference()} not found relative to {instance.full_reference()}"
-                                )
-                            arg_scope = scope
+                            scope = scope.classes[child_name]
+                        arg_scope = scope
                     break
+                elif scope is None:
+                    # We reached root so try traversing back down
+                    scope = (
+                        instance.root
+                        if isinstance(scope, ast.InstanceClass)
+                        else instance.parent.root
+                    )
+                    for child_name in arg_scope_tuple:
+                        if child_name in scope.classes:
+                            scope = scope.classes[child_name]
+                        else:
+                            scope = None
+                            break
+                    if isinstance(scope, (ast.InstanceElement, InstanceTree)):
+                        arg_scope = scope
+                        break
 
-            # if arg_scope is None or not isinstance(arg_scope, ast.InstanceClass):
-            #     arg_scope = _instantiate_partially(
-            #         arg.scope,
-            #         ast.ClassModification(),
-            #         arg.scope.parent,
-            #     )
-
-            # Make a copy so we don't change original AST or same arg used elsewhere
-            new_arg = copy.copy(arg)
-            new_arg.scope = arg_scope
-            instance.modification_environment.arguments[index] = new_arg
+            if arg_scope is not None:
+                # Make a copy so we don't change original AST or same arg used elsewhere
+                new_arg = copy.copy(arg)
+                new_arg.scope = arg_scope
+                instance.modification_environment.arguments[arg_index] = new_arg
+            else:
+                # raise AssertionError(
+                #     f"Modification scope {arg.scope.full_reference()}"
+                #     f" not found relative to {instance.full_reference()}"
+                # )
+                pass
 
 
 def _append_modifications(*mods: ast.ClassModification) -> ast.ClassModification:

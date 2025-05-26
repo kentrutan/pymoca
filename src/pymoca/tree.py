@@ -1156,7 +1156,7 @@ def _instantiate_symbol(
         modification_environment,
         parent_instance,
         symbol_type_parent,
-        update_parent_instance=True,
+        update_parent_instance=False,
     )
     # FIXME: Remove this comment (no longer needed now that do redeclare with extends)
     # instantiated = True

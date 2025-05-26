@@ -920,7 +920,7 @@ def _instantiate_class(
         if not isinstance(symbol, ast.InstanceSymbol) and symbol.class_modification is not None:
             symbol = copy.copy(symbol)
             scoped_mod_args = list(symbol.class_modification.arguments)
-            _update_modification_argument_scopes(scoped_mod_args, parent_instance)
+            _update_modification_argument_scopes(scoped_mod_args, new_class)
             symbol.class_modification = ast.ClassModification(arguments=scoped_mod_args)
         instance = _instantiate_partially(
             symbol,
@@ -1306,14 +1306,14 @@ def _apply_modifications(
 
 def _update_modification_argument_scopes(
     modification_arguments: List[ast.ClassModificationArgument],
-    parent_instance: ast.InstanceClass,
+    current_scope: ast.InstanceClass,
 ) -> None:
     """Update the scopes of modification arguments to the given scope if not already done"""
     for arg_index, arg in enumerate(modification_arguments):
         if isinstance(arg.scope, ast.InstanceClass):
             # Already done
             continue
-        scope = parent_instance
+        scope = current_scope
         if scope.name != arg.scope.name:
             # Must be a short class definition which does not create a new scope
             # So we go up one level to the parent instance of the parent instance

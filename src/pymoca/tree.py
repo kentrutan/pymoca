@@ -578,8 +578,13 @@ def _flatten_first_and_find_rest(
     elif isinstance(first.parent, ast.Tree):
         temporary_parent = InstanceTree(first.parent)
     else:
+        assert first.parent is not None
+        assert first.parent.parent is not None
         temporary_parent = _instantiate_partially(
-            first.parent, ast.ClassModification(), first.parent.parent
+            first.parent,
+            ast.ClassModification(),
+            first.parent.parent,
+            first.parent.parent,
         )
     instance = _instantiate_class(first, ast.ClassModification(), temporary_parent, first.parent)
 
@@ -813,8 +818,8 @@ def instantiate(class_name: str, class_tree: ast.Tree) -> ast.InstanceClass:
 def _instantiate_class(
     orig_class: Union[ast.Class, ast.InstanceClass],
     modification_environment: ast.ClassModification,
-    parent_instance: Union[ast.Class, ast.InstanceClass],
-    parent: Union[ast.Class, ast.InstanceClass, None] = None,
+    parent_instance: Union[InstanceTree, ast.InstanceClass],
+    parent: Union[ast.Class, ast.InstanceClass, InstanceTree, None] = None,
     update_parent_instance: bool = True,
 ) -> ast.InstanceClass:
     """Instantiate a class
@@ -859,6 +864,7 @@ def _instantiate_class(
         new_class = _instantiate_partially(
             orig_class,
             modification_environment,
+            parent_instance,
             parent,
         )
         if update_parent_instance:
@@ -885,6 +891,8 @@ def _instantiate_class(
         from_class = new_class.ast_ref
     else:
         from_class = orig_class
+
+    # Maintain lexical instance tree for the new class
     if new_class.name in parent.classes:
         scope = parent.classes[new_class.name]
     else:
@@ -892,20 +900,32 @@ def _instantiate_class(
             from_class,
             ast.ClassModification(),
             parent,
+            parent,
         )
         parent.classes[new_class.name] = scope
+
     for name, class_ in from_class.classes.items():
         instance = _instantiate_partially(
             class_,
             modification_environment,
+            new_class,
             scope,
         )
         new_class.classes[name] = instance
 
     for name, symbol in from_class.symbols.items():
+        # FIXME: Unify class_modification scope update for symbols and extends
+        # Probably needs to be done in _instantiate_partially and we go ahead and
+        # instantiate partially the extends classes above and delete this hack
+        if not isinstance(symbol, ast.InstanceSymbol) and symbol.class_modification is not None:
+            symbol = copy.copy(symbol)
+            scoped_mod_args = list(symbol.class_modification.arguments)
+            _update_modification_argument_scopes(scoped_mod_args, parent_instance)
+            symbol.class_modification = ast.ClassModification(arguments=scoped_mod_args)
         instance = _instantiate_partially(
             symbol,
             modification_environment,
+            new_class,
             scope,
         )
         new_class.symbols[name] = instance
@@ -993,17 +1013,25 @@ def _instantiate_extends_single(
 
     if isinstance(extends, ast.Class):
         extends_class = extends
-        if isinstance(extends, ast.InstanceClass):
+        if isinstance(extends_class, ast.InstanceClass):
             extends_mod = extends.modification_environment
-        else:
+        else:  # ast.Class
             extends_mod = ast.ClassModification()
-    else:
+    else:  # ast.ExtendsClause
         extends_class = _find_name(extends.component, parent_instance, search_inherited=False)
         if extends_class is None:
             raise ModelicaSemanticError(
                 f"Extends name {extends.component} not found in scope {parent_instance.full_reference()}"
             )
         extends_mod = extends.class_modification
+        if extends_mod.arguments:
+            # Set the instance scope for the extends clause class modification
+            scoped_extends_mods = ast.ClassModification()
+            scoped_extends_mods.arguments = list(extends_mod.arguments)
+            _update_modification_argument_scopes(scoped_extends_mods.arguments, parent_instance)
+            extends_mod = scoped_extends_mods
+
+    extends_parent = _find_lexical_parent_instance(extends_class, parent_instance)
 
     if isinstance(extends_class, ast.Symbol):
         raise ModelicaSemanticError(
@@ -1019,13 +1047,16 @@ def _instantiate_extends_single(
         raise ModelicaSemanticError(
             f"In {full_name} extends {comp}, {comp} and parents cannot be replaceable"
         )
-    # TODO: Check with spec about what to do with extends.class_modification in case of redeclare
-    modifications = _append_modifications(extends_mod, modification_environment)
+
+    modifications = _append_modifications(
+        extends_mod, parent_instance.modification_environment, modification_environment
+    )
+
     extends_instance = _instantiate_class(
         extends_class,
         modifications,
         parent_instance,
-        extends_class.parent,
+        extends_parent,
         update_parent_instance=False,
     )
     # Extends nodes are "unnamed" per the spec
@@ -1033,11 +1064,16 @@ def _instantiate_extends_single(
     # Imports are not inherited
     extends_instance.imports = OrderedDict()
 
-    # TODO: Is there another way to handle `extends.class_modification`? This seems like a hack.
-    # _instantiate_partially removes from extend_mod, but not original modification_environment
-    # Reflect changes in extend_mod back into the passed-in modification env
+    # Reflect changes in copied list back into the original modification environments
+    # TODO: Refactor merging of modifications and removal from parent environments
+    # _instantiate_partially removes from copied list, but not originals
     modification_environment.arguments = [
         arg for arg in modification_environment.arguments if arg in modifications.arguments
+    ]
+    parent_instance.modification_environment.arguments = [
+        arg
+        for arg in parent_instance.modification_environment.arguments
+        if arg in modifications.arguments
     ]
 
     if extends_instance.type in InstanceTree.BUILTIN_TYPES:
@@ -1050,6 +1086,27 @@ def _instantiate_extends_single(
     # TODO: Step 4 Check class lookup before and after extends
 
     return extends_instance
+
+
+def _find_lexical_parent_instance(
+    class_: Union[ast.Class, ast.InstanceClass],
+    parent_instance: ast.InstanceClass,
+) -> Union[ast.InstanceClass, InstanceTree]:
+    if isinstance(class_, ast.InstanceClass):
+        return class_.parent
+    else:  # ast.Class
+        # Find the lexical parent from the instance tree
+        if isinstance(class_.parent, ast.Tree):
+            return parent_instance.root
+        else:
+            lexical_parent = _find_name(class_.name, parent_instance)
+            if lexical_parent is None:
+                raise ModelicaSemanticError(
+                    f"Extends name {class_.name} not found in"
+                    f" scope {parent_instance.full_reference()}"
+                )
+            assert isinstance(lexical_parent, ast.InstanceClass)
+            return lexical_parent
 
 
 def _is_transitively_replaceable(class_: ast.Class) -> bool:
@@ -1079,7 +1136,8 @@ def _instantiate_symbol(
     modification_environment = symbol.modification_environment
     _apply_redeclares(symbol, modification_environment, parent_instance)
 
-    instantiated = False
+    # FIXME: Remove this comment (no longer needed now that do redeclare with extends)
+    # instantiated = False
     if not isinstance(symbol.type, ast.InstanceClass):
         symbol_type = find_name(symbol.type, parent_instance)
         if symbol_type is None:
@@ -1087,24 +1145,31 @@ def _instantiate_symbol(
                 f"Type {symbol.type} of symbol {symbol.name} "
                 f"not found in {parent_instance.full_reference()}"
             )
-        if symbol.replaceable:
-            symbol_type = copy.copy(symbol_type)
-            symbol_type.replaceable = True
-        symbol.type = _instantiate_class(
-            symbol_type,
-            modification_environment,
-            parent_instance,
-            symbol_type.parent,
-            update_parent_instance=True,
-        )
-        instantiated = True
+        symbol_type_parent = _find_lexical_parent_instance(symbol_type, parent_instance)
+    else:
+        symbol_type = symbol.type
+        symbol_type_parent = symbol.type.parent
+
+    if symbol.replaceable:
+        symbol_type = copy.copy(symbol_type)
+        symbol_type.replaceable = True
+    symbol.type = _instantiate_class(
+        symbol_type,
+        modification_environment,
+        parent_instance,
+        symbol_type_parent,
+        update_parent_instance=True,
+    )
+    # FIXME: Remove this comment (no longer needed now that do redeclare with extends)
+    # instantiated = True
 
     _copy_symbol_contents(symbol)
 
+    # FIXME: Remove this comment (no longer needed now that do redeclare with extends)
     # May have redeclared the type during instantiation, so update symbol replaceable
     # We have to do this after copying contents which also sets replaceable
-    if instantiated:
-        symbol.replaceable = symbol.type.replaceable
+    # if instantiated:
+    #     symbol.replaceable = symbol.type.replaceable
 
     symbol.fully_instantiated = True
 
@@ -1117,6 +1182,7 @@ def _instantiate_partially(
         ast.InstanceSymbol,
     ],
     modification_environment: ast.ClassModification,
+    parent_instance: Union[InstanceTree, ast.InstanceClass],
     parent: Union[ast.Class, ast.InstanceClass],
 ) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
     """Partially instantiate a class or symbol, apply modifiers, and set visibility"""
@@ -1136,6 +1202,7 @@ def _instantiate_partially(
         instance = ast.InstanceClass(
             name=element.name,
             ast_ref=ast_ref,
+            parent_instance=parent_instance,
             parent=parent,
             annotation=ast.ClassModification(),
             replaceable=element.replaceable,
@@ -1236,71 +1303,25 @@ def _apply_modifications(
 
     instance.modification_environment = mod
 
-    _update_modification_argument_scopes(instance)
-
 
 def _update_modification_argument_scopes(
-    instance: Union[ast.InstanceClass, ast.InstanceSymbol],
+    modification_arguments: List[ast.ClassModificationArgument],
+    parent_instance: ast.InstanceClass,
 ) -> None:
-    """Update the scopes of modification arguments to the instance tree
-    :param instance: The instance to update
-    """
-    # Modification argument scope is set in the parser as the parent of the class,
-    # extends, or symbol declaration. Update the scope to an instance if it exists.
-    for arg_index, arg in enumerate(instance.modification_environment.arguments):
-        assert arg.scope is not None, "Modification argument scope should have been set by now"
-        if not isinstance(arg.scope, (ast.InstanceClass, InstanceTree)):
-            # Since we are in the instance tree, we can find the scope without name
-            # lookup. This avoids infinite recursion with instantiation in name lookup.
-            arg_scope_tuple = arg.scope.full_reference().to_tuple()
-            len_scope_tuple = len(arg_scope_tuple)
-            arg_scope = None
-            for scope_index, name in enumerate(reversed(arg_scope_tuple)):
-                scope = instance.parent
-                while scope is not None:
-                    if scope.name == name:
-                        end_index = len_scope_tuple - scope_index
-                        if scope.full_reference().to_tuple() == arg_scope_tuple[:end_index]:
-                            # Found a matching scope path, but we stop only if an instance
-                            if isinstance(scope, ast.InstanceElement):
-                                arg_scope = scope
-                                break
-                    scope = scope.parent
-                if arg_scope is not None:
-                    if scope_index:
-                        # We found a scope outside the current branch so traverse back down
-                        for child_name in arg_scope_tuple[scope_index:]:
-                            scope = scope.classes[child_name]
-                        arg_scope = scope
-                    break
-                elif scope is None:
-                    # We reached root so try traversing back down
-                    scope = (
-                        instance.root
-                        if isinstance(scope, ast.InstanceClass)
-                        else instance.parent.root
-                    )
-                    for child_name in arg_scope_tuple:
-                        if child_name in scope.classes:
-                            scope = scope.classes[child_name]
-                        else:
-                            scope = None
-                            break
-                    if isinstance(scope, (ast.InstanceElement, InstanceTree)):
-                        arg_scope = scope
-                        break
-
-            if arg_scope is not None:
-                # Make a copy so we don't change original AST or same arg used elsewhere
-                new_arg = copy.copy(arg)
-                new_arg.scope = arg_scope
-                instance.modification_environment.arguments[arg_index] = new_arg
-            else:
-                # raise AssertionError(
-                #     f"Modification scope {arg.scope.full_reference()}"
-                #     f" not found relative to {instance.full_reference()}"
-                # )
-                pass
+    """Update the scopes of modification arguments to the given scope if not already done"""
+    for arg_index, arg in enumerate(modification_arguments):
+        if isinstance(arg.scope, ast.InstanceClass):
+            # Already done
+            continue
+        scope = parent_instance
+        if scope.name != arg.scope.name:
+            # Must be a short class definition which does not create a new scope
+            # So we go up one level to the parent instance of the parent instance
+            scope = scope.parent_instance
+        # Make a copy so we don't change original AST or same arg used elsewhere
+        new_arg = copy.copy(arg)
+        new_arg.scope = scope
+        modification_arguments[arg_index] = new_arg
 
 
 def _append_modifications(*mods: ast.ClassModification) -> ast.ClassModification:

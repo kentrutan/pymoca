@@ -996,6 +996,8 @@ class InstanceClass(InstanceElement, Class):
     """
 
     def __init__(self, **kwargs):
+        self.parent_instance = None  # type: Optional[InstanceClass]
+
         super().__init__(**kwargs)
 
     def __repr__(self):

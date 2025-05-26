@@ -1092,21 +1092,19 @@ def _find_lexical_parent_instance(
     class_: Union[ast.Class, ast.InstanceClass],
     parent_instance: ast.InstanceClass,
 ) -> Union[ast.InstanceClass, InstanceTree]:
+    """Find the lexical parent instance of the given class"""
+
     if isinstance(class_, ast.InstanceClass):
         return class_.parent
-    else:  # ast.Class
-        # Find the lexical parent from the instance tree
-        if isinstance(class_.parent, ast.Tree):
-            return parent_instance.root
-        else:
-            lexical_parent = _find_name(class_.name, parent_instance)
-            if lexical_parent is None:
-                raise ModelicaSemanticError(
-                    f"Extends name {class_.name} not found in"
-                    f" scope {parent_instance.full_reference()}"
-                )
-            assert isinstance(lexical_parent, ast.InstanceClass)
-            return lexical_parent
+    if isinstance(class_.parent, ast.Tree):
+        return parent_instance.root
+    lexical_parent = _find_name(class_.name, parent_instance)
+    if lexical_parent is None:
+        raise ModelicaSemanticError(
+            f"Extends name {class_.name} not found in" f" scope {parent_instance.full_reference()}"
+        )
+    assert isinstance(lexical_parent, ast.InstanceClass)
+    return lexical_parent
 
 
 def _is_transitively_replaceable(class_: ast.Class) -> bool:

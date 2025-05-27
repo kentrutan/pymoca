@@ -838,6 +838,16 @@ class Class(Node):
         else:
             return self.parent.root
 
+    def ancestors(self) -> List["Class"]:
+        """Return a list of all ancestor classes, farthest first."""
+        ancestors = []
+        current = self.parent
+        while current is not None:
+            ancestors.append(current)
+            current = current.parent
+        ancestors.reverse()
+        return ancestors
+
     def copy_including_children(self):
         return copy.deepcopy(self)
 

@@ -585,6 +585,7 @@ def _flatten_first_and_find_rest(
             ast.ClassModification(),
             first.parent.parent,
             first.parent.parent,
+            update_parent_instance=False,
         )
     instance = _instantiate_class(first, ast.ClassModification(), temporary_parent, first.parent)
 
@@ -866,9 +867,8 @@ def _instantiate_class(
             modification_environment,
             parent_instance,
             parent,
+            update_parent_instance=update_parent_instance,
         )
-        if update_parent_instance:
-            parent_instance.classes[new_class.name] = new_class
     else:
         # Class already at least partially instantiated
         new_class = parent_instance.classes[orig_class.name]
@@ -902,18 +902,16 @@ def _instantiate_class(
             parent,
             parent,
         )
-        parent.classes[new_class.name] = scope
 
-    for name, class_ in from_class.classes.items():
-        instance = _instantiate_partially(
+    for class_ in from_class.classes.values():
+        _instantiate_partially(
             class_,
             modification_environment,
             new_class,
             scope,
         )
-        new_class.classes[name] = instance
 
-    for name, symbol in from_class.symbols.items():
+    for symbol in from_class.symbols.values():
         # FIXME: Unify class_modification scope update for symbols and extends
         # Probably needs to be done in _instantiate_partially and we go ahead and
         # instantiate partially the extends classes above and delete this hack
@@ -922,13 +920,12 @@ def _instantiate_class(
             scoped_mod_args = list(symbol.class_modification.arguments)
             _update_modification_argument_scopes(scoped_mod_args, new_class)
             symbol.class_modification = ast.ClassModification(arguments=scoped_mod_args)
-        instance = _instantiate_partially(
+        _instantiate_partially(
             symbol,
             modification_environment,
             new_class,
             scope,
         )
-        new_class.symbols[name] = instance
 
     # 2.2 Copy local contents into the element itself
     _copy_class_contents(new_class, copy_extends=True)
@@ -1182,6 +1179,7 @@ def _instantiate_partially(
     modification_environment: ast.ClassModification,
     parent_instance: Union[InstanceTree, ast.InstanceClass],
     parent: Union[ast.Class, ast.InstanceClass],
+    update_parent_instance: bool = True,
 ) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
     """Partially instantiate a class or symbol, apply modifiers, and set visibility"""
 
@@ -1208,7 +1206,8 @@ def _instantiate_partially(
             partial=element.partial,
             final=element.final,
         )
-
+        if update_parent_instance:
+            parent_instance.classes[element.name] = instance
     else:
         # TODO: Try using Symbol (and Symbol.class_modification) instead of InstanceSymbol
         instance = ast.InstanceSymbol(
@@ -1218,6 +1217,8 @@ def _instantiate_partially(
             replaceable=element.replaceable,
             final=element.final,
         )
+        if update_parent_instance:
+            parent_instance.symbols[element.name] = instance
 
     # Merge visibility
     instance.visibility = min(ast_ref.visibility, parent.visibility)

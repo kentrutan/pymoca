@@ -1028,7 +1028,7 @@ def _instantiate_extends_single(
             _update_modification_argument_scopes(scoped_extends_mods.arguments, parent_instance)
             extends_mod = scoped_extends_mods
 
-    extends_parent = _find_lexical_parent_instance(extends_class, parent_instance)
+    extends_parent = _get_lexical_parent_instance(extends_class, parent_instance)
 
     if isinstance(extends_class, ast.Symbol):
         raise ModelicaSemanticError(
@@ -1085,23 +1085,32 @@ def _instantiate_extends_single(
     return extends_instance
 
 
-def _find_lexical_parent_instance(
+def _get_lexical_parent_instance(
     class_: Union[ast.Class, ast.InstanceClass],
-    parent_instance: ast.InstanceClass,
+    lookup_scope: ast.InstanceClass,
 ) -> Union[ast.InstanceClass, InstanceTree]:
     """Find the lexical parent instance of the given class"""
 
     if isinstance(class_, ast.InstanceClass):
         return class_.parent
     if isinstance(class_.parent, ast.Tree):
-        return parent_instance.root
-    lexical_parent = _find_name(class_.name, parent_instance)
-    if lexical_parent is None:
-        raise ModelicaSemanticError(
-            f"Extends name {class_.name} not found in" f" scope {parent_instance.full_reference()}"
-        )
-    assert isinstance(lexical_parent, ast.InstanceClass)
-    return lexical_parent
+        return lookup_scope.root
+    found = _find_name(class_.name, lookup_scope)
+    if (
+        found is not None
+        and isinstance(found.parent, ast.InstanceClass)
+        and found.full_reference().to_tuple() == class_.full_reference().to_tuple()
+    ):
+        return found.parent
+    # Create a branch with parent instances of the class
+    ancestors = class_.ancestors()
+    parent = lookup_scope.root
+    for cls in ancestors[1:]:
+        # The spec says put the top-level class we are instantiating in root
+        # Guard against the rare case of stomping on it with a class of the same name
+        update_parent = cls.name not in parent.classes
+        parent = _instantiate_partially(cls, ast.ClassModification(), parent, parent, update_parent)
+    return parent
 
 
 def _is_transitively_replaceable(class_: ast.Class) -> bool:
@@ -1140,7 +1149,7 @@ def _instantiate_symbol(
                 f"Type {symbol.type} of symbol {symbol.name} "
                 f"not found in {parent_instance.full_reference()}"
             )
-        symbol_type_parent = _find_lexical_parent_instance(symbol_type, parent_instance)
+        symbol_type_parent = _get_lexical_parent_instance(symbol_type, parent_instance)
     else:
         symbol_type = symbol.type
         symbol_type_parent = symbol.type.parent

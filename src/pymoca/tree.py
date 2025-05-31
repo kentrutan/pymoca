@@ -497,7 +497,7 @@ def _find_rest_of_name(
             # and `A` is a scalar or can be evaluated as a scalar from an array
             # and `B` and `C` are classes,
             # it is a non-operator function call.
-            found = _find_composite_name_in_classes(rest_of_name, type_class)
+            found, _ = _find_composite_name_in_classes(rest_of_name, type_class)
             if isinstance(found, ast.Class):
                 if found.type != "function":
                     found = None
@@ -509,7 +509,15 @@ def _find_rest_of_name(
                         )
 
     elif isinstance(first, ast.Class):
-        found = _flatten_first_and_find_rest(first, rest_of_name, check_encapsulated)
+        if isinstance(first, ast.InstanceClass) and first.fully_instantiated:
+            # FIXME: Check encapsulation requirements (put it in find_simple_name or callers?)
+            found, next_names = _find_composite_name_in_classes(
+                rest_of_name, first, return_last_class_found=True
+            )
+            if found and next_names:
+                found = _find_composite_name_in_symbols(next_names, found)
+        else:
+            found = _flatten_first_and_find_rest(first, rest_of_name, check_encapsulated)
     else:
         raise NameLookupError(f'Found unexpected node "{first!r}" during name lookup')
 
@@ -545,15 +553,65 @@ def _find_composite_name_in_symbols(name: str, scope: ast.Class) -> Optional[ast
     return found
 
 
-def _find_composite_name_in_classes(name: str, scope: ast.Class) -> Optional[ast.Class]:
-    """Search for composite name (e.g. A.B.C) in local classes, recursively"""
+def _find_composite_name_in_classes(
+    name: str, scope: ast.Class, return_last_class_found: bool = False
+) -> Tuple[Optional[ast.Class], str]:
+    """Search for composite name (e.g. A.B.C) in local classes, recursively
+
+    :return: tuple(last found class or None, string of remaining names)
+    """
     first_name, _, next_names = name.partition(".")
     found = None
     if first_name in scope.classes:
         found = scope.classes[first_name]
     if found and next_names:
-        found = _find_composite_name_in_classes(next_names, found)
-    return found
+        last_found = found
+        found, next_names = _find_composite_name_in_classes(next_names, found)
+        if (
+            not found
+            and isinstance(last_found, ast.InstanceClass)
+            and not last_found.fully_instantiated
+            and "." not in next_names
+        ):
+            # There may be a contained class that was not instantiated
+            instance = _instantiate_class(
+                last_found, ast.ClassModification(), last_found.parent_instance, last_found.parent
+            )
+            found, next_names = _find_composite_name_in_classes(next_names, instance)
+        if not found and return_last_class_found:
+            return last_found, next_names
+    if not found:
+        next_names = name
+    return found, next_names
+
+
+def _check_encapsulation_requirements(class_: ast.Class, name: str) -> bool:
+    """Check package/encapsulation requirements for looking within a class
+
+    :return: True if full name found, false if None
+    :raises: NameLookupError if package/encapsulation requirements check fails
+    """
+    for simple_name in name.split("."):
+        child = _find_simple_name(simple_name, class_)
+        if child is None:
+            return False
+        # Spec says "satisfy the requirements for a package" but we require package
+        if class_.type != "package":
+            child_is_symbol = isinstance(child, ast.Symbol)
+            if child_is_symbol and not class_.encapsulated:
+                raise NameLookupError(
+                    f"{ast.element_full_name(class_)} must be a package"
+                    f" or encapsulated to access {simple_name}"
+                )
+            if not child_is_symbol and not child.encapsulated:
+                raise NameLookupError(
+                    f"{ast.element_full_name(class_)} is not a package"
+                    f" so {simple_name} must be encapsulated"
+                )
+        if not isinstance(child, ast.Class):
+            break
+        class_ = child
+    return True
 
 
 def _flatten_first_and_find_rest(
@@ -570,40 +628,53 @@ def _flatten_first_and_find_rest(
     #     Checking "the class we look inside shall not be partial in a simulation model"
     #     is left to the caller.
 
-    # TODO: Per spec v3.5 section 5.3.2 bullet 4, class is temporarily *flattened*
-    # Before we have flattening implemented, bootstrap with temporary instantiation
-    # Prevent overwriting any original classes with temporary classes
-    if isinstance(first.parent, (ast.InstanceClass, InstanceTree)):
-        temporary_parent = copy.copy(first.parent)
-    elif isinstance(first.parent, ast.Tree):
-        temporary_parent = InstanceTree(first.parent)
+    # Create temporary_parent only for the first call in the recursive sequence
+    # Use static variable to track whether this is the first call in the recursive sequence
+    if not hasattr(_flatten_first_and_find_rest, "_stack_level"):
+        if isinstance(first.parent, (ast.InstanceClass, InstanceTree)):
+            temporary_parent = copy.copy(first.parent)
+        elif isinstance(first.parent, ast.Tree):
+            temporary_parent = InstanceTree(first.parent)
+        else:
+            assert first.parent is not None
+            assert first.parent.parent is not None
+            grandparent = first.parent.parent
+            if isinstance(first.parent, ast.InstanceClass):
+                grandparent_instance = first.parent.parent_instance
+            else:  # ast.Class
+                grandparent_instance = grandparent
+            temporary_parent = _instantiate_partially(
+                first.parent,
+                ast.ClassModification(),
+                grandparent_instance,
+                grandparent,
+                update_parent_instance=False,
+            )
+        _flatten_first_and_find_rest._stack_level = 1
+        parent = parent_instance = temporary_parent
     else:
-        assert first.parent is not None
-        assert first.parent.parent is not None
-        temporary_parent = _instantiate_partially(
-            first.parent,
-            ast.ClassModification(),
-            first.parent.parent,
-            first.parent.parent,
-            update_parent_instance=False,
-        )
-    instance = _instantiate_class(first, ast.ClassModification(), temporary_parent, first.parent)
+        assert isinstance(first, ast.InstanceClass), "Found Class, expected InstanceClass"
+        # FIXME: We can have nested flatten_first_and_find_rest calls
+        # where we are looking up a higher parent or totally different branch leading
+        # to an ast.Class being encountered when hasattr(_stack_level) == True
+        # We need to use the same instance tree building procedure as elsewhere to be
+        # able to create multiple temporary parents that all can be deleted/delattr.
+        parent = first.parent
+        parent_instance = first.parent_instance
+        _flatten_first_and_find_rest._stack_level += 1
 
-    found = _find_name(
-        rest_of_name, instance, search_parent=False, check_encapsulated=check_encapsulated
-    )
+    instance = _instantiate_class(first, ast.ClassModification(), parent_instance, parent)
 
-    # Check that found meets non-package lookup requirements in spec section 5.3.2
-    # The found.name test is so we only check going left to right in composite name
-    # and not the other direction as we pop the recursive call stack.
-    if (
-        check_encapsulated
-        and found is not None
-        and found.name == _first_name(rest_of_name)
-        and first.type != "package"
-        and not (isinstance(found, ast.Class) and found.encapsulated)
-    ):
-        raise NameLookupError(f"{first.name} is not a package so {found.name} must be encapsulated")
+    found = _find_name(rest_of_name, instance, search_parent=False, check_encapsulated=False)
+
+    # If `A` is not a package, lookup is restricted to `encapsulated` elements only
+    if check_encapsulated and not _check_encapsulation_requirements(first, rest_of_name):
+        return None
+
+    # Remove the static variable for future calls
+    _flatten_first_and_find_rest._stack_level -= 1
+    if not _flatten_first_and_find_rest._stack_level:
+        delattr(_flatten_first_and_find_rest, "_stack_level")
 
     return found
 
@@ -757,10 +828,9 @@ def _check_import_rules(
         raise NameLookupError(message)
     if element.visibility != ast.Visibility.PUBLIC:
         raise NameLookupError(f"Import {element.name} must not be protected")
-    # We test on parent and name instead of just "is" because we may have a copy of a Class
-    if element.parent is scope.parent and element.name == scope.name:
-        full_name = str(element.parent.full_reference()) + "." + element.name
-        raise NameLookupError(f"Import {full_name} is recursive")
+    element_full_name = ast.element_full_name(element)
+    if element_full_name == ast.element_full_name(scope):
+        raise NameLookupError(f"Import {element_full_name} is recursive")
 
 
 class InstanceTree(ast.Tree):
@@ -812,7 +882,12 @@ def instantiate(class_name: str, class_tree: ast.Tree) -> ast.InstanceClass:
     instance_tree = InstanceTree(class_tree)
     # That section also says the instance should be stored in the parent instance
     # so _instantiate_class does this
-    instance = _instantiate_class(class_, ast.ClassModification(), instance_tree)
+    instance = _instantiate_class(
+        class_,
+        ast.ClassModification(),
+        instance_tree,
+        class_.parent,
+    )
     return instance
 
 
@@ -893,6 +968,7 @@ def _instantiate_class(
         from_class = orig_class
 
     # Maintain lexical instance tree for the new class
+    # scope = _get_lexical_parent_instance(new_class, parent_instance)
     if new_class.name in parent.classes:
         scope = parent.classes[new_class.name]
     else:
@@ -1015,10 +1091,22 @@ def _instantiate_extends_single(
         else:  # ast.Class
             extends_mod = ast.ClassModification()
     else:  # ast.ExtendsClause
-        extends_class = _find_name(extends.component, parent_instance, search_inherited=False)
+        scope = parent_instance
+        assert extends.scope, "Extends scope should be set by now"
+        # TODO: Make ExtendsClause.scope and ClassModificationArgument.scope relative
+        # to current scope. Now scope points to specific class, but in recursive
+        # instantiation, relative to current scope is faster and more convenient.
+        # Legacy flattening code would need to be updated also, so leave as-is
+        # until new flattening is closer to release.
+        if ast.element_full_name(scope) != ast.element_full_name(extends.scope):
+            # Must be a class_spec_base which does not create a new scope
+            # So we go up one level to the parent instance of the parent instance
+            scope = scope.parent_instance
+        extends_class = _find_name(extends.component, scope, search_inherited=False)
         if extends_class is None:
+            scope_name = ast.element_full_name(scope) or "<root>"
             raise ModelicaSemanticError(
-                f"Extends name {extends.component} not found in scope {parent_instance.full_reference()}"
+                f"Extends name {extends.component} not found in scope {scope_name}"
             )
         extends_mod = extends.class_modification
         if extends_mod.arguments:
@@ -1322,7 +1410,9 @@ def _update_modification_argument_scopes(
             # Already done
             continue
         scope = current_scope
-        if scope.name != arg.scope.name:
+        assert arg.scope, "Modification scope should be set by now"
+        # TODO: Make modifications argument scopes relative (see extends comment)
+        if ast.element_full_name(scope) != ast.element_full_name(arg.scope):
             # Must be a short class definition which does not create a new scope
             # So we go up one level to the parent instance of the parent instance
             scope = scope.parent_instance

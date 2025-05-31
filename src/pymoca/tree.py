@@ -1143,7 +1143,7 @@ def _instantiate_symbol(
     # FIXME: Remove this comment (no longer needed now that do redeclare with extends)
     # instantiated = False
     if not isinstance(symbol.type, ast.InstanceClass):
-        symbol_type = find_name(symbol.type, parent_instance)
+        symbol_type = _find_name(symbol.type, parent_instance)
         if symbol_type is None:
             raise NameLookupError(
                 f"Type {symbol.type} of symbol {symbol.name} "

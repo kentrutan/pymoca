@@ -936,17 +936,25 @@ class Class(Node):
         return '{} {}, Type "{}"'.format(type(self).__name__, self.name, self.type)
 
 
-def element_full_reference(element: Union[Class, Symbol]) -> ComponentRef:
-    """Return the fully-qualified component reference to element"""
+def element_name_tuple(element: Union[Class, Symbol]) -> tuple[str]:
+    """Return fully-qualified name of an element as a tuple of names"""
     names = []
-    while True:
-        names.append(element.name)
-        if element.parent is None:
-            break
-        else:
-            element = element.parent
-    # Exclude the root node's name
-    return ComponentRef.from_tuple(tuple(reversed(names[:-1])))
+    current = element
+    while current.parent is not None:
+        names.append(current.name)
+        current = current.parent
+    return tuple(reversed(names))
+
+
+def element_full_name(element: Union[Class, Symbol]) -> str:
+    """Return fully-qualified name of an element"""
+    return ".".join(element_name_tuple(element))
+
+
+def element_full_reference(element: Union[Class, Symbol]) -> ComponentRef:
+    """Return fully-qualified component reference to element"""
+    name_tuple = element_name_tuple(element)
+    return ComponentRef.from_tuple(name_tuple) if name_tuple else ComponentRef()
 
 
 class InstanceElement:

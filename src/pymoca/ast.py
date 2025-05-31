@@ -602,12 +602,17 @@ class ExtendsClause(Node):
     def __init__(self, **kwargs):
         self.component = None  # type: Optional[ComponentRef]
         self.class_modification = None  # type: Optional[ClassModification]
+        self.scope = None  # type: Optional[Class]
         self.visibility = Visibility.PUBLIC  # type: Visibility
         super().__init__(**kwargs)
 
     def __repr__(self):
-        return "{}(component={}, class_modification={!r}, visibility={!r})".format(
-            type(self).__name__, self.component, self.class_modification, self.visibility
+        return "{}(component={}, class_modification={!r}, scope={!r}, visibility={!r})".format(
+            type(self).__name__,
+            self.component,
+            self.class_modification,
+            self.scope,
+            self.visibility,
         )
 
 

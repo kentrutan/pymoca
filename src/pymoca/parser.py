@@ -182,7 +182,10 @@ class ASTListener(ModelicaListener):
         else:
             class_modification = ast.ClassModification()
         extends_clause = ast.ExtendsClause(
-            component=self.ast[ctx.component_reference()], class_modification=class_modification
+            component=self.ast[ctx.component_reference()],
+            class_modification=class_modification,
+            # class_spec_base does not create a new scope so go up a level
+            scope=self.class_nodes[-2],
         )
         class_node.extends.append(extends_clause)
         self.in_extends = False
@@ -665,7 +668,9 @@ class ASTListener(ModelicaListener):
         else:
             class_modification = ast.ClassModification()
         self.ast[ctx] = ast.ExtendsClause(
-            component=self.ast[ctx.component_reference()], class_modification=class_modification
+            component=self.ast[ctx.component_reference()],
+            class_modification=class_modification,
+            scope=self.class_node,
         )
         self.class_node.extends += [self.ast[ctx]]
 

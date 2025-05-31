@@ -1374,7 +1374,7 @@ def _apply_redeclares(
         redeclare_name = redeclare.component
     else:  # ast.ComponentClause
         redeclare_name = redeclare.type.name
-    redeclare_class = find_name(redeclare_name, scope_class)
+    redeclare_class = _find_name(redeclare_name, scope_class)
     if redeclare_class is None:
         raise NameLookupError(
             f"Redeclare class {redeclare_name} not found"

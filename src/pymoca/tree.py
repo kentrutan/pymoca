@@ -299,7 +299,7 @@ def find_name(
     if not isinstance(name, (str, ast.ComponentRef)):
         raise TypeError(f"name must be a string or ComponentRef, not {type(name)}")
     if not isinstance(scope, ast.Class):
-        raise TypeError(f"scope must be a Class, not {type(scope)}")
+        raise TypeError(f"scope must be a Class or Tree, not {type(scope)}")
     return _find_name(name, scope)
 
 

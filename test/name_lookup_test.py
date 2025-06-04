@@ -483,11 +483,10 @@ class ImportedNameLookupTest(unittest.TestCase):
         """Checks that it's possible to import from inside an
         encapsulated model"""
         ast = parse_imported_lookup_file("EncapsulatedImport.mo")
-        scope = find_name(
-            "Scoping.NameLookup.Imports.EncapsulatedImport",
-            ast.classes["ModelicaCompliance"],
+        found = find_name(
+            "ModelicaCompliance.Scoping.NameLookup.Imports.EncapsulatedImport.a.m.x",
+            ast,
         )
-        found = find_name("a.m.x", scope)
         self.assertIsNotNone(found)
         self.assertIsInstance(found, pymoca.ast.Symbol)
         # TODO: flatten and check a.m.x.value = 2.0

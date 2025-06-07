@@ -8,7 +8,7 @@ import unittest
 
 import pymoca.ast
 import pymoca.parser
-from pymoca.tree import NameLookupError, find_name, flatten
+from pymoca.tree import NameLookupError, find_name, flatten, instantiate
 
 MY_DIR = os.path.dirname(os.path.realpath(__file__))
 COMPLIANCE_DIR = os.path.join(MY_DIR, "libraries", "Modelica-Compliance", "ModelicaCompliance")

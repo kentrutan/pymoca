@@ -1063,6 +1063,7 @@ class Tree(Class):
             displayUnit=Primary(value=""),
             # TODO: unbounded from spec is missing in Symbol
             # TODO: stateSelect from spec is missing in Symbol
+            class_modification=ClassModification(),
         ),
         "Integer": Symbol(
             name="Integer",
@@ -1072,6 +1073,7 @@ class Tree(Class):
             max=Primary(value=sys.maxsize),
             fixed=Primary(value=False),  # True for parameters and constants
             quantity=Primary(value=""),
+            class_modification=ClassModification(),
         ),
         "Boolean": Symbol(
             name="Boolean",
@@ -1079,6 +1081,7 @@ class Tree(Class):
             start=Primary(value=0.0),
             fixed=Primary(value=False),  # True for parameters and constants
             quantity=Primary(value=""),
+            class_modification=ClassModification(),
         ),
         "String": Symbol(
             name="String",
@@ -1086,6 +1089,7 @@ class Tree(Class):
             start=Primary(value=0.0),
             fixed=Primary(value=False),  # True for parameters and constants
             quantity=Primary(value=""),
+            class_modification=ClassModification(),
         ),
     }
 

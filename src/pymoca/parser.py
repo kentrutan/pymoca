@@ -798,6 +798,8 @@ class ASTListener(ModelicaListener):
                         sym.class_modification = sym_mod
                     else:
                         sym.class_modification.arguments.append(vmod_arg)
+        else:
+            sym.class_modification = ast.ClassModification()
 
     def exitElement_modification(self, ctx: ModelicaParser.Element_modificationContext):
         component = self.ast[ctx.component_reference()]

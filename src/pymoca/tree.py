@@ -919,7 +919,7 @@ def _instantiate_class(
         # FIXME: Unify class_modification scope update for symbols and extends
         # Probably needs to be done in _instantiate_partially and we go ahead and
         # instantiate partially the extends classes above and delete this hack
-        if not isinstance(symbol, ast.InstanceSymbol) and symbol.class_modification is not None:
+        if not isinstance(symbol, ast.InstanceSymbol) and symbol.class_modification.arguments:
             symbol = copy.copy(symbol)
             scoped_mod_args = list(symbol.class_modification.arguments)
             _update_modification_argument_scopes(scoped_mod_args, new_class)
@@ -1213,6 +1213,7 @@ def _instantiate_partially(
             parent=parent,
             replaceable=element.replaceable,
             final=element.final,
+            class_modification=element.class_modification,
         )
         if update_parent_instance:
             parent_instance.symbols[element.name] = instance
@@ -1261,7 +1262,7 @@ def _apply_modifications(
         instance.modification_environment.arguments += apply_mod_args
 
     # Shift modifiers down
-    if isinstance(element, ast.Symbol) and instance.ast_ref.class_modification:
+    if isinstance(element, ast.Symbol):
         mod = _append_modifications(instance.ast_ref.class_modification)
     else:
         mod = ast.ClassModification()
@@ -1381,12 +1382,10 @@ def _apply_redeclares(
             f"Redeclaring {element.name}{if_symbol_msg} with component {redeclare_name}"
             f" in scope {scope_class.full_reference()}"
         )
-    apply_args = []
     if isinstance(redeclare, ast.ShortClassDefinition):
         apply_args = redeclare.class_modification.arguments
     else:  # ast.ComponentClause
-        if redeclare.symbol_list[0].class_modification is not None:
-            apply_args = redeclare.symbol_list[0].class_modification.arguments
+        apply_args = redeclare.symbol_list[0].class_modification.arguments
     modification_environment.arguments = modification_environment.arguments + apply_args
     redeclare_class = _instantiate_extends_single(
         redeclare_class,

@@ -585,7 +585,7 @@ class ClassModificationArgument(Node):
         self.value = (
             []
         )  # type: List[Union[ElementModification, ComponentClause, ShortClassDefinition]]
-        self.scope = None  # type: Optional[InstanceClass]
+        self.scope = None  # type: Optional[Union[Class, InstanceClass]]
         self.redeclare = False
         super().__init__(**kwargs)
 

@@ -1704,7 +1704,6 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(aircraft.symbols["accel.ma_x"].comment, "measured acceleration")
         self.assertEqual(aircraft.symbols["body.g"].comment, "")
 
-    @unittest.expectedFailure  # Parser setting modification argument scope breaks old flattening
     def test_derived_type_value_modification(self):
         """Test modifying the value of a derived type"""
         txt = """

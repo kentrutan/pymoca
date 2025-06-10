@@ -1175,7 +1175,7 @@ def _instantiate_partially(
     ],
     modification_environment: ast.ClassModification,
     parent_instance: Union[InstanceTree, ast.InstanceClass],
-    parent: Union[ast.Class, ast.InstanceClass],
+    parent: Union[InstanceTree, ast.InstanceClass],
     update_parent_instance: bool = True,
 ) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
     """Partially instantiate a class or symbol, apply modifiers, and set visibility"""

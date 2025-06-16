@@ -1106,6 +1106,7 @@ class Tree(Class):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.type = "package"
         self._create_builtins()
 
     def _create_builtins(self):

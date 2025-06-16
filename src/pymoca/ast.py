@@ -449,6 +449,11 @@ class Symbol(Node):
     def full_reference(self) -> ComponentRef:
         return element_full_reference(self)
 
+    @property
+    def full_name(self) -> str:
+        """Return fully-qualified name of this symbol"""
+        return element_full_name(self)
+
     def __str__(self):
         return '{} {}, Type "{}"'.format(type(self).__name__, self.name, self.type)
 
@@ -824,6 +829,11 @@ class Class(Node):
 
     def full_reference(self) -> ComponentRef:
         return element_full_reference(self)
+
+    @property
+    def full_name(self) -> str:
+        """Return fully-qualified name of this class"""
+        return element_full_name(self)
 
     def _extend(self, other: "Class") -> None:
         for class_name in other.classes.keys():

@@ -919,6 +919,16 @@ class Class(Node):
         new.__deepcopy__ = _deepcp
         return new
 
+    def clone(self):
+        """Make a copy of self with copy.copy of lists and dicts"""
+        new_self = copy.copy(self)
+        for key, value in new_self.__dict__.items():
+            if isinstance(value, (list, dict)):
+                new_self.__dict__[key] = copy.copy(value)
+            elif isinstance(value, ClassModification):
+                value.arguments = copy.copy(value.arguments)
+        return new_self
+
     def __repr__(self):
         return "{}(name={!r}, type={!r})".format(type(self).__name__, self.name, self.type)
 

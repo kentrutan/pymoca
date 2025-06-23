@@ -994,6 +994,17 @@ class InstanceElement:
 
         self.fully_instantiated = fully_instantiated
 
+    # FIXME: Delete if not used
+    def clone(self):
+        """Make a copy of self with copy.copy of lists, dicts, and ClassModifications"""
+        new_self = copy.copy(self)
+        for key, value in new_self.__dict__.items():
+            if isinstance(value, (list, dict, ClassModification)):
+                new_self.__dict__[key] = copy.copy(value)
+            if isinstance(value, ClassModification):
+                new_self.__dict__[key].arguments = copy.copy(value.arguments)
+        return new_self
+
     def __repr__(self):
         return f"name={self.name!r}, ast_ref={self.ast_ref!r}, modification_environment={self.modification_environment!r}"
 

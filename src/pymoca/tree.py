@@ -369,8 +369,12 @@ def _find_name(
         found = _find_rest_of_name(
             found,
             rest_of_name,
+            search_imports=search_imports,
+            search_parent=search_parent,
+            search_inherited=search_inherited,
             check_encapsulated=check_encapsulated,
             instantiate_in_place=instantiate_in_place,
+            current_extends=current_extends,
         )
 
     # Maintaining backward compatibility by including InstanceTree (not strictly correct)
@@ -462,12 +466,30 @@ def _find_simple_name(
 
         # Step 4: Look in inherited classes if enabled
         if search_inherited:
-            if found := _find_inherited(name, current_scope, current_extends=current_extends):
+            if found := _find_inherited(
+                name,
+                current_scope,
+                search_imports=search_imports,
+                search_parent=search_parent,
+                search_inherited=search_inherited,
+                check_encapsulated=check_encapsulated,
+                instantiate_in_place=instantiate_in_place,
+                current_extends=current_extends,
+            ):
                 break
 
         # Steps 5-6: Look in imports if enabled
         if search_imports:
-            if found := _find_imported(name, current_scope, current_extends=current_extends):
+            if found := _find_imported(
+                name,
+                current_scope,
+                search_imports=search_imports,
+                search_parent=search_parent,
+                search_inherited=search_inherited,
+                check_encapsulated=check_encapsulated,
+                instantiate_in_place=instantiate_in_place,
+                current_extends=current_extends,
+            ):
                 break
 
         # Step 7b: Continue unless we should stop
@@ -500,8 +522,12 @@ def _find_simple_name(
 def _find_rest_of_name(
     first: Union[ast.Class, ast.Symbol],
     rest_of_name: str,
+    search_imports: bool = True,
+    search_parent: bool = True,
+    search_inherited: bool = True,
     check_encapsulated: bool = True,
     instantiate_in_place: bool = False,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Lookup the `B.C` part of Composite Name Lookup (`A.B.C`) (spec 5.3.2)"""
 
@@ -524,13 +550,24 @@ def _find_rest_of_name(
             type_class = _find_name(
                 first.type,
                 first.parent,
+                search_imports=search_imports,
+                search_parent=search_parent,
+                search_inherited=search_inherited,
                 check_encapsulated=check_encapsulated,
                 instantiate_in_place=instantiate_in_place,
+                current_extends=current_extends,
             )
             if type_class is None:
                 raise NameLookupError(f"Lookup failed for type of symbol {first.full_name}")
         found = _find_composite_name_in_symbols(
-            rest_of_name, type_class, instantiate_in_place=instantiate_in_place
+            rest_of_name,
+            type_class,
+            search_imports=search_imports,
+            search_parent=search_parent,
+            search_inherited=search_inherited,
+            check_encapsulated=check_encapsulated,
+            instantiate_in_place=instantiate_in_place,
+            current_extends=current_extends,
         )
         if not found:
             # Can only find in classes if the below rules apply:
@@ -553,7 +590,14 @@ def _find_rest_of_name(
 
     elif isinstance(first, ast.Class):
         found = _flatten_first_and_find_rest(
-            first, rest_of_name, check_encapsulated, instantiate_in_place
+            first,
+            rest_of_name,
+            search_imports=search_imports,
+            search_parent=search_parent,
+            search_inherited=search_inherited,
+            check_encapsulated=check_encapsulated,
+            instantiate_in_place=instantiate_in_place,
+            current_extends=current_extends,
         )
     else:
         raise NameLookupError(f'Found unexpected node "{first!r}" during name lookup')
@@ -562,7 +606,14 @@ def _find_rest_of_name(
 
 
 def _find_composite_name_in_symbols(
-    name: str, scope: ast.Class, instantiate_in_place: bool = False
+    name: str,
+    scope: ast.Class,
+    search_imports: bool = True,
+    search_parent: bool = True,
+    search_inherited: bool = True,
+    check_encapsulated: bool = True,
+    instantiate_in_place: bool = False,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
 ) -> Optional[ast.Symbol]:
     """Search for composite name (e.g. A.B.C) in local symbols, recursively"""
     if instantiate_in_place:
@@ -576,14 +627,28 @@ def _find_composite_name_in_symbols(
     # This can include inherited and imported components.
     # Look up the type (Class) within the current scope if necessary
     found = _find_name(
-        first_name, scope, search_parent=False, instantiate_in_place=instantiate_in_place
+        first_name,
+        scope,
+        search_imports=search_imports,
+        search_parent=False,
+        search_inherited=search_inherited,
+        check_encapsulated=check_encapsulated,
+        instantiate_in_place=instantiate_in_place,
+        current_extends=current_extends,
     )
     if isinstance(found, ast.Symbol):
         if next_names:
             if isinstance(found.type, ast.ComponentRef):
                 type_name = str(found.type)
                 found_type_class = _find_name(
-                    type_name, scope, instantiate_in_place=instantiate_in_place
+                    type_name,
+                    scope,
+                    search_imports=search_imports,
+                    search_parent=search_parent,
+                    search_inherited=search_inherited,
+                    check_encapsulated=check_encapsulated,
+                    instantiate_in_place=instantiate_in_place,
+                    current_extends=current_extends,
                 )
                 if found_type_class is None or isinstance(found_type_class, ast.Symbol):
                     raise NameLookupError(
@@ -594,7 +659,14 @@ def _find_composite_name_in_symbols(
                 found_type_class = found.type
             # Look in symbols of the type
             found = _find_composite_name_in_symbols(
-                next_names, found_type_class, instantiate_in_place=instantiate_in_place
+                next_names,
+                found_type_class,
+                search_imports=search_imports,
+                search_parent=search_parent,
+                search_inherited=search_inherited,
+                check_encapsulated=check_encapsulated,
+                instantiate_in_place=instantiate_in_place,
+                current_extends=current_extends,
             )
     else:
         found = None
@@ -622,8 +694,12 @@ def _find_composite_name_in_classes(
 def _flatten_first_and_find_rest(
     first: ast.Class,
     rest_of_name: str,
-    check_encapsulated: bool,
+    search_imports: bool = True,
+    search_parent: bool = True,
+    search_inherited: bool = True,
+    check_encapsulated: bool = True,
     instantiate_in_place: bool = False,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Lookup the `B.C` part of Composite Name Lookup (`A.B.C`) where`A` is a Class"""
 
@@ -655,9 +731,12 @@ def _flatten_first_and_find_rest(
     found = _find_name(
         rest_of_name,
         first,
+        search_imports=search_imports,
         search_parent=False,
+        search_inherited=search_inherited,
         check_encapsulated=check_encapsulated,
         instantiate_in_place=True,
+        current_extends=current_extends,
     )
 
     # Check that found meets non-package lookup requirements in spec section 5.3.2
@@ -714,6 +793,11 @@ def _find_iteration_variable(name: str, scope: ast.Class) -> Optional[ast.Symbol
 def _find_inherited(
     name: str,
     scope: ast.Class,
+    search_imports: bool = True,
+    search_parent: bool = True,
+    search_inherited: bool = True,
+    check_encapsulated: bool = True,
+    instantiate_in_place: bool = False,
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Find simple name in inherited classes"""
@@ -732,12 +816,22 @@ def _find_inherited(
             return _find_name(
                 name,
                 extends,
+                search_imports=search_imports,
+                search_parent=search_parent,
+                search_inherited=search_inherited,
+                check_encapsulated=check_encapsulated,
+                instantiate_in_place=instantiate_in_place,
                 current_extends=current_extends,
             )
 
         extends_scope = _find_name(
             extends.component,
             scope,
+            search_imports=search_imports,
+            search_parent=search_parent,
+            search_inherited=search_inherited,
+            check_encapsulated=check_encapsulated,
+            instantiate_in_place=instantiate_in_place,
             current_extends=current_extends,
         )
         if extends_scope is not None:
@@ -746,9 +840,12 @@ def _find_inherited(
             found = _find_name(
                 name,
                 extends_scope,
-                search_parent=False,
-                current_extends=current_extends,
                 search_imports=False,
+                search_parent=False,
+                search_inherited=search_inherited,
+                check_encapsulated=check_encapsulated,
+                instantiate_in_place=instantiate_in_place,
+                current_extends=current_extends,
             )
             current_extends.remove(extends)
             if found is not None:
@@ -761,6 +858,11 @@ def _find_inherited(
 def _find_imported(
     name: str,
     scope: ast.Class,
+    search_imports: bool = True,
+    search_parent: bool = True,
+    search_inherited: bool = True,
+    check_encapsulated: bool = True,
+    instantiate_in_place: bool = False,
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Find simple name in imports per MLS v3.5 section 13.2.1"""
@@ -775,7 +877,11 @@ def _find_imported(
         found = _find_name(
             import_,
             scope.root,
+            search_imports=search_imports,
             search_parent=False,
+            search_inherited=search_inherited,
+            check_encapsulated=check_encapsulated,
+            instantiate_in_place=instantiate_in_place,
             current_extends=current_extends,
         )
         _check_import_rules(found, scope)
@@ -792,6 +898,9 @@ def _find_imported(
                 scope.root,
                 search_imports=False,
                 search_parent=False,
+                search_inherited=search_inherited,
+                check_encapsulated=check_encapsulated,
+                instantiate_in_place=instantiate_in_place,
                 current_extends=current_extends,
             )
             # TODO: Should _check_import_rules be inside `if c is not None` check? (fix in rewrite)

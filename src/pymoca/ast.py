@@ -984,6 +984,7 @@ class InstanceElement:
         ast_ref: Optional[Union[Class, Symbol]] = None,
         modification_environment: Optional[ClassModification] = None,
         fully_instantiated: bool = False,
+        partially_instantiated: bool = False,
         **kwargs,
     ):
         """ast_ref is a reference to the AST node where this instance is defined.
@@ -1014,6 +1015,7 @@ class InstanceElement:
             self.type = ComponentRef()  # The default in Symbol
 
         self.fully_instantiated = fully_instantiated
+        self.partially_instantiated = partially_instantiated
 
     # FIXME: Delete if not used
     def clone(self):

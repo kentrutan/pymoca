@@ -412,7 +412,7 @@ def _instantiate_class_if_needed(
 ) -> Union[ast.Class, ast.InstanceClass]:
     if not isinstance(class_, (ast.InstanceClass, InstanceTree)):
         return class_
-    if class_.fully_instantiated:
+    if class_.fully_instantiated or class_.partially_instantiated:
         return class_
     # Co-opt this to only do partial instantiation for class lookup
     # parent = _get_lexical_parent_instance(orig_class, parent_instance)
@@ -1048,7 +1048,7 @@ def _instantiate_class(
         if modification_environment.arguments:
             new_class = new_class.clone()
             _apply_modifications(new_class, modification_environment)
-        elif new_class.fully_instantiated:
+        elif new_class.fully_instantiated or partially and new_class.partially_instantiated:
             return new_class
 
     # 1.3. Redeclare of element itself is done
@@ -1078,33 +1078,36 @@ def _instantiate_class(
         )
         assert isinstance(lexical_parent, (ast.InstanceClass, InstanceTree))
 
-    for class_ in from_class.classes.values():
-        _instantiate_partially(
-            class_,
-            modification_environment,
-            new_class,
-            lexical_parent,
-        )
+    if not new_class.partially_instantiated:
 
-    for symbol in from_class.symbols.values():
-        if not isinstance(symbol, ast.InstanceSymbol):
-            symbol = _update_class_modification_scopes(symbol, new_class)
-        _instantiate_partially(
-            symbol,
-            modification_environment,
-            new_class,
-            lexical_parent,
-            class_modification=symbol.class_modification,
-        )
+        for class_ in from_class.classes.values():
+            _instantiate_partially(
+                class_,
+                modification_environment,
+                new_class,
+                lexical_parent,
+            )
 
-    for extends in from_class.extends:
-        extends_class = _instantiate_extends(
-            extends, modification_environment, new_class, partially=True
-        )
-        new_class.extends.append(extends_class)
+        for symbol in from_class.symbols.values():
+            if not isinstance(symbol, ast.InstanceSymbol):
+                symbol = _update_class_modification_scopes(symbol, new_class)
+            _instantiate_partially(
+                symbol,
+                modification_environment,
+                new_class,
+                lexical_parent,
+                class_modification=symbol.class_modification,
+            )
 
-    _check_extends_rules(new_class)
+        for extends in from_class.extends:
+            extends_class = _instantiate_extends(
+                extends, modification_environment, new_class, partially=True
+            )
+            new_class.extends.append(extends_class)
 
+        _check_extends_rules(new_class)
+
+    new_class.partially_instantiated = True
     if partially:
         return new_class
 
@@ -1646,6 +1649,7 @@ def flatten_instance(
         parent=instance.parent,
         parent_instance=instance.parent_instance,
         fully_instantiated=instance.fully_instantiated,
+        partially_instantiated=instance.partially_instantiated,
     )
 
     # Populate classes and extends for name lookup

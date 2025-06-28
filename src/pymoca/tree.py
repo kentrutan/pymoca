@@ -306,12 +306,12 @@ def find_name(
 def _find_name(
     name: Union[str, ast.ComponentRef],
     scope: ast.Class,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
+    instantiate_in_place: bool = False,
     search_imports: bool = True,
     search_parent: bool = True,
     search_inherited: bool = True,
     check_encapsulated: bool = True,
-    instantiate_in_place: bool = False,
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Internal start point for name lookup with extra parameters to control the lookup"""
     # Look for ast.Class or ast.Symbol per the MLS v3.5:
@@ -356,12 +356,12 @@ def _find_name(
     found = _find_simple_name(
         left_name,
         scope,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
         search_imports=search_imports,
         search_parent=search_parent,
         search_inherited=search_inherited,
         check_encapsulated=check_encapsulated,
-        instantiate_in_place=instantiate_in_place,
-        current_extends=current_extends,
     )
 
     # Lookup rest of name (e.g. `B.C`) to complete composite name lookup
@@ -369,12 +369,12 @@ def _find_name(
         found = _find_rest_of_name(
             found,
             rest_of_name,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
             search_imports=search_imports,
             search_parent=search_parent,
             search_inherited=search_inherited,
             check_encapsulated=check_encapsulated,
-            instantiate_in_place=instantiate_in_place,
-            current_extends=current_extends,
         )
 
     # Maintaining backward compatibility by including InstanceTree (not strictly correct)
@@ -384,12 +384,12 @@ def _find_name(
         found = _find_name(
             name=name,
             scope=scope.ast_ref,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
             search_imports=search_imports,
             search_parent=search_parent,
             search_inherited=search_inherited,
             check_encapsulated=check_encapsulated,
-            instantiate_in_place=instantiate_in_place,
-            current_extends=current_extends,
         )
 
     return found
@@ -408,16 +408,28 @@ def _parse_str_or_ref(name: Union[str, ast.ComponentRef]) -> Tuple[str, str]:
 
 
 def _instantiate_class_if_needed(
-    class_: Union[ast.Class, ast.InstanceClass]
+    class_: Union[ast.Class, ast.InstanceClass],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
 ) -> Union[ast.Class, ast.InstanceClass]:
-    if not isinstance(class_, (ast.InstanceClass, InstanceTree)):
+    if isinstance(class_, ast.Tree) or not isinstance(class_, ast.InstanceClass):
         return class_
     if class_.fully_instantiated or class_.partially_instantiated:
         return class_
     # Co-opt this to only do partial instantiation for class lookup
-    # parent = _get_lexical_parent_instance(orig_class, parent_instance)
+    # parent = _get_lexical_parent_instance(
+    #   orig_class,
+    #   parent_instance,
+    #   current_extends=current_extends,
+    #   instantiate_in_place=instantiate_in_place
+    # )
     return _instantiate_class(
-        class_, ast.ClassModification(), class_.parent_instance, partially=True
+        class_,
+        ast.ClassModification(),
+        class_.parent_instance,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+        partially=True,
     )
     # TODO: Full instantiation in place for flattening
     # return _instantiate_class(
@@ -430,12 +442,12 @@ def _instantiate_class_if_needed(
 def _find_simple_name(
     name: str,
     scope: ast.Class,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
     search_imports: bool = True,
     search_parent: bool = True,
     search_inherited: bool = True,
     check_encapsulated: bool = True,
-    instantiate_in_place: bool = False,
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Lookup name per Modelica spec 3.5 section 5.3.1 Simple Name Lookup"""
 
@@ -458,7 +470,11 @@ def _find_simple_name(
     while True:
 
         if instantiate_in_place:
-            current_scope = _instantiate_class_if_needed(current_scope)
+            current_scope = _instantiate_class_if_needed(
+                current_scope,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+            )
 
         # Steps 1-3: Try local lookup first (iteration vars, classes, symbols)
         if found := _find_local(name, current_scope):
@@ -469,12 +485,12 @@ def _find_simple_name(
             if found := _find_inherited(
                 name,
                 current_scope,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
                 search_imports=search_imports,
                 search_parent=search_parent,
                 search_inherited=search_inherited,
                 check_encapsulated=check_encapsulated,
-                instantiate_in_place=instantiate_in_place,
-                current_extends=current_extends,
             ):
                 break
 
@@ -483,12 +499,12 @@ def _find_simple_name(
             if found := _find_imported(
                 name,
                 current_scope,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
                 search_imports=search_imports,
                 search_parent=search_parent,
                 search_inherited=search_inherited,
                 check_encapsulated=check_encapsulated,
-                instantiate_in_place=instantiate_in_place,
-                current_extends=current_extends,
             ):
                 break
 
@@ -522,12 +538,12 @@ def _find_simple_name(
 def _find_rest_of_name(
     first: Union[ast.Class, ast.Symbol],
     rest_of_name: str,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
     search_imports: bool = True,
     search_parent: bool = True,
     search_inherited: bool = True,
     check_encapsulated: bool = True,
-    instantiate_in_place: bool = False,
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Lookup the `B.C` part of Composite Name Lookup (`A.B.C`) (spec 5.3.2)"""
 
@@ -550,24 +566,24 @@ def _find_rest_of_name(
             type_class = _find_name(
                 first.type,
                 first.parent,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
                 search_imports=search_imports,
                 search_parent=search_parent,
                 search_inherited=search_inherited,
                 check_encapsulated=check_encapsulated,
-                instantiate_in_place=instantiate_in_place,
-                current_extends=current_extends,
             )
             if type_class is None:
                 raise NameLookupError(f"Lookup failed for type of symbol {first.full_name}")
         found = _find_composite_name_in_symbols(
             rest_of_name,
             type_class,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
             search_imports=search_imports,
             search_parent=search_parent,
             search_inherited=search_inherited,
             check_encapsulated=check_encapsulated,
-            instantiate_in_place=instantiate_in_place,
-            current_extends=current_extends,
         )
         if not found:
             # Can only find in classes if the below rules apply:
@@ -576,7 +592,10 @@ def _find_rest_of_name(
             # and `B` and `C` are classes,
             # it is a non-operator function call.
             found = _find_composite_name_in_classes(
-                rest_of_name, type_class, instantiate_in_place=instantiate_in_place
+                rest_of_name,
+                type_class,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
             )
             if isinstance(found, ast.Class):
                 if found.type != "function":
@@ -592,12 +611,12 @@ def _find_rest_of_name(
         found = _flatten_first_and_find_rest(
             first,
             rest_of_name,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
             search_imports=search_imports,
             search_parent=search_parent,
             search_inherited=search_inherited,
             check_encapsulated=check_encapsulated,
-            instantiate_in_place=instantiate_in_place,
-            current_extends=current_extends,
         )
     else:
         raise NameLookupError(f'Found unexpected node "{first!r}" during name lookup')
@@ -608,16 +627,18 @@ def _find_rest_of_name(
 def _find_composite_name_in_symbols(
     name: str,
     scope: ast.Class,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
     search_imports: bool = True,
     search_parent: bool = True,
     search_inherited: bool = True,
     check_encapsulated: bool = True,
-    instantiate_in_place: bool = False,
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
 ) -> Optional[ast.Symbol]:
     """Search for composite name (e.g. A.B.C) in local symbols, recursively"""
     if instantiate_in_place:
-        scope = _instantiate_class_if_needed(scope)
+        scope = _instantiate_class_if_needed(
+            scope, current_extends=current_extends, instantiate_in_place=instantiate_in_place
+        )
 
     first_name, _, next_names = name.partition(".")
 
@@ -629,12 +650,12 @@ def _find_composite_name_in_symbols(
     found = _find_name(
         first_name,
         scope,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
         search_imports=search_imports,
         search_parent=False,
         search_inherited=search_inherited,
         check_encapsulated=check_encapsulated,
-        instantiate_in_place=instantiate_in_place,
-        current_extends=current_extends,
     )
     if isinstance(found, ast.Symbol):
         if next_names:
@@ -643,12 +664,12 @@ def _find_composite_name_in_symbols(
                 found_type_class = _find_name(
                     type_name,
                     scope,
+                    current_extends=current_extends,
+                    instantiate_in_place=instantiate_in_place,
                     search_imports=search_imports,
                     search_parent=search_parent,
                     search_inherited=search_inherited,
                     check_encapsulated=check_encapsulated,
-                    instantiate_in_place=instantiate_in_place,
-                    current_extends=current_extends,
                 )
                 if found_type_class is None or isinstance(found_type_class, ast.Symbol):
                     raise NameLookupError(
@@ -661,12 +682,12 @@ def _find_composite_name_in_symbols(
             found = _find_composite_name_in_symbols(
                 next_names,
                 found_type_class,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
                 search_imports=search_imports,
                 search_parent=search_parent,
                 search_inherited=search_inherited,
                 check_encapsulated=check_encapsulated,
-                instantiate_in_place=instantiate_in_place,
-                current_extends=current_extends,
             )
     else:
         found = None
@@ -674,11 +695,16 @@ def _find_composite_name_in_symbols(
 
 
 def _find_composite_name_in_classes(
-    name: str, scope: ast.Class, instantiate_in_place: bool = False
+    name: str,
+    scope: ast.Class,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
 ) -> Optional[ast.Class]:
     """Search for composite name (e.g. A.B.C) in local classes, recursively"""
     if instantiate_in_place:
-        scope = _instantiate_class_if_needed(scope)
+        scope = _instantiate_class_if_needed(
+            scope, current_extends=current_extends, instantiate_in_place=instantiate_in_place
+        )
 
     first_name, _, next_names = name.partition(".")
     found = None
@@ -686,7 +712,10 @@ def _find_composite_name_in_classes(
         found = scope.classes[first_name]
     if found and next_names:
         found = _find_composite_name_in_classes(
-            next_names, found, instantiate_in_place=instantiate_in_place
+            next_names,
+            found,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
         )
     return found
 
@@ -694,12 +723,12 @@ def _find_composite_name_in_classes(
 def _flatten_first_and_find_rest(
     first: ast.Class,
     rest_of_name: str,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
     search_imports: bool = True,
     search_parent: bool = True,
     search_inherited: bool = True,
     check_encapsulated: bool = True,
-    instantiate_in_place: bool = False,
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Lookup the `B.C` part of Composite Name Lookup (`A.B.C`) where`A` is a Class"""
 
@@ -713,15 +742,31 @@ def _flatten_first_and_find_rest(
     #     is left to the caller.
 
     # Per spec v3.5 section 5.3.2 bullet 4, class is temporarily flattened
-    if not instantiate_in_place:
-        parent_instance = getattr(first, "parent_instance", None)
-        if parent_instance is None:
-            parent_instance = _get_lexical_parent_instance(first, first.parent)
-        first_instance = _instantiate_class(
-            first, ast.ClassModification(), parent_instance, update_parent_instance=False
+    # if not instantiate_in_place:
+    parent_instance = getattr(first, "parent_instance", None)
+    if parent_instance is None:
+        parent_instance = _get_lexical_parent_instance(
+            first,
+            first.parent,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
         )
-        first_flattened = flatten_instance(first_instance)
-        first = first_flattened
+    first_instance = _instantiate_class(
+        first,
+        ast.ClassModification(),
+        parent_instance,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+        update_parent_instance=False,
+    )
+    flat_class = _create_partial_flat_instance(first_instance)
+    _flatten_instance(
+        first_instance,
+        flat_class,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
+    first = flat_class
 
     # Classes with embedded references to the same class cause infinite recursion if we do
     # instantiation or temporary flattening recursively, so it is only done on the first
@@ -731,12 +776,12 @@ def _flatten_first_and_find_rest(
     found = _find_name(
         rest_of_name,
         first,
+        current_extends=current_extends,
+        instantiate_in_place=True,
         search_imports=search_imports,
         search_parent=False,
         search_inherited=search_inherited,
         check_encapsulated=check_encapsulated,
-        instantiate_in_place=True,
-        current_extends=current_extends,
     )
 
     # Check that found meets non-package lookup requirements in spec section 5.3.2
@@ -793,12 +838,12 @@ def _find_iteration_variable(name: str, scope: ast.Class) -> Optional[ast.Symbol
 def _find_inherited(
     name: str,
     scope: ast.Class,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
     search_imports: bool = True,
     search_parent: bool = True,
     search_inherited: bool = True,
     check_encapsulated: bool = True,
-    instantiate_in_place: bool = False,
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Find simple name in inherited classes"""
     for extends in scope.extends:
@@ -816,23 +861,23 @@ def _find_inherited(
             return _find_name(
                 name,
                 extends,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
                 search_imports=search_imports,
                 search_parent=search_parent,
                 search_inherited=search_inherited,
                 check_encapsulated=check_encapsulated,
-                instantiate_in_place=instantiate_in_place,
-                current_extends=current_extends,
             )
 
         extends_scope = _find_name(
             extends.component,
             scope,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
             search_imports=search_imports,
             search_parent=search_parent,
             search_inherited=search_inherited,
             check_encapsulated=check_encapsulated,
-            instantiate_in_place=instantiate_in_place,
-            current_extends=current_extends,
         )
         if extends_scope is not None:
             if isinstance(extends_scope, ast.Symbol):
@@ -840,12 +885,12 @@ def _find_inherited(
             found = _find_name(
                 name,
                 extends_scope,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
                 search_imports=False,
                 search_parent=False,
                 search_inherited=search_inherited,
                 check_encapsulated=check_encapsulated,
-                instantiate_in_place=instantiate_in_place,
-                current_extends=current_extends,
             )
             current_extends.remove(extends)
             if found is not None:
@@ -858,12 +903,12 @@ def _find_inherited(
 def _find_imported(
     name: str,
     scope: ast.Class,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
     search_imports: bool = True,
     search_parent: bool = True,
     search_inherited: bool = True,
     check_encapsulated: bool = True,
-    instantiate_in_place: bool = False,
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Find simple name in imports per MLS v3.5 section 13.2.1"""
     # TODO: Rewrite this to work with parser rewrite of import_clause handler.
@@ -877,12 +922,12 @@ def _find_imported(
         found = _find_name(
             import_,
             scope.root,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
             search_imports=search_imports,
             search_parent=False,
             search_inherited=search_inherited,
             check_encapsulated=check_encapsulated,
-            instantiate_in_place=instantiate_in_place,
-            current_extends=current_extends,
         )
         _check_import_rules(found, scope)
         return found
@@ -896,12 +941,12 @@ def _find_imported(
             c = _find_name(
                 imported_comp_ref,
                 scope.root,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
                 search_imports=False,
                 search_parent=False,
                 search_inherited=search_inherited,
                 check_encapsulated=check_encapsulated,
-                instantiate_in_place=instantiate_in_place,
-                current_extends=current_extends,
             )
             # TODO: Should _check_import_rules be inside `if c is not None` check? (fix in rewrite)
             _check_import_rules(c, scope)
@@ -974,13 +1019,13 @@ def instantiate(class_name: str, class_tree: ast.Tree) -> ast.InstanceClass:
     `False`. If so, these cases will need to be fully instantiated
     for flattening by calling this function on the class.
     """
-    class_ = find_name(class_name, class_tree)
+    instance_tree = InstanceTree(class_tree)
+    class_ = find_name(class_name, instance_tree)
     if class_ is None:
         raise NameLookupError(f"{class_name} not found in given tree")
     if isinstance(class_, ast.Symbol):
         raise InstantiationError(f"Found Symbol for {class_name} but need Class to instantiate")
     # Spec v 3.5 section 5.6.1.3 says the instance tree root is parent in the top-level call
-    instance_tree = InstanceTree(class_tree)
     # That section also says the instance should be stored in the parent instance
     # so _instantiate_class does this
     instance = _instantiate_class(class_, ast.ClassModification(), instance_tree)
@@ -991,6 +1036,8 @@ def _instantiate_class(
     orig_class: Union[ast.Class, ast.InstanceClass],
     modification_environment: ast.ClassModification,
     parent_instance: Union[InstanceTree, ast.InstanceClass],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
+    instantiate_in_place: bool = False,
     update_parent_instance: bool = True,
     partially: bool = False,
 ) -> ast.InstanceClass:
@@ -1000,6 +1047,8 @@ def _instantiate_class(
     :param modification_environment: The modification environment of the class
         instance
     :param parent_instance: The parent class this class is contained in
+    :param current_extends: `extends` in process of name lookup (see _find_inherited)
+    :param instantiate_in_place: If True, partially instantiate for name lookup if not already
     :param update_parent_instance: If True, the parent instance will be updated with the instantiated class
     :return: The instantiated class
 
@@ -1025,7 +1074,12 @@ def _instantiate_class(
     #    (error if not) and only keep one if so (to preserve function argument order)
     # 6. Components are recursively instantiated
 
-    lexical_parent = _get_lexical_parent_instance(orig_class, parent_instance)
+    lexical_parent = _get_lexical_parent_instance(
+        orig_class,
+        parent_instance,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
 
     # 1.1. Partially instantiate the element itself and 1.2 merge modifiers
     if orig_class.name not in parent_instance.classes or not isinstance(
@@ -1052,7 +1106,13 @@ def _instantiate_class(
             return new_class
 
     # 1.3. Redeclare of element itself is done
-    redeclared = _apply_redeclares(new_class, modification_environment, parent_instance)
+    redeclared = _apply_redeclares(
+        new_class,
+        modification_environment,
+        parent_instance,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
     if redeclared:
         return new_class
 
@@ -1101,7 +1161,12 @@ def _instantiate_class(
 
         for extends in from_class.extends:
             extends_class = _instantiate_extends(
-                extends, modification_environment, new_class, partially=True
+                extends,
+                modification_environment,
+                new_class,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+                partially=True,
             )
             new_class.extends.append(extends_class)
 
@@ -1122,22 +1187,44 @@ def _instantiate_class(
 
     # 6. Recursively instantiate symbols (local and inherited)
     for symbol in new_class.symbols.values():
-        _instantiate_symbol(symbol, new_class)
+        _instantiate_symbol(
+            symbol,
+            new_class,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
 
     # Recurse down through all levels of extends and instantiate symbols
-    _instantiate_extends_symbols(new_class.extends)
+    _instantiate_extends_symbols(
+        new_class.extends,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
 
     new_class.fully_instantiated = True
 
     return new_class
 
 
-def _instantiate_extends_symbols(extends: List[ast.InstanceClass]):
+def _instantiate_extends_symbols(
+    extends: List[ast.InstanceClass],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
+):
     for extend_node in extends:
         for symbol in extend_node.symbols.values():
-            _instantiate_symbol(symbol, extend_node)
+            _instantiate_symbol(
+                symbol,
+                extend_node,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+            )
         if extend_node.extends:
-            _instantiate_extends_symbols(extend_node.extends)
+            _instantiate_extends_symbols(
+                extend_node.extends,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+            )
 
 
 def _update_class_modification_scopes(
@@ -1206,6 +1293,8 @@ def _instantiate_extends(
     extends: Union[ast.ExtendsClause, ast.Class, ast.InstanceClass],
     modification_environment: ast.ClassModification,
     parent_instance: ast.InstanceClass,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
     partially: bool = False,
 ) -> ast.InstanceClass:
     """Instantiate an extends clause, partially or fully depending on partially flag"""
@@ -1213,12 +1302,22 @@ def _instantiate_extends(
     assert isinstance(extends, (ast.ExtendsClause, ast.Class))
     if not isinstance(extends, ast.Class):
         extends = _update_class_modification_scopes(extends, parent_instance)
-        extends_class = _find_extends_class(extends.component, parent_instance)
+        extends_class = _find_extends_class(
+            extends.component,
+            parent_instance,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
         class_modification = extends.class_modification
         # Partially instantiate the extends class
         # We are only doing this because we need to pass along the class_modification
         # FIXME: Apply class_modification through _instantiate_class somehow
-        lexical_parent = _get_lexical_parent_instance(extends_class, parent_instance)
+        lexical_parent = _get_lexical_parent_instance(
+            extends_class,
+            parent_instance,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
         extends_class = _instantiate_partially(
             extends_class,
             modification_environment,
@@ -1234,6 +1333,8 @@ def _instantiate_extends(
         extends_class,
         modification_environment,
         parent_instance,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
         update_parent_instance=False,
         partially=partially,
     )
@@ -1247,10 +1348,18 @@ def _instantiate_extends(
 def _find_extends_class(
     extends_name: Union[str, ast.ComponentRef],
     parent_instance: Union[InstanceTree, ast.InstanceClass],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
 ) -> Union[ast.Class, ast.InstanceClass]:
     """Find the extends class and do checks"""
 
-    extends_class = _find_name(extends_name, parent_instance, search_inherited=False)
+    extends_class = _find_name(
+        extends_name,
+        parent_instance,
+        search_inherited=False,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
 
     if extends_class is None:
         raise ModelicaSemanticError(
@@ -1275,12 +1384,19 @@ def _find_extends_class(
 def _get_lexical_parent_instance(
     class_: Union[ast.Class, ast.InstanceClass],
     lookup_scope: Union[ast.Class, ast.InstanceClass, InstanceTree],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
 ) -> Union[ast.InstanceClass, InstanceTree]:
     """Find the lexical parent instance of the given class"""
 
     if isinstance(class_, ast.InstanceClass):
         return class_.parent
-    found = _find_name(class_.name, lookup_scope)
+    found = _find_name(
+        class_.name,
+        lookup_scope,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
     if (
         found is not None
         and isinstance(found.parent, ast.InstanceClass)
@@ -1314,6 +1430,8 @@ def _is_transitively_replaceable(class_: ast.Class) -> bool:
 def _instantiate_symbol(
     symbol: ast.InstanceSymbol,
     parent_instance: ast.InstanceClass,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
 ) -> None:
     """Instantiate given symbol"""
 
@@ -1325,10 +1443,21 @@ def _instantiate_symbol(
         return
 
     modification_environment = symbol.modification_environment
-    _apply_redeclares(symbol, modification_environment, parent_instance)
+    _apply_redeclares(
+        symbol,
+        modification_environment,
+        parent_instance,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
 
     if not isinstance(symbol.type, ast.InstanceClass):
-        symbol_type = _find_name(symbol.type, parent_instance)
+        symbol_type = _find_name(
+            symbol.type,
+            parent_instance,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
         if symbol_type is None:
             raise NameLookupError(
                 f"Type {symbol.type} of symbol {symbol.name} "
@@ -1344,6 +1473,8 @@ def _instantiate_symbol(
         symbol_type,
         modification_environment,
         parent_instance,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
         update_parent_instance=False,
     )
     _copy_symbol_contents(symbol)
@@ -1508,6 +1639,8 @@ def _apply_redeclares(
     element: Union[ast.InstanceClass, ast.InstanceSymbol],
     modification_environment: ast.ClassModification,
     parent_instance: Union[ast.InstanceClass, InstanceTree],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
     partially: bool = False,
 ) -> bool:
     """Apply redeclare if any and remove from environment
@@ -1555,7 +1688,12 @@ def _apply_redeclares(
     else:  # ast.ComponentClause
         redeclare_name = redeclare.type.name
 
-    redeclare_class = _find_name(redeclare_name, scope_class)
+    redeclare_class = _find_name(
+        redeclare_name,
+        scope_class,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
 
     if redeclare_class is None:
         raise NameLookupError(
@@ -1581,6 +1719,8 @@ def _apply_redeclares(
         redeclare_class,
         modification_environment,
         parent_instance,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
         partially=partially,
     )
     redeclare_class.replaceable = redeclare.replaceable
@@ -1641,6 +1781,12 @@ def flatten_instance(
     if not isinstance(instance, ast.InstanceClass):
         raise TypeError(f"Expected InstanceClass, got {type(instance)}")
 
+    flat_class = _create_partial_flat_instance(instance)
+    _flatten_instance(instance, flat_class)
+    return flat_class
+
+
+def _create_partial_flat_instance(instance: ast.InstanceClass) -> ast.InstanceClass:
     flat_class = ast.InstanceClass(
         name=_flatten_name(instance),
         comment=instance.comment,
@@ -1662,13 +1808,14 @@ def flatten_instance(
         extends_copy.parent_instance = flat_class
         flat_class.extends.append(extends_copy)
 
-    _flatten_instance(instance, flat_class)
     return flat_class
 
 
 def _flatten_instance(
     instance: ast.InstanceClass,
     flat_class: ast.InstanceClass,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
+    instantiate_in_place: bool = False,
     prefix: str = "",
     keep_connectors: bool = False,
 ) -> None:
@@ -1676,6 +1823,8 @@ def _flatten_instance(
 
     :param instance: The instance class to flatten
     :param flat_class: The flattened class
+    :param current_extends: ...
+    :param instantiate_in_place: ...
     :param prefix: The prefix for the current instance
     :param keep_connectors: Whether to keep connectors in the flattened class
     :return: The flattened instance class
@@ -1743,7 +1892,13 @@ def _flatten_instance(
             flat_symbol.name = flat_name
             flat_class.symbols[flat_name] = flat_symbol
         elif not isinstance(flat_symbol.type, ast.InstanceClass):
-            resolved = _resolve_name(flat_symbol.type, instance, flat_class)
+            resolved = _resolve_name(
+                flat_symbol.type,
+                instance,
+                flat_class,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+            )
             is_class = isinstance(resolved, ast.InstanceClass)
             flat_symbol.type = resolved if is_class else resolved.parent
 
@@ -1757,17 +1912,34 @@ def _flatten_instance(
         # 1.4 Resolve modifications of value attributes of simple types and records
         # 1.5 Resolve modifications of other attributes of simple types
         if flat_symbol.type.name in InstanceTree.BUILTIN_TYPES or "record" in flat_symbol.prefixes:
-            _resolve_modifications(flat_symbol, flat_class)
+            _resolve_modifications(
+                flat_symbol,
+                flat_class,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+            )
         else:
             # 1.6 Recursively "handle" non-simple types
-            _flatten_instance(flat_symbol.type, flat_class, flat_name)
+            _flatten_instance(
+                flat_symbol.type,
+                flat_class,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+                prefix=flat_name,
+            )
 
     # 1.7 Resolve references in equations and algorithms
     _resolve_equation_and_algorithm_references(flat_class)
 
     # 1.8 Recursively "handle" unnamed extends instances
     for extends in instance.extends:
-        _flatten_instance(extends, flat_class, prefix)
+        _flatten_instance(
+            extends,
+            flat_class,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+            prefix=prefix,
+        )
 
     # 1.9 Check that all references now point to a valid instance (not conditionally false)
     _check_all_references_valid(flat_class)
@@ -1790,7 +1962,12 @@ def _resolve_dimensions(symbol: ast.InstanceSymbol, parent: ast.Class):
     pass
 
 
-def _resolve_modifications(symbol: ast.InstanceSymbol, flat_class: ast.InstanceClass) -> None:
+def _resolve_modifications(
+    symbol: ast.InstanceSymbol,
+    flat_class: ast.InstanceClass,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
+) -> None:
     """Resolve modifications of a symbol
     :param symbol: The symbol to resolve modifications for
     :param flat_class: The flattened class
@@ -1812,12 +1989,19 @@ def _resolve_modifications(symbol: ast.InstanceSymbol, flat_class: ast.InstanceC
         if arg.value.component == "value" and "record" in symbol.prefixes:
             # TODO: record value modification
             continue
-        _resolve_modification_attribute(symbol, arg)
+        _resolve_modification_attribute(
+            symbol,
+            arg,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
 
 
 def _resolve_modification_attribute(
     symbol: ast.InstanceSymbol,
     arg: ast.ClassModificationArgument,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
 ):
     # The spec says the modifications are resolved by creating equations, but we are
     # going to set the symbol attributes now and create equations for them in another
@@ -1831,7 +2015,13 @@ def _resolve_modification_attribute(
         value = value.value
     elif isinstance(value, ast.ComponentRef):
         assert isinstance(symbol.parent, ast.InstanceClass)
-        value = _resolve_name(value, arg.scope, symbol.parent)
+        value = _resolve_name(
+            value,
+            arg.scope,
+            symbol.parent,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
         value = cast(ast.InstanceSymbol, value)
     elif isinstance(value, ast.Array):
         # TODO: Handle array modifications
@@ -1891,6 +2081,8 @@ def _resolve_name(
     name: Union[str, ast.ComponentRef],
     scope: ast.InstanceClass,
     flat_class: ast.InstanceClass,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
 ) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
     """Flatten and resolve a name reference"""
     # * A. "all references by name in conditional declarations, modifications, dimension
@@ -1917,7 +2109,12 @@ def _resolve_name(
         # Fully instantiate the scope class to get instantiated symbol
         scope = _instantiate_class(scope, ast.ClassModification(), scope.parent)
 
-    found = _find_name(name, scope)
+    found = _find_name(
+        name,
+        scope,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
     if found is None:
         raise NameLookupError(f"Unable to resolve {name} in scope {scope.full_name}")
     is_symbol = isinstance(found, ast.Symbol)
@@ -1937,11 +2134,23 @@ def _resolve_name(
             # TODO: Implement direct instantiation of symbols
             # Fully instantiate the symbol parent class to get instantiated symbol
             assert found.parent is not None
-            found.parent = _instantiate_class_update_name(found.parent, scope, flat_name)
+            found.parent = _instantiate_class_update_name(
+                found.parent,
+                scope,
+                flat_name,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+            )
             found = found.parent.symbols[found.name]
             flat_class.symbols[flat_name] = found
         else:  # class
-            found = _instantiate_class_update_name(found, scope, flat_name)
+            found = _instantiate_class_update_name(
+                found,
+                scope,
+                flat_name,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+            )
             flat_class.classes[flat_name] = found
 
     return found
@@ -1951,9 +2160,17 @@ def _instantiate_class_update_name(
     class_: Union[ast.Class, ast.InstanceClass],
     parent: ast.InstanceClass,
     flat_name: str,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
 ) -> ast.InstanceClass:
     assert class_.parent is not None
-    instance = _instantiate_class(class_, ast.ClassModification(), parent)
+    instance = _instantiate_class(
+        class_,
+        ast.ClassModification(),
+        parent,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
     # Update the instance tree with the fully instantiated class
     assert instance.name is not None
     assert instance.parent is not None

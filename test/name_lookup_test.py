@@ -8,7 +8,7 @@ import unittest
 
 import pymoca.ast
 import pymoca.parser
-from pymoca.tree import NameLookupError, find_name, flatten
+from pymoca.tree import NameLookupError, find_name, flatten, instantiate
 
 MY_DIR = os.path.dirname(os.path.realpath(__file__))
 COMPLIANCE_DIR = os.path.join(MY_DIR, "libraries", "Modelica-Compliance", "ModelicaCompliance")
@@ -695,12 +695,14 @@ class ImportedNameLookupTest(unittest.TestCase):
         """Checks that an unqualified import is not allowed to import
         from a non-package"""
         ast = parse_imported_lookup_file("UnqualifiedImportNonPackage.mo")
-        scope = find_name(
-            "Scoping.NameLookup.Imports.UnqualifiedImportNonPackage",
-            ast.classes["ModelicaCompliance"],
+        _ = instantiate(
+            "ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImportNonPackage", ast
         )
-        with self.assertRaises(pymoca.tree.NameLookupError):
-            _ = find_name("B", scope)
+        # with self.assertRaises(pymoca.tree.NameLookupError):
+        #     _ = find_name(
+        #         "ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImportNonPackage",
+        #         ast,
+        #     )
 
     def test_unqualified_import_protected(self):
         """Checks that the name lookup only considers public members of

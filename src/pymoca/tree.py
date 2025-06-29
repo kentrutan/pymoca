@@ -469,12 +469,12 @@ def _find_simple_name(
     # Search through enclosing scopes until we find something or hit a boundary
     while True:
 
-        if instantiate_in_place:
-            current_scope = _instantiate_class_if_needed(
-                current_scope,
-                current_extends=current_extends,
-                instantiate_in_place=instantiate_in_place,
-            )
+        # if instantiate_in_place:
+        #     current_scope = _instantiate_class_if_needed(
+        #         current_scope,
+        #         current_extends=current_extends,
+        #         instantiate_in_place=instantiate_in_place,
+        #     )
 
         # Steps 1-3: Try local lookup first (iteration vars, classes, symbols)
         if found := _find_local(name, current_scope):
@@ -757,7 +757,8 @@ def _flatten_first_and_find_rest(
         parent_instance,
         current_extends=current_extends,
         instantiate_in_place=instantiate_in_place,
-        update_parent_instance=False,
+        # update_parent_instance=False,
+        partially=True,
     )
     flat_class = _create_partial_flat_instance(first_instance)
     _flatten_instance(
@@ -766,6 +767,8 @@ def _flatten_first_and_find_rest(
         current_extends=current_extends,
         instantiate_in_place=instantiate_in_place,
     )
+    # Need non-flat name for name lookup
+    flat_class.name = flat_class.name.split(".")[-1]
     first = flat_class
 
     # Classes with embedded references to the same class cause infinite recursion if we do

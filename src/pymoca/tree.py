@@ -24,6 +24,8 @@ class ModificationTargetNotFound(Exception):
 
 
 class ModelicaError(Exception):
+    """Common base class for all Modelica language errors"""
+
     def __init__(self, msg):
         self.msg = msg
         super().__init__(self)
@@ -36,14 +38,20 @@ class ModelicaError(Exception):
 
 
 class ModelicaSemanticError(ModelicaError):
+    """Error in meaning of Modelica code"""
+
     pass
 
 
 class NameLookupError(ModelicaError):
+    """Error looking up a Modelica name"""
+
     pass
 
 
 class InstantiationError(ModelicaError):
+    """Error instantiating a Modelica element"""
+
     pass
 
 

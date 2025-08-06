@@ -832,7 +832,7 @@ class Class(Node):
 
     @property
     def full_name(self) -> str:
-        """Return fully-qualified name of this class"""
+        """Return fully-qualified lexical name of this class"""
         return element_full_name(self)
 
     def _extend(self, other: "Class") -> None:
@@ -948,7 +948,7 @@ class Class(Node):
 
 
 def element_name_tuple(element: Union[Class, Symbol]) -> tuple[str]:
-    """Return fully-qualified name of an element as a tuple of names"""
+    """Return fully-qualified lexical name of an element as a tuple of names"""
     names = []
     current = element
     while current.parent is not None:
@@ -958,7 +958,7 @@ def element_name_tuple(element: Union[Class, Symbol]) -> tuple[str]:
 
 
 def element_full_name(element: Union[Class, Symbol]) -> str:
-    """Return fully-qualified name of an element"""
+    """Return fully-qualified lexical name of an element"""
     return ".".join(element_name_tuple(element))
 
 
@@ -983,6 +983,7 @@ class InstanceElement:
         self,
         ast_ref: Optional[Union[Class, Symbol]] = None,
         modification_environment: Optional[ClassModification] = None,
+        parent_instance: Optional["InstanceClass"] = None,
         fully_instantiated: bool = False,
         partially_instantiated: bool = False,
         **kwargs,
@@ -1016,6 +1017,12 @@ class InstanceElement:
 
         self.fully_instantiated = fully_instantiated
         self.partially_instantiated = partially_instantiated
+        self.parent_instance = parent_instance
+
+    @property
+    def full_instance_name(self) -> str:
+        """Return fully-qualified instance name of this element"""
+        return element_instance_full_name(self)
 
     # FIXME: Delete if not used
     def clone(self):
@@ -1032,14 +1039,30 @@ class InstanceElement:
         return f"name={self.name!r}, ast_ref={self.ast_ref!r}, modification_environment={self.modification_environment!r}"
 
 
+def element_instance_name_tuple(element: InstanceElement) -> tuple[str]:
+    """Return fully-qualified instance name of an element as a tuple of names"""
+    names = []
+    current = element
+    while hasattr(current, "parent_instance"):
+        assert current.parent_instance is not None
+        # Skip unnamed extends instances
+        if current.name:
+            names.append(current.name)
+        current = current.parent_instance
+    return tuple(reversed(names))
+
+
+def element_instance_full_name(element: InstanceElement) -> str:
+    """Return fully-qualified instance name of an element"""
+    return ".".join(element_instance_name_tuple(element))
+
+
 class InstanceClass(InstanceElement, Class):
     """
     Class used during instantiation and flattening of the model.
     """
 
     def __init__(self, **kwargs):
-        self.parent_instance = None  # type: Optional[InstanceClass]
-
         super().__init__(**kwargs)
 
     def __repr__(self):

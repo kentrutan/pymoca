@@ -233,7 +233,7 @@ class TreeWalker:
         """
         if (
             isinstance(tree, (ast.Class, ast.Symbol))
-            and child_name == "parent"
+            and child_name in ("parent", "parent_instance")
             or isinstance(tree, ast.ClassModificationArgument)
             and child_name in ("scope", "__deepcopy__")
         ):

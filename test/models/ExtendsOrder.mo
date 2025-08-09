@@ -1,4 +1,4 @@
-// Taken from https://trac.modelica.org/Modelica/ticket/1829#comment:38
+// Taken from https://github.com/modelica/ModelicaSpecification/issues/1829#issuecomment-435677277
 package P
   model BT
     parameter Real m = -1;

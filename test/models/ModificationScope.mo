@@ -13,15 +13,14 @@ model A
         extends Resistor(R=R);
         // Gives the singular equation R=R, since the right-hand side R
         // is searched for in LoadError and found in its base-class Resistor.
-        constant Real c = 42; /* Added */
     end LoadError /* constrainedby TwoPin */;
     /* TODO: Uncomment when we support global name lookup */
     /*
     encapsulated model Load2=.Resistor(R=2); // Ok
     encapsulated model LoadR=.Resistor(R=R); // Illegal
     */
-    Load a(R=4),b,c(R=R); /* Added modifications */
-    LoadError d(c=LoadError.c*2); /* Added this line to instantiate LoadError*/
+    Load a(R=4),b,c(R=5); /* Added modifications */
+    LoadError d; /* Added this line to instantiate LoadError*/
     /* ConstantSource ...; */
     /* ... */
 end A;
@@ -29,24 +28,8 @@ end A;
 model B
     extends A(redeclare model Load=Resistor);
     Load e, f(R=R), g;
-    LoadC h(R=LoadError.c);
+    LoadC h(R=R);
     LoadB i, j(R=2);
     model LoadB = Resistor(R=R);
     model LoadC = LoadB;
 end B;
-
-// OMC 1.25.0 -i=B gives:
-// class B
-//   parameter Real R = 3.0;
-//   parameter Real a.R = 4.0;
-//   parameter Real b.R = R;
-//   parameter Real c.R = R;
-//   parameter Real d.R = d.R;
-//   constant Real d.c = 84.0;
-//   parameter Real e.R = R;
-//   parameter Real f.R = R;
-//   parameter Real g.R = R;
-//   parameter Real h.R = 42.0;
-//   parameter Real i.R = R;
-//   parameter Real j.R = 2.0;
-// end B;

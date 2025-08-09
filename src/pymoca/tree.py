@@ -8,7 +8,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import copy  # TODO
 import logging
 import sys
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from typing import Iterable, List, Optional, Set, Tuple, Union, cast
 
 import numpy as np
@@ -1075,8 +1075,8 @@ def _instantiate_class(
         from_class = orig_class
 
     # Maintain lexical instance tree for the new class
-    if new_class.name in lexical_parent.classes:
-        lexical_parent = lexical_parent.classes[new_class.name]
+    if new_class.ast_ref.name in lexical_parent.classes:
+        lexical_parent = lexical_parent.classes[new_class.ast_ref.name]
     else:
         lexical_parent = _instantiate_partially(
             from_class,
@@ -1878,11 +1878,111 @@ def _resolve_modification_attribute(
         raise NotImplementedError("Array modifications not implemented yet")
         # value = _resolve_array(value, arg.scope, symbol.parent)
     elif isinstance(value, ast.Expression):
-        # TODO: Handle expression modifications
-        raise NotImplementedError("Expression modifications not implemented yet")
-        # value = _resolve_expression(value, arg.scope, symbol.parent)
+        value = _resolve_expression(
+            value,
+            arg.scope,
+            symbol.parent_instance,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
 
     setattr(symbol, mod.component.name, value)
+
+
+class ExpressionEvaluator(TreeListener):
+    """Calculate an ast.Expression tree containing only Primary and ComponentRef operands
+
+    TODO: Ensure expression evaluation is according to Modelica spec"""
+
+    # How to transform Modelica operators to Python
+    transform_operator = defaultdict(
+        None,
+        {
+            "+": "+",
+            "-": "-",
+            "*": "*",
+            "/": "/",
+            "^": "**",
+            "and": "and",
+            "or": "or",
+            "not": "not",
+            "<": "<",
+            "<=": "<=",
+            ">": ">",
+            ">=": ">=",
+            "==": "==",
+            "<>": "!=",
+        },
+    )
+
+    def __init__(
+        self,
+        scope: ast.InstanceClass,
+        flat_class: ast.InstanceClass,
+        current_instances: Optional[Set[ast.InstanceClass]],
+        current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+        instantiate_in_place: bool,
+    ):
+        self.scope = scope
+        self.flat_class = flat_class
+        self.current_instances = current_instances
+        self.current_extends = current_extends
+        self.instantiate_in_place = instantiate_in_place
+
+        self.result = None
+        super().__init__()
+
+    def enterExpression(self, tree: ast.Expression):
+        operator = self.transform_operator[str(tree.operator)]
+        if operator is None:
+            raise NotImplementedError(f"Unsupported operator {tree.operator} in {tree:r}")
+        operands = []
+        for operand in tree.operands:
+            if isinstance(operand, ast.ComponentRef):
+                operand = _resolve_name(
+                    operand,
+                    self.scope,
+                    self.flat_class,
+                    self.current_instances,
+                    self.current_extends,
+                    self.instantiate_in_place,
+                )
+            if not isinstance(operand, (ast.Primary, ast.Symbol)):
+                raise NotImplementedError(f"Expression operand type not implemented: {operand!r}")
+            operands.append(operand)
+
+        if len(operands) == 1:
+            expr_parts = (operator, operands[0].value)
+        else:
+            expr_parts = (operands[0].value, operator, operands[1].value)
+        expr = " ".join(str(part) for part in expr_parts)
+        try:
+            self.result = eval(expr)
+        except Exception:
+            raise ModelicaSemanticError(f"Unable to evaluate expression: {expr}")
+
+
+def _resolve_expression(
+    expr: ast.Expression,
+    scope: ast.InstanceClass,
+    flat_class: ast.InstanceClass,
+    current_instances: Optional[Set[ast.InstanceClass]],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
+) -> Optional[Union[int, float, bool, str]]:
+    """Calculate the given expression or return None if not possible"""
+    assert isinstance(expr, ast.Expression)
+    listener = ExpressionEvaluator(
+        scope=scope,
+        flat_class=flat_class,
+        current_instances=current_instances,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
+    walker = TreeWalker()
+    walker.walk(listener, expr)
+    return listener.result
 
 
 def _resolve_equation_and_algorithm_references(flat_class: ast.InstanceClass):

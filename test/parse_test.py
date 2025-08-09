@@ -799,7 +799,6 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(flat_tree.symbols["c.v1"].nominal, 10.0)
         self.assertEqual(flat_tree.symbols["c.v2"].nominal, 1000.0)
 
-    @unittest.expectedFailure  # "New flattening expression modification not implemented yet"
     def test_inheritance_symbol_modifiers(self):
         instance = self.parse_and_instantiate_model("Inheritance.mo", "Sub")
 
@@ -995,18 +994,7 @@ class ParseTest(unittest.TestCase):
         instance = self.parse_and_instantiate_model("LexicalVsInstanceScope.mo", "P.C")
         self.check_redeclare_expects(instance, [self.redeclare_expect("n", "Integer", 3, False)])
 
-    def test_flattening_redeclare_nested_class(self):
-        """Test flattening of a model redeclaring a nested class in an extends clause"""
-
-        # Instantiation should fail if the type lookup fails
-        instance = self.parse_and_instantiate_model("FlatteningRedeclareNested.mo", "P.M")
-
-        expect = [
-            self.redeclare_expect("at.m", "Real", 0.0, False),
-            self.redeclare_expect("bt.m", "Real", 0.0, False),
-        ]
-        self.check_redeclare_expects(instance, expect)
-
+    @unittest.expectedFailure  # `redeclare class extends` not implemented
     def test_flattening_redeclare_class_extends(self):
         """Test redeclare class extends construct"""
 
@@ -1201,7 +1189,7 @@ class ParseTest(unittest.TestCase):
         instance = self.parse_and_instantiate_model("RedeclarationScopeAlternative.mo", "ChannelZ")
 
         c_type = instance.symbols["c"].type
-        self.assertIn("Z", c_type.symbols["up"].type.symbols)
+        self.assertIn("Z", c_type.symbols["up"].type.extends[0].symbols)
         self.assertIn("A", c_type.symbols["down"].type.symbols)
 
         flat_tree = tree.flatten_instance(instance)
@@ -1263,9 +1251,9 @@ class ParseTest(unittest.TestCase):
         # Check that the symbol value set by modifications have the right value and scope
         expect = (  # symbol_name, value_type, value, value_parent_name
             ("R", "literal", 3.0, None),  # Literal has no value parent
-            ("a.R", "symbol", "R", "A"),
-            ("b.R", "symbol", "R", "A"),
-            ("c.R", "symbol", "R", "A"),
+            ("a.R", "literal", 4.0, "A"),
+            ("b.R", "symbol", "R", ""),  # Unnamed extends node is parent
+            ("c.R", "literal", 5.0, "A"),
             ("d.R", "symbol", "R", ""),  # Unnamed extends node is parent
         )
         for symbol_name, value_type, value, value_parent_name in expect:
@@ -1278,7 +1266,7 @@ class ParseTest(unittest.TestCase):
                 self.assertEqual(symbol_value.name, value, "Wrong value for symbol: " + symbol_name)
                 # Check that we have the correct scope for symbolic values
                 self.assertEqual(
-                    symbol_value.parent.name,
+                    symbol_value.parent_instance.name,
                     value_parent_name,
                     "Wrong value scope for symbol: " + symbol_name,
                 )

@@ -24,7 +24,7 @@ from pymoca import ast
 from pymoca import parser
 from pymoca import tree
 from pymoca.parser import DEFAULT_MODEL_CACHE_DB
-
+from pymoca.tree._name_lookup import _find_name
 
 MY_DIR = os.path.dirname(os.path.realpath(__file__))
 MODEL_DIR = os.path.join(MY_DIR, "models")
@@ -918,7 +918,7 @@ class ParseTest(unittest.TestCase):
     def check_redeclare_expects(self, instance, expects):
         """Check that the redeclare expectations are met in the given instance"""
         for name, type_, value, replaceable in expects:
-            x = tree._find_name(name, instance, check_encapsulated=False)
+            x = _find_name(name, instance, check_encapsulated=False)
             self.assertIsNotNone(x, f"{name} not found in instance")
             self.assertTrue(x.replaceable == replaceable, f"for {name}")
             if x.type.type == "type":
@@ -1007,7 +1007,7 @@ class ParseTest(unittest.TestCase):
         instance = self.parse_and_instantiate_model(
             "NestedExtendsModification.mo", "NestedExtendsModification.ValM"
         )
-        x = tree._find_name("x", instance, check_encapsulated=False)
+        x = _find_name("x", instance, check_encapsulated=False)
         self.assertIsNotNone(x, "x not found in ValM instance")
         value_args = get_modifiers_by_name(x, "value")
         self.assertTrue(len(value_args) > 0, "x missing value modification")

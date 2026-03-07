@@ -6,3 +6,4 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "name_lookup: Name lookup level compliance test")
     config.addinivalue_line("markers", "instantiation: Instantiation level compliance test")
     config.addinivalue_line("markers", "flattening: Flattening level compliance test")
+    config.addinivalue_line("markers", "value_check: Compile-time value checking test")

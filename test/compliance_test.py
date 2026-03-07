@@ -1,5 +1,6 @@
 """Automated ModelicaCompliance tests for name lookup, instantiation, and flattening."""
 
+import collections
 import os
 import re
 
@@ -25,6 +26,40 @@ COMPLIANCE_DIR = os.path.join(MY_DIR, "libraries", "Modelica-Compliance", "Model
 COMPLIANCE_AVAILABLE = os.path.isfile(os.path.join(COMPLIANCE_DIR, "Icons.mo"))
 
 _SHOULD_PASS_RE = re.compile(r"shouldPass\s*=\s*(true|false)", re.IGNORECASE)
+
+# Matches: assert(expr == value, "msg") or assert(expr == value, "msg");
+_ASSERT_DIRECT_RE = re.compile(
+    r"assert\s*\(\s*"
+    r"([\w.]+)\s*==\s*"  # lhs == rhs
+    r"([\d.eE+-]+)"  # numeric literal
+    r'\s*,\s*"[^"]*"\s*\)',
+)
+
+# Matches: assert(Util.compareReal(expr, value), "msg")
+_ASSERT_COMPARE_RE = re.compile(
+    r"assert\s*\(\s*Util\.compareReal\s*\(\s*"
+    r"([\w.]+)\s*,\s*"  # variable
+    r"([\d.eE+-]+)"  # numeric literal
+    r'\s*\)\s*,\s*"[^"]*"\s*\)',
+)
+
+AssertionInfo = collections.namedtuple("AssertionInfo", ["variable", "expected", "approx"])
+
+
+def parse_assertions(mo_file_path):
+    """Extract assert(...) conditions from a .mo file.
+
+    Returns list of AssertionInfo(variable, expected, approx) where approx=True
+    for Util.compareReal checks.
+    """
+    with open(mo_file_path, "r", encoding="utf-8") as f:
+        text = f.read()
+    results = []
+    for m in _ASSERT_DIRECT_RE.finditer(text):
+        results.append(AssertionInfo(m.group(1), float(m.group(2)), False))
+    for m in _ASSERT_COMPARE_RE.finditer(text):
+        results.append(AssertionInfo(m.group(1), float(m.group(2)), True))
+    return results
 
 
 def parse_should_pass(mo_file_path):
@@ -98,11 +133,11 @@ KNOWN_FAILURES = {}
 
 # All global tests fail at all levels (parse error)
 for _model in _GLOBAL_MODELS:
-    for _level in ("name_lookup", "instantiation", "flattening"):
+    for _level in ("name_lookup", "instantiation", "flattening", "value_check"):
         KNOWN_FAILURES[(_level, _model)] = _GLOBAL_REASON
 
 # QualifiedImportConflict fails at all levels (parse error)
-for _level in ("name_lookup", "instantiation", "flattening"):
+for _level in ("name_lookup", "instantiation", "flattening", "value_check"):
     KNOWN_FAILURES[(_level, _IMPORT_CONFLICT)] = _IMPORT_CONFLICT_REASON
 
 # Flattening WIP — models that pass instantiation but fail flattening
@@ -132,6 +167,7 @@ _FLATTEN_WIP = {
 }
 for _model, _reason in _FLATTEN_WIP.items():
     KNOWN_FAILURES[("flattening", _model)] = _reason
+    KNOWN_FAILURES[("value_check", _model)] = _reason
 
 # Inheritance/Modification/Redeclare — instantiation failures (cascade to flattening+value_check)
 _INST_FAILURES = {
@@ -321,3 +357,60 @@ def test_compliance_flatten(mo_path, model_name, should_pass):
             NotImplementedError,
         ):
             pass  # Expected failure
+
+
+# ---------------------------------------------------------------------------
+# Value checking tests (Phase 2a)
+# ---------------------------------------------------------------------------
+
+
+def _resolve_symbol_value(flat, var_name):
+    """Try to resolve a symbol's value to a numeric literal.
+
+    Returns the numeric value, or None if not resolvable.
+    """
+    sym = flat.symbols.get(var_name)
+    if sym is None:
+        return None
+    v = sym.value
+    if isinstance(v, (int, float)):
+        return v
+    return None
+
+
+@pytest.mark.compliance
+@pytest.mark.value_check
+@pytest.mark.parametrize(
+    "mo_path, model_name, should_pass",
+    build_params("value_check", NAME_LOOKUP_CATEGORIES) if COMPLIANCE_AVAILABLE else [],
+)
+def test_compliance_value_check(mo_path, model_name, should_pass):
+    """Test that flattened symbol values match assert() expectations in .mo file."""
+    if not should_pass:
+        pytest.skip("Value checking only applies to shouldPass=true models")
+
+    assertions = parse_assertions(mo_path)
+    if not assertions:
+        pytest.skip("No assertions found in model")
+
+    ast_tree = load_compliance_model(mo_path)
+    assert ast_tree is not None, f"Failed to parse {mo_path}"
+
+    instance = instantiate(model_name, ast_tree)
+    flat = flatten_instance(instance)
+    assert flat is not None
+
+    checked = 0
+    for assertion in assertions:
+        value = _resolve_symbol_value(flat, assertion.variable)
+        if value is None:
+            continue  # Symbol not found or value not resolved to literal
+        checked += 1
+        if assertion.approx:
+            assert (
+                abs(value - assertion.expected) < 1e-10
+            ), f"{assertion.variable}: expected ~{assertion.expected}, got {value}"
+        else:
+            assert (
+                value == assertion.expected
+            ), f"{assertion.variable}: expected {assertion.expected}, got {value}"

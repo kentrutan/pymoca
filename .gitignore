@@ -67,6 +67,10 @@ pymoca/version.py
 .idea/
 .vscode/
 
+# AI
+.claude
+tmp
+
 # virtual environments
 venv/
 venv3/

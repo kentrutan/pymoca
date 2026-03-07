@@ -994,6 +994,28 @@ class ParseTest(unittest.TestCase):
         instance = self.parse_and_instantiate_model("LexicalVsInstanceScope.mo", "P.C")
         self.check_redeclare_expects(instance, [self.redeclare_expect("n", "Integer", 3, False)])
 
+    def test_value_modification_ordering(self):
+        """Test that value-only modifications at 3+ nesting levels pick the outermost value.
+
+        ValF defines Real x = 1.0. ValD extends ValF(x=2.0). ValA extends ValC(ValD(x=3.0)).
+        ValM extends ValA.ValD(x=4.0). The outermost value (4.0) should win.
+
+        This is the same root cause as the redeclare ordering bug in
+        test_redeclare_component_complicated but for non-redeclare value modifications.
+        """
+
+        instance = self.parse_and_instantiate_model(
+            "NestedExtendsModification.mo", "NestedExtendsModification.ValM"
+        )
+        x = tree._find_name("x", instance, check_encapsulated=False)
+        self.assertIsNotNone(x, "x not found in ValM instance")
+        value_args = get_modifiers_by_name(x, "value")
+        self.assertTrue(len(value_args) > 0, "x missing value modification")
+        # "Last wins" — the last value modification should be 4.0 (outermost)
+        value_mod = value_args[-1].value.modifications[0]
+        self.assertIsInstance(value_mod, ast.Primary)
+        self.assertEqual(value_mod.value, 4.0, "Outermost value modification (4.0) should win")
+
     @unittest.expectedFailure  # `redeclare class extends` not implemented
     def test_flattening_redeclare_class_extends(self):
         """Test redeclare class extends construct"""
@@ -1096,7 +1118,8 @@ class ParseTest(unittest.TestCase):
         expect = [
             self.redeclare_expect("num", "Real", 7.0, False),
             self.redeclare_expect("b.num", "Integer", 5, True),
-            self.redeclare_expect("g", "G", 8.0, False),
+            # G is `type G = Real`, so resolves to Real at the symbol level
+            self.redeclare_expect("g", "Real", 8.0, False),
         ]
         self.check_redeclare_expects(instance, expect)
 

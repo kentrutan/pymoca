@@ -373,13 +373,16 @@ def _find_name(
     )
 
     # Lookup rest of name (e.g. `B.C`) to complete composite name lookup
+    # Per MLS 5.6.1, search_inherited=False only restricts the first (simple) name
+    # lookup in extends clauses. Once the first name is found, the rest of the
+    # composite name should use normal lookup including inherited elements.
     if found is not None and rest_of_name:
         found = _find_rest_of_name(
             found,
             rest_of_name,
             search_imports=search_imports,
             search_parent=search_parent,
-            search_inherited=search_inherited,
+            search_inherited=True,
             check_encapsulated=check_encapsulated,
             instantiate_in_place=instantiate_in_place,
             current_extends=current_extends,

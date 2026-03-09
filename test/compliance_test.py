@@ -364,17 +364,65 @@ def test_compliance_flatten(mo_path, model_name, should_pass):
 # ---------------------------------------------------------------------------
 
 
-def _resolve_symbol_value(flat, var_name):
+def _extract_value_from_class_mod(sym):
+    """Extract numeric value from a Symbol's class_modification (value=X pattern).
+
+    For symbols like `constant Real x = 5.1`, the value 5.1 is stored in
+    class_modification as ElementModification(component=value, modifications=[Primary(value=5.1)]).
+    """
+    cm = sym.class_modification
+    if not cm:
+        return None
+    for arg in cm.arguments:
+        em = arg.value
+        if hasattr(em, "component") and str(em.component) == "value":
+            if hasattr(em, "modifications") and em.modifications:
+                m = em.modifications[0]
+                if isinstance(m, ast.Primary) and isinstance(m.value, (int, float)):
+                    return m.value
+    return None
+
+
+def _resolve_symbol_value(flat, var_name, _visited=None):
     """Try to resolve a symbol's value to a numeric literal.
+
+    Follows InstanceSymbol reference chains through flat.symbols to find resolved
+    numeric values. For package constants not in flat.symbols, falls back to
+    ast_ref.class_modification.
 
     Returns the numeric value, or None if not resolvable.
     """
+    if _visited is None:
+        _visited = set()
+    if var_name in _visited:
+        return None  # Cycle detection
+    _visited.add(var_name)
+
     sym = flat.symbols.get(var_name)
     if sym is None:
         return None
     v = sym.value
     if isinstance(v, (int, float)):
         return v
+    if not isinstance(v, ast.InstanceSymbol):
+        return None
+
+    ref_name = v.name
+
+    # Strategy 1: Prefix-based lookup in flat.symbols
+    # e.g., var_name="b.y", ref_name="x" -> try "b.x"
+    prefix = var_name.rsplit(".", 1)[0] if "." in var_name else ""
+    candidate = (prefix + "." + ref_name) if prefix else ref_name
+    result = _resolve_symbol_value(flat, candidate, _visited)
+    if result is not None:
+        return result
+
+    # Strategy 2: ast_ref.class_modification for package constants
+    # e.g., ref_name="P.P.x" where P.x has `constant Real x = 5.1`
+    result = _extract_value_from_class_mod(v.ast_ref)
+    if result is not None:
+        return result
+
     return None
 
 
@@ -414,3 +462,6 @@ def test_compliance_value_check(mo_path, model_name, should_pass):
             assert (
                 value == assertion.expected
             ), f"{assertion.variable}: expected {assertion.expected}, got {value}"
+
+    if checked == 0:
+        pytest.skip(f"No assertions resolved to numeric values ({len(assertions)} skipped)")

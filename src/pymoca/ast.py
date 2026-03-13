@@ -1044,8 +1044,13 @@ def element_instance_name_tuple(element: InstanceElement) -> tuple[str]:
     current = element
     while hasattr(current, "parent_instance"):
         assert current.parent_instance is not None
-        # Skip unnamed extends instances
-        if current.name:
+        # Skip unnamed extends instances AND type class instances
+        # (type classes are InstanceClass nodes whose parent is an InstanceSymbol;
+        # per MLS 5.6.2 the symbol's component name is used, not the class name)
+        if current.name and not (
+            isinstance(current, InstanceClass)
+            and isinstance(current.parent_instance, InstanceSymbol)
+        ):
             names.append(current.name)
         current = current.parent_instance
     return tuple(reversed(names))

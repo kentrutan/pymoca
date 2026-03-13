@@ -1,0 +1,593 @@
+#!/usr/bin/env python
+"""
+Tests for tree.flatten_instance() / tree.flatten().
+"""
+
+from conftest_parse import (
+    _flush,
+    parse_and_instantiate_model,
+    parse_model_files,
+)
+
+from pymoca import ast
+from pymoca import parser
+from pymoca import tree
+
+import pytest
+
+
+def test_aircraft():
+    ast_tree = parse_model_files("Aircraft.mo")
+    print("AST TREE\n", ast_tree)
+    instance = tree.instantiate("Aircraft", ast_tree)
+    flat_tree = tree.flatten_instance(instance)
+    print("AST TREE FLAT\n", flat_tree)
+    _flush()
+
+
+def test_bouncing_ball():
+    ast_tree = parse_model_files("BouncingBall.mo")
+    print("AST TREE\n", ast_tree)
+    instance = tree.instantiate("BouncingBall", ast_tree)
+    flat_tree = tree.flatten_instance(instance)
+    print(flat_tree)
+    print("AST TREE FLAT\n", flat_tree)
+    _flush()
+
+
+def test_estimator():
+    ast_tree = parse_model_files("./Estimator.mo")
+    print("AST TREE\n", ast_tree)
+    instance = tree.instantiate("Estimator", ast_tree)
+    flat_tree = tree.flatten_instance(instance)
+    print("AST TREE FLAT\n", flat_tree)
+    _flush()
+
+
+def test_spring():
+    ast_tree = parse_model_files("Spring.mo")
+    print("AST TREE\n", ast_tree)
+    instance = tree.instantiate("Spring", ast_tree)
+    flat_tree = tree.flatten_instance(instance)
+    print("AST TREE FLAT\n", flat_tree)
+    _flush()
+
+
+def test_duplicate_state():
+    ast_tree = parse_model_files("DuplicateState.mo")
+    print("AST TREE\n", ast_tree)
+    instance = tree.instantiate("DuplicateState", ast_tree)
+    flat_tree = tree.flatten_instance(instance)
+    print("AST TREE FLAT\n", flat_tree)
+    _flush()
+
+
+def test_function_pull():
+    ast_tree = parse_model_files("FunctionPull.mo")
+
+    class_name = "Level1.Level2.Level3.Function5"
+    comp_ref = ast.ComponentRef.from_string(class_name)
+
+    flat_tree = tree.flatten(ast_tree, comp_ref)
+
+    # Check if all referenced functions are pulled in
+    assert "Level1.Level2.Level3.f" in flat_tree.classes
+    assert "Level1.Level2.Level3.TestPackage.times2" in flat_tree.classes
+    assert "Level1.Level2.Level3.TestPackage.square" in flat_tree.classes
+    assert "Level1.Level2.Level3.TestPackage.not_called" not in flat_tree.classes
+
+    # Check if the classes in the flattened tree have the right type
+    assert flat_tree.classes["Level1.Level2.Level3.Function5"].type == "model"
+
+    assert flat_tree.classes["Level1.Level2.Level3.f"].type == "function"
+    assert flat_tree.classes["Level1.Level2.Level3.TestPackage.times2"].type == "function"
+    assert flat_tree.classes["Level1.Level2.Level3.TestPackage.square"].type == "function"
+
+    # Check whether input/output information of functions comes along properly
+    func_t2 = flat_tree.classes["Level1.Level2.Level3.TestPackage.times2"]
+    assert "input" in func_t2.symbols["x"].prefixes
+    assert "output" in func_t2.symbols["y"].prefixes
+
+    # Check if built-in function call statement comes along properly
+    func_f = flat_tree.classes["Level1.Level2.Level3.f"]
+    assert func_f.statements[0].right.operator == "*"
+    # Check if user-specified function call statement comes along properly
+    assert (
+        func_f.statements[0].right.operands[0].operator == "Level1.Level2.Level3.TestPackage.times2"
+    )
+
+
+def test_flattening_inheritance_tree():
+    """Test flattening multi-level class hierarchy with modifications but no equations"""
+    instance = parse_and_instantiate_model("InstantiationTree.mo", "TreeModel.Tree")
+    flat_tree = tree.flatten_instance(instance)
+    expect = (
+        ("w", "nominal", 2.0),
+        ("b.t", "nominal", 1.0),
+        ("l.c", "value", 1),
+        ("l2.c", "value", 2),
+        ("t", "nominal", 2.0),
+    )
+    for name, attr, value in expect:
+        assert name in flat_tree.symbols
+        symbol = flat_tree.symbols[name]
+        assert getattr(symbol, attr) == value
+
+
+def test_flattening_spring_system():
+    """Test flattening of a simple class hierarchy with equations"""
+    instance = parse_and_instantiate_model("SpringSystemExample.mo", "Example.SpringSystem")
+    flat_tree = tree.flatten_instance(instance)
+    for name in ("spring.x", "spring.f", "damper.v", "damper.f", "damper.c"):
+        assert name in flat_tree.symbols, f"Name not flattened: {name}"
+
+    # Verify equations were collected and refs resolved
+    assert len(flat_tree.equations) > 0, "No equations collected"
+
+
+def test_equation_ref_resolution_bouncing_ball():
+    """Verify equation ComponentRefs are resolved to flat names"""
+    instance = parse_and_instantiate_model("BouncingBall.mo", "BouncingBall")
+    flat_tree = tree.flatten_instance(instance)
+
+    # BouncingBall has: der(height) = velocity; der(velocity) = -g;
+    assert len(flat_tree.equations) >= 2
+
+    # Collect all ComponentRef names from equations
+    ref_names = set()
+    _collect_component_ref_names(flat_tree.equations, ref_names)
+
+    # All refs should be flat (no children) and match known symbols or builtins
+    for name in ref_names:
+        assert "." not in name or name in flat_tree.symbols, f"Unresolved hierarchical ref: {name}"
+    # Known symbols should appear
+    assert "height" in ref_names
+    assert "velocity" in ref_names
+
+    # All refs should have no children (fully flattened)
+    _assert_no_child_refs(flat_tree.equations)
+
+
+def test_equation_ref_resolution_spring_system():
+    """Verify cross-component equation refs are resolved with prefixes"""
+    instance = parse_and_instantiate_model("SpringSystemExample.mo", "Example.SpringSystem")
+    flat_tree = tree.flatten_instance(instance)
+
+    ref_names = set()
+    _collect_component_ref_names(flat_tree.equations, ref_names)
+
+    # SpringSystem equations reference nested symbols: spring.x, damper.v, etc.
+    assert "spring.x" in ref_names
+    assert "damper.v" in ref_names
+    assert "spring.f" in ref_names
+    assert "damper.f" in ref_names
+    # Spring's own equation f = -k*x should be resolved to spring.f, spring.k, spring.x
+    assert "spring.k" in ref_names
+
+    # All resolved refs should exist in flat_class.symbols
+    for name in ref_names:
+        if name not in ("time",):  # builtins are OK to not be in symbols
+            assert name in flat_tree.symbols, f"Ref {name!r} not in flat symbols"
+
+    # All refs should have no children (fully flattened)
+    _assert_no_child_refs(flat_tree.equations)
+
+
+def test_equation_ref_resolution_nested_component():
+    """Verify equations from nested components get correct prefix"""
+    instance = parse_and_instantiate_model("SpringSystemExample.mo", "Example.SpringSystem")
+    flat_tree = tree.flatten_instance(instance)
+
+    # Spring's equation is f = -k*x. After flattening under prefix "spring",
+    # this should become spring.f = -spring.k * spring.x
+    # Find the equation that has spring.k (the spring constant equation)
+    spring_eq_found = False
+    for eq in flat_tree.equations:
+        ref_names = set()
+        _collect_component_ref_names([eq], ref_names)
+        if "spring.k" in ref_names:
+            spring_eq_found = True
+            assert "spring.f" in ref_names or "spring.x" in ref_names
+    assert spring_eq_found, "Spring's internal equation not found"
+
+
+def _collect_component_ref_names(nodes, names):
+    """Recursively collect all ComponentRef names from a list of AST nodes"""
+    for node in nodes:
+        if isinstance(node, ast.ComponentRef):
+            names.add(node.name)
+        if isinstance(node, ast.Node):
+            for attr in node.__dict__:
+                val = getattr(node, attr)
+                if isinstance(val, ast.Node):
+                    _collect_component_ref_names([val], names)
+                elif isinstance(val, list):
+                    _collect_component_ref_names(val, names)
+                elif isinstance(val, dict):
+                    _collect_component_ref_names(list(val.values()), names)
+
+
+def _assert_no_child_refs(nodes):
+    """Assert all ComponentRefs in the tree have no children (fully flattened)"""
+    for node in nodes:
+        if isinstance(node, ast.ComponentRef):
+            assert (
+                len(node.child) == 0
+            ), f"ComponentRef {node.name!r} still has children: {node.child}"
+        if isinstance(node, ast.Node):
+            for attr in node.__dict__:
+                val = getattr(node, attr)
+                if isinstance(val, ast.Node):
+                    _assert_no_child_refs([val])
+                elif isinstance(val, list):
+                    _assert_no_child_refs(val)
+                elif isinstance(val, dict):
+                    _assert_no_child_refs(list(val.values()))
+
+
+def test_flattening_modification_scope():
+    """Test for correct scope for references and values of modifications"""
+    instance = parse_and_instantiate_model("ModificationScope.mo", "A")
+    flat_tree = tree.flatten_instance(instance)
+    # Check that the symbol value set by modifications have the right value and scope
+    expect = (  # symbol_name, value_type, value, value_parent_name
+        ("R", "literal", 3.0, None),  # Literal has no value parent
+        ("a.R", "literal", 4.0, "A"),
+        ("b.R", "symbol", "R", ""),  # Unnamed extends node is parent
+        ("c.R", "literal", 5.0, "A"),
+        ("d.R", "symbol", "R", ""),  # Unnamed extends node is parent
+    )
+    for symbol_name, value_type, value, value_parent_name in expect:
+        symbol_value = flat_tree.symbols[symbol_name].value
+        if value_type == "literal":
+            assert symbol_value == value, "Wrong value for symbol: " + symbol_name
+        elif value_type == "symbol":
+            # Check that we have the correct reference for symbolic values
+            assert isinstance(symbol_value, ast.Symbol)
+            assert symbol_value.name == value, "Wrong value for symbol: " + symbol_name
+            # Check that we have the correct scope for symbolic values
+            assert symbol_value.parent_instance.name == value_parent_name, (
+                "Wrong value scope for symbol: " + symbol_name
+            )
+        else:
+            raise AssertionError(f"Unexpected value type in test: {value_type}")
+
+
+def test_extends_order():
+    instance = parse_and_instantiate_model("ExtendsOrder.mo", "P.M")
+
+    flat_tree = tree.flatten_instance(instance)
+
+    assert flat_tree.symbols["at.m"].value == 0.0
+
+
+def test_constant_references():
+    instance = parse_and_instantiate_model("ConstantReferences.mo", "b")
+
+    # Since b extends a and a has no symbols, new instantiation stops there
+    # Instead we will check for the redeclare being applied correctly
+    b_m_mod = instance.extends[0].classes["m"].modification_environment.arguments[0]
+    assert b_m_mod.value.name == "m"
+    assert b_m_mod.value.component.name == "m2"
+
+    flat_tree = tree.flatten_instance(instance)
+
+    # TODO: Update after constant reference evaluation is implemented
+    # This was the Pymoca v0.10 test:
+    # self.assertEqual(flat_tree.symbols["m.p"].value, 2.0)
+    # self.assertEqual(flat_tree.symbols["M2.m.f"].value, 3.0)
+
+    # This is what we expect after the new flattening
+    assert flat_tree.symbols["y"].value.name == "m.p"
+    assert flat_tree.symbols["y"].value.parent_instance.name == "b"  # Reparented to flat class
+    assert flat_tree.symbols["z"].value.name == "P0.p"
+    # TODO: Uncomment after equation references and constant references are implemented
+    # self.assertIn("M2.m.f", flat_tree.symbols)
+    # self.assertEqual(flat_tree.symbols["M2.m.f"].value.name, "m.f")
+    # self.assertEqual(flat_tree.symbols["M2.m.f"].value.parent.name, "M1")
+    # self.assertEqual(flat_tree.symbols["M2.m.f"].value.value, 3.0)
+
+
+def test_parameter_modification_scope():
+    instance = parse_and_instantiate_model("ParameterScope.mo", "ScopeTest")
+
+    p_sym = instance.symbols["p"].type.symbols["Real"]
+    p_sym_mod = p_sym.modification_environment.arguments[0]
+    assert p_sym_mod.value.component.name == "value"
+    assert p_sym_mod.value.modifications[0].value == 1.0
+    nc_p_sym = instance.symbols["nc"].type.symbols["p"].type.symbols["Real"]
+    nc_p_mod = nc_p_sym.modification_environment.arguments[0]
+    assert nc_p_mod.value.modifications[0].name == "p"
+
+    flat_tree = tree.flatten_instance(instance)
+
+    assert flat_tree.symbols["nc.p"].value.name == "p"
+
+
+def test_custom_units():
+    instance = parse_and_instantiate_model("CustomUnits.mo", "A")
+
+    dummy = instance.extends[0].symbols["dummy_parameter"].type.extends[0].symbols["Real"]
+    dummy_value_mod = dummy.modification_environment.arguments[0]
+    assert dummy_value_mod.value.component.name == "unit"
+    assert dummy_value_mod.value.modifications[0].value == "m/s"
+    dummy_value_mod = dummy.modification_environment.arguments[-1]
+    assert dummy_value_mod.value.component.name == "value"
+    assert dummy_value_mod.value.modifications[0].value == 10.0
+
+    flat_tree = tree.flatten_instance(instance)
+
+    assert flat_tree.symbols["dummy_parameter"].unit == "m/s"
+    assert flat_tree.symbols["dummy_parameter"].value == 10.0
+
+
+def test_flatten_to_tree_bouncing_ball():
+    """flatten_to_tree returns ast.Tree with ast.Class/Symbol, not Instance types."""
+    ast_tree = parse_model_files("BouncingBall.mo")
+    comp_ref = ast.ComponentRef.from_string("BouncingBall")
+    result = tree.flatten_to_tree(ast_tree, comp_ref)
+
+    # Result is ast.Tree
+    assert isinstance(result, ast.Tree)
+
+    # Model class is ast.Class, not InstanceClass
+    model = result.classes["BouncingBall"]
+    assert isinstance(model, ast.Class)
+    assert not isinstance(model, ast.InstanceClass)
+
+    # All symbols are ast.Symbol, not InstanceSymbol
+    for name, sym in model.symbols.items():
+        assert isinstance(sym, ast.Symbol), f"{name} is {type(sym)}"
+        assert not isinstance(sym, ast.InstanceSymbol), f"{name} is InstanceSymbol"
+        # All .type fields are ComponentRef, not InstanceClass
+        assert isinstance(sym.type, ast.ComponentRef), f"{name}.type is {type(sym.type)}"
+
+    # Equations are non-empty
+    assert len(model.equations) > 0
+
+    # Expected symbols present
+    assert "height" in model.symbols
+    assert "velocity" in model.symbols
+
+
+def test_flatten_to_tree_spring_system():
+    """flatten_to_tree handles nested components and state annotation."""
+    ast_tree = parse_model_files("SpringSystemExample.mo")
+    comp_ref = ast.ComponentRef.from_string("Example.SpringSystem")
+    result = tree.flatten_to_tree(ast_tree, comp_ref)
+
+    model = result.classes["Example.SpringSystem"]
+    assert isinstance(model, ast.Class)
+    assert not isinstance(model, ast.InstanceClass)
+
+    # Nested component symbols present
+    for name in ("spring.x", "spring.f", "damper.v", "damper.f", "damper.c"):
+        assert name in model.symbols, f"Missing nested symbol: {name}"
+        sym = model.symbols[name]
+        assert isinstance(sym, ast.Symbol)
+        assert not isinstance(sym, ast.InstanceSymbol)
+
+    # Equations collected
+    assert len(model.equations) > 0
+
+
+def test_flatten_to_tree_matches_legacy():
+    """flatten_to_tree and legacy flatten produce same symbol names/types."""
+    ast_tree = parse_model_files("BouncingBall.mo")
+    comp_ref = ast.ComponentRef.from_string("BouncingBall")
+
+    legacy_tree = tree.flatten(ast_tree, comp_ref)
+
+    # Re-parse since flatten may mutate
+    ast_tree2 = parse_model_files("BouncingBall.mo")
+    new_tree = tree.flatten_to_tree(ast_tree2, comp_ref)
+
+    legacy_model = legacy_tree.classes["BouncingBall"]
+    new_model = new_tree.classes["BouncingBall"]
+
+    # Same symbol names
+    assert set(legacy_model.symbols.keys()) == set(new_model.symbols.keys())
+
+    # Same type names
+    for name in legacy_model.symbols:
+        legacy_type = str(legacy_model.symbols[name].type)
+        new_type = str(new_model.symbols[name].type)
+        assert legacy_type == new_type, f"Type mismatch for {name}: {legacy_type} vs {new_type}"
+
+
+def test_flatten_to_tree_function_pull():
+    ast_tree = parse_model_files("FunctionPull.mo")
+    class_name = "Level1.Level2.Level3.Function5"
+    comp_ref = ast.ComponentRef.from_string(class_name)
+
+    flat_tree = tree.flatten_to_tree(ast_tree, comp_ref)
+
+    # Functions pulled to top-level classes
+    assert "Level1.Level2.Level3.f" in flat_tree.classes
+    assert "Level1.Level2.Level3.TestPackage.times2" in flat_tree.classes
+    assert "Level1.Level2.Level3.TestPackage.square" in flat_tree.classes
+    assert "Level1.Level2.Level3.TestPackage.not_called" not in flat_tree.classes
+
+    # Correct types
+    assert flat_tree.classes[class_name].type == "model"
+    assert flat_tree.classes["Level1.Level2.Level3.f"].type == "function"
+
+    # Input/output prefixes preserved
+    func_t2 = flat_tree.classes["Level1.Level2.Level3.TestPackage.times2"]
+    assert "input" in func_t2.symbols["x"].prefixes
+    assert "output" in func_t2.symbols["y"].prefixes
+
+    # Function call operators are fully-scoped strings
+    func_f = flat_tree.classes["Level1.Level2.Level3.f"]
+    assert func_f.statements[0].right.operator == "*"
+    assert (
+        func_f.statements[0].right.operands[0].operator == "Level1.Level2.Level3.TestPackage.times2"
+    )
+
+
+def test_extend_from_self():
+    txt = """
+    model A
+      extends A;
+    end A;"""
+
+    ast_tree = parser.parse(txt)
+
+    with pytest.raises(tree.ModelicaSemanticError, match="Cannot extend class 'A' with itself"):
+        instance = tree.instantiate("A", ast_tree)  # noqa: F841
+
+    # TODO: Update when new flattening is implemented
+    class_name = "A"
+    comp_ref = ast.ComponentRef.from_string(class_name)
+
+    with pytest.raises(Exception, match="Cannot extend class 'A' with itself"):
+        flat_tree = tree.flatten(ast_tree, comp_ref)  # noqa: F841
+
+
+def test_connect_equations_hq():
+    """Test connect equation generation with flow/non-flow connectors."""
+    instance = parse_and_instantiate_model("ConnectorHQ.mo", "System")
+    flat = tree.flatten_instance(instance)
+
+    # All connector sub-variables present
+    for name in (
+        "a.up.H",
+        "a.up.Q",
+        "a.down.H",
+        "a.down.Q",
+        "b.up.H",
+        "b.up.Q",
+        "b.down.H",
+        "b.down.Q",
+        "c.up.H",
+        "c.up.Q",
+        "c.down.H",
+        "c.down.Q",
+        "qa.down.H",
+        "qa.down.Q",
+        "p.H",
+        "p.Q",
+        "hb.up.H",
+        "hb.up.Q",
+        "zerotest.H",
+        "zerotest.Q",
+    ):
+        assert name in flat.symbols, f"Missing symbol: {name}"
+
+    # No ConnectClauses remain (all expanded)
+    for eq in flat.equations:
+        assert not isinstance(eq, ast.ConnectClause), f"Unexpanded ConnectClause: {eq!r}"
+
+    # Non-flow equality equations: internal connects (up.H = down.H per Channel)
+    eq_strs = _equation_strings(flat.equations)
+    assert ("a.up.H", "=", "a.down.H") in eq_strs
+    assert ("b.up.H", "=", "b.down.H") in eq_strs
+    assert ("c.up.H", "=", "c.down.H") in eq_strs
+
+    # Cross-connect equality equations
+    assert ("qa.down.H", "=", "a.up.H") in eq_strs
+    assert ("p.H", "=", "c.up.H") in eq_strs
+    assert ("a.down.H", "=", "b.up.H") in eq_strs
+    assert ("b.down.H", "=", "hb.up.H") in eq_strs
+
+    # Flow sum-to-zero: 3-way junction at b.up (a.down + c.down + b.up)
+    has_3way_flow = any(
+        _is_flow_sum_equation(eq, {"a.down.Q", "c.down.Q", "b.up.Q"}) for eq in flat.equations
+    )
+    assert has_3way_flow, "Expected 3-way flow sum-to-zero for a.down.Q + c.down.Q + b.up.Q"
+
+    # Flow sum-to-zero: qa.down connected to a.up
+    has_qa_flow = any(_is_flow_sum_equation(eq, {"qa.down.Q", "a.up.Q"}) for eq in flat.equations)
+    assert has_qa_flow, "Expected flow sum-to-zero for qa.down.Q + a.up.Q"
+
+    # Disconnected flow variable (zerotest.Q) defaults to 0
+    has_zerotest_q = any(_is_zero_equation(eq, "zerotest.Q") for eq in flat.equations)
+    assert has_zerotest_q, "Disconnected flow variable zerotest.Q not set to 0"
+
+
+def test_connect_equations_simple_circuit():
+    """Test connect equation generation with nested connectors via extends."""
+    instance = parse_and_instantiate_model("SimpleCircuit.mo", "SimpleCircuit")
+    flat = tree.flatten_instance(instance)
+
+    # Connector sub-variables present (Pin has v and flow i)
+    for comp in ("R1", "C", "R2", "L", "AC"):
+        for port in ("p", "n"):
+            assert f"{comp}.{port}.v" in flat.symbols
+            assert f"{comp}.{port}.i" in flat.symbols
+    assert "G.p.v" in flat.symbols
+    assert "G.p.i" in flat.symbols
+
+    # No ConnectClauses remain
+    for eq in flat.equations:
+        assert not isinstance(eq, ast.ConnectClause), f"Unexpanded ConnectClause: {eq!r}"
+
+    # Equality equations for non-flow (v) connections
+    eq_strs = _equation_strings(flat.equations)
+    assert ("AC.p.v", "=", "R1.p.v") in eq_strs
+    assert ("R1.n.v", "=", "C.p.v") in eq_strs
+
+
+def test_connect_equations_channel():
+    """Test connect in a simple two-connector model."""
+    instance = parse_and_instantiate_model("ConnectorHQ.mo", "Channel")
+    flat = tree.flatten_instance(instance)
+
+    # Symbols
+    assert "up.H" in flat.symbols
+    assert "up.Q" in flat.symbols
+    assert "down.H" in flat.symbols
+    assert "down.Q" in flat.symbols
+
+    # Equality for non-flow
+    eq_strs = _equation_strings(flat.equations)
+    assert ("up.H", "=", "down.H") in eq_strs
+
+    # Flow sum-to-zero
+    has_flow_eq = any(_is_flow_sum_equation(eq, {"up.Q", "down.Q"}) for eq in flat.equations)
+    assert has_flow_eq, "Expected flow sum-to-zero for up.Q + down.Q"
+
+
+def _equation_strings(equations):
+    """Extract (left_name, '=', right_name) tuples from simple equality equations."""
+    result = set()
+    for eq in equations:
+        if isinstance(eq, ast.Equation):
+            left = _ref_name(eq.left)
+            right = _ref_name(eq.right)
+            if left and right:
+                result.add((left, "=", right))
+    return result
+
+
+def _ref_name(node):
+    """Get the name from a ComponentRef or similar."""
+    if isinstance(node, ast.ComponentRef):
+        return node.name
+    return None
+
+
+def _is_zero_equation(eq, var_name):
+    """Check if equation is var_name = 0."""
+    if not isinstance(eq, ast.Equation):
+        return False
+    if not (isinstance(eq.right, ast.Primary) and eq.right.value == 0):
+        return False
+    return isinstance(eq.left, ast.ComponentRef) and eq.left.name == var_name
+
+
+def _is_flow_sum_equation(eq, var_names):
+    """Check if equation is a sum-to-zero of the given variable names."""
+    if not isinstance(eq, ast.Equation):
+        return False
+    if not (isinstance(eq.right, ast.Primary) and eq.right.value == 0):
+        return False
+    refs = set()
+    _collect_component_ref_names([eq.left], refs)
+    return refs == var_names
+
+
+if __name__ == "__main__":
+    import pytest as _pytest
+
+    _pytest.main([__file__])

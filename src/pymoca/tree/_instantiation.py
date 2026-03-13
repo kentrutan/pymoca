@@ -663,6 +663,11 @@ def _instantiate_symbol(
     )
     _copy_symbol_contents(symbol)
 
+    # Per MLS 5.6.2 (p67): instance identifiers use component names along
+    # the instance path; reparent type class under its symbol so the parent
+    # chain reflects component names, not class names
+    symbol.type.parent_instance = symbol
+
     symbol.fully_instantiated = True
 
 

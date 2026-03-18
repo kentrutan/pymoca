@@ -12,23 +12,52 @@ they arise.
 
 ## Table of Contents
 
-1. [Why CasADi?](#1-why-casadi)
-2. [Installation](#2-installation)
-3. [CasADi Crash Course for Modelica Users](#3-casadi-crash-course-for-modelica-users)
-4. [Quick Start — Compiling a Modelica Model](#4-quick-start--compiling-a-modelica-model)
-5. [The DAE Residual Function](#5-the-dae-residual-function)
-6. [Variable Metadata](#6-variable-metadata)
-7. [Simulation with CasADi Integrators](#7-simulation-with-casadi-integrators)
-8. [Optimal Control — Direct Collocation](#8-optimal-control--direct-collocation)
-9. [Automatic Differentiation](#9-automatic-differentiation)
-10. [Model Simplification Options](#10-model-simplification-options)
-11. [Caching and Code Generation](#11-caching-and-code-generation)
-12. [Advanced Features](#12-advanced-features)
-    - [Arrays and Matrices](#12a-arrays-and-matrices)
-    - [Interpolation / Look-up Tables](#12b-interpolation--look-up-tables)
-    - [Time Delays](#12c-time-delays)
-    - [Component Models and Connectors](#12d-component-models-and-connectors)
-13. [API Reference](#13-api-reference)
+- [pymoca CasADi Backend — User Guide](#pymoca-casadi-backend--user-guide)
+  - [Table of Contents](#table-of-contents)
+  - [1. Why CasADi?](#1-why-casadi)
+  - [2. Installation](#2-installation)
+  - [3. CasADi Crash Course for Modelica Users](#3-casadi-crash-course-for-modelica-users)
+    - [3.1 Symbolic types: SX, MX, DM](#31-symbolic-types-sx-mx-dm)
+    - [3.2 The `ca.Function` class](#32-the-cafunction-class)
+    - [3.3 Building and solving an NLP in one screen](#33-building-and-solving-an-nlp-in-one-screen)
+  - [4. Quick Start — Compiling a Modelica Model](#4-quick-start--compiling-a-modelica-model)
+    - [4.1 Alternative: compile from an in-memory AST](#41-alternative-compile-from-an-in-memory-ast)
+  - [5. The DAE Residual Function](#5-the-dae-residual-function)
+    - [5.1 Residual form](#51-residual-form)
+    - [5.2 Evaluating the residual numerically](#52-evaluating-the-residual-numerically)
+    - [5.3 Initial residual](#53-initial-residual)
+  - [6. Variable Metadata](#6-variable-metadata)
+    - [6.1 The `Variable` class](#61-the-variable-class)
+    - [6.2 `variable_metadata_function`](#62-variable_metadata_function)
+  - [7. Simulation with CasADi Integrators](#7-simulation-with-casadi-integrators)
+    - [7.1 Wrapping a pure ODE](#71-wrapping-a-pure-ode)
+    - [7.2 Forward simulation with multiple time steps](#72-forward-simulation-with-multiple-time-steps)
+    - [7.3 DAE simulation with IDAS](#73-dae-simulation-with-idas)
+  - [8. Optimal Control — Direct Collocation](#8-optimal-control--direct-collocation)
+    - [8.1 Multiple shooting](#81-multiple-shooting)
+  - [9. Automatic Differentiation](#9-automatic-differentiation)
+    - [9.1 Jacobian of the DAE residual](#91-jacobian-of-the-dae-residual)
+    - [9.2 Gradient and Hessian](#92-gradient-and-hessian)
+    - [9.3 Sensitivity of integration output w.r.t. parameters](#93-sensitivity-of-integration-output-wrt-parameters)
+  - [10. Model Simplification Options](#10-model-simplification-options)
+    - [Recommended combinations](#recommended-combinations)
+    - [Calling `simplify` manually](#calling-simplify-manually)
+  - [11. Caching and Code Generation](#11-caching-and-code-generation)
+    - [11.1 Pickle cache](#111-pickle-cache)
+    - [11.2 Native code generation](#112-native-code-generation)
+    - [11.3 Manual save/load](#113-manual-saveload)
+  - [12. Advanced Features](#12-advanced-features)
+    - [12a. Arrays and Matrices](#12a-arrays-and-matrices)
+    - [12b. Interpolation / Look-up Tables](#12b-interpolation--look-up-tables)
+    - [12c. Time Delays](#12c-time-delays)
+    - [12d. Component Models and Connectors](#12d-component-models-and-connectors)
+  - [13. API Reference](#13-api-reference)
+    - [`transfer_model`](#transfer_model)
+    - [`gen_casadi.generate`](#gen_casadigenerate)
+    - [`Model` class](#model-class)
+    - [`Variable` class](#variable-class)
+    - [`save_model` / `load_model`](#save_model--load_model)
+  - [Further Reading](#further-reading)
 
 ---
 
@@ -85,11 +114,11 @@ CasADi has three matrix types you will encounter.
 See the [CasADi symbolic types docs](https://web.casadi.org/docs/#the-sx-symbolics) for
 the full picture.
 
-| Type | What it is | When you see it |
-|------|-----------|-----------------|
+| Type    | What it is                              | When you see it                        |
+| ------- | --------------------------------------- | -------------------------------------- |
 | `ca.MX` | Symbolic matrix expression (graph node) | pymoca uses MX for all model variables |
-| `ca.SX` | Scalar-level symbolic expression | Appears when `expand_mx=True` is set |
-| `ca.DM` | Dense numerical matrix | Used to pass numbers into functions |
+| `ca.SX` | Scalar-level symbolic expression        | Appears when `expand_mx=True` is set   |
+| `ca.DM` | Dense numerical matrix                  | Used to pass numbers into functions    |
 
 ```python
 import casadi as ca
@@ -210,16 +239,16 @@ The full DAE system is a `ca.Function` with signature:
 dae_residual(t, x, ẋ, z, u, c, p)  →  r
 ```
 
-| Argument | Meaning | CasADi symbol |
-|----------|---------|---------------|
-| `t` | time | scalar |
-| `x` | differential states | `veccat(model.states)` |
-| `ẋ` | state derivatives | `veccat(model.der_states)` |
-| `z` | algebraic states | `veccat(model.alg_states)` |
-| `u` | inputs | `veccat(model.inputs)` |
-| `c` | constants | `veccat(model.constants)` |
-| `p` | parameters | `veccat(model.parameters)` |
-| `r` | residuals (= 0 at solution) | `veccat(model.equations)` |
+| Argument | Meaning                     | CasADi symbol              |
+| -------- | --------------------------- | -------------------------- |
+| `t`      | time                        | scalar                     |
+| `x`      | differential states         | `veccat(model.states)`     |
+| `ẋ`      | state derivatives           | `veccat(model.der_states)` |
+| `z`      | algebraic states            | `veccat(model.alg_states)` |
+| `u`      | inputs                      | `veccat(model.inputs)`     |
+| `c`      | constants                   | `veccat(model.constants)`  |
+| `p`      | parameters                  | `veccat(model.parameters)` |
+| `r`      | residuals (= 0 at solution) | `veccat(model.equations)`  |
 
 This is exactly the semi-explicit DAE form used by CasADi's IDAS integrator.
 
@@ -280,15 +309,15 @@ You can still find consistent initial conditions by solving a small NLP that dri
 Each entry in `model.states`, `model.alg_states`, `model.inputs`, `model.parameters`,
 `model.constants`, etc., is a `Variable` instance with the following attributes:
 
-| Attribute | Type | Meaning |
-|-----------|------|---------|
-| `.symbol` | `ca.MX` | CasADi symbolic (use in expressions) |
-| `.value` | float / `ca.MX` | Default / assigned value (NaN if unset) |
-| `.start` | float / `ca.MX` | Initial guess for the solver |
-| `.min` | float / `ca.MX` | Lower bound |
-| `.max` | float / `ca.MX` | Upper bound |
-| `.nominal` | float / `ca.MX` | Scaling hint |
-| `.fixed` | bool | Whether the start value is fixed |
+| Attribute  | Type            | Meaning                                 |
+| ---------- | --------------- | --------------------------------------- |
+| `.symbol`  | `ca.MX`         | CasADi symbolic (use in expressions)    |
+| `.value`   | float / `ca.MX` | Default / assigned value (NaN if unset) |
+| `.start`   | float / `ca.MX` | Initial guess for the solver            |
+| `.min`     | float / `ca.MX` | Lower bound                             |
+| `.max`     | float / `ca.MX` | Upper bound                             |
+| `.nominal` | float / `ca.MX` | Scaling hint                            |
+| `.fixed`   | bool            | Whether the start value is fixed        |
 
 Attributes that depend on parameters are `ca.MX` expressions instead of plain floats;
 they are evaluated by `variable_metadata_function` (see §6.2).
@@ -610,29 +639,29 @@ applies a chain of symbolic transformations controlled by a dictionary of option
 All options and their defaults are listed in
 `src/pymoca/backends/casadi/_options.py`:
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `library_folders` | `[]` | Additional folders to scan for `.mo` files |
-| `verbose` | `False` | Print extra diagnostics |
-| `check_balanced` | `True` | Warn if `#equations ≠ #unknowns` |
-| `mtime_check` | `True` | Invalidate cache when source `.mo` is newer |
-| `cache` | `False` | Save/load compiled model to `.pymoca_cache` |
-| `codegen` | `False` | Compile CasADi functions to a native shared library |
-| `expand_mx` | `False` | Expand all MX nodes to scalar SX (implied by `cache`) |
-| `unroll_loops` | `True` | Unroll Modelica `for` loops into scalar equations |
-| `inline_functions` | `True` | Inline Modelica function calls |
-| `expand_vectors` | `False` | Scalarize vector-valued variables |
-| `resolve_parameter_values` | `False` | Propagate constant parameter values |
-| `replace_parameter_expressions` | `False` | Substitute parameter-dependent expressions |
-| `replace_constant_expressions` | `False` | Substitute constant-dependent expressions |
-| `eliminate_constant_assignments` | `False` | Remove trivial constant equations |
-| `replace_parameter_values` | `False` | Replace all parameter symbols with their values |
-| `replace_constant_values` | `False` | Replace all constant symbols with their values |
-| `eliminable_variable_expression` | `None` | Callable to mark extra eliminable variables |
-| `factor_and_simplify_equations` | `False` | Apply algebraic factoring/simplification |
-| `detect_aliases` | `False` | Eliminate variables related by `x = ±y` |
-| `allow_derivative_aliases` | `True` | Include `der(x) = ±der(y)` in alias detection |
-| `reduce_affine_expression` | `False` | Factor affine equations into matrix form |
+| Option                           | Default | Description                                           |
+| -------------------------------- | ------- | ----------------------------------------------------- |
+| `library_folders`                | `[]`    | Additional folders to scan for `.mo` files            |
+| `verbose`                        | `False` | Print extra diagnostics                               |
+| `check_balanced`                 | `True`  | Warn if `#equations ≠ #unknowns`                      |
+| `mtime_check`                    | `True`  | Invalidate cache when source `.mo` is newer           |
+| `cache`                          | `False` | Save/load compiled model to `.pymoca_cache`           |
+| `codegen`                        | `False` | Compile CasADi functions to a native shared library   |
+| `expand_mx`                      | `False` | Expand all MX nodes to scalar SX (implied by `cache`) |
+| `unroll_loops`                   | `True`  | Unroll Modelica `for` loops into scalar equations     |
+| `inline_functions`               | `True`  | Inline Modelica function calls                        |
+| `expand_vectors`                 | `False` | Scalarize vector-valued variables                     |
+| `resolve_parameter_values`       | `False` | Propagate constant parameter values                   |
+| `replace_parameter_expressions`  | `False` | Substitute parameter-dependent expressions            |
+| `replace_constant_expressions`   | `False` | Substitute constant-dependent expressions             |
+| `eliminate_constant_assignments` | `False` | Remove trivial constant equations                     |
+| `replace_parameter_values`       | `False` | Replace all parameter symbols with their values       |
+| `replace_constant_values`        | `False` | Replace all constant symbols with their values        |
+| `eliminable_variable_expression` | `None`  | Callable to mark extra eliminable variables           |
+| `factor_and_simplify_equations`  | `False` | Apply algebraic factoring/simplification              |
+| `detect_aliases`                 | `False` | Eliminate variables related by `x = ±y`               |
+| `allow_derivative_aliases`       | `True`  | Include `der(x) = ±der(y)` in alias detection         |
+| `reduce_affine_expression`       | `False` | Factor affine equations into matrix form              |
 
 ### Recommended combinations
 
@@ -898,6 +927,10 @@ Scans `model_folder` (and `compiler_options["library_folders"]`) for `.mo` files
 parses them all, generates the CasADi model, applies simplifications, and returns a
 `Model`.  If `cache=True` or `codegen=True`, also reads/writes the `.pymoca_cache` file.
 
+> **Tip:** The `model_folder` should only contain `.mo` files that are valid Modelica
+> *and* only contain Modelica features supported by the version of Pymoca that you are
+> using. Otherwise, `transfer_model()` may fail.
+
 ### `gen_casadi.generate`
 
 ```python
@@ -912,48 +945,48 @@ compiling multiple models from the same source.
 
 `src/pymoca/backends/casadi/model.py`
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `time` | `ca.MX` | Symbolic time variable |
-| `states` | `list[Variable]` | Differential state variables |
-| `der_states` | `list[Variable]` | Time derivatives of states |
-| `alg_states` | `list[Variable]` | Algebraic state variables |
-| `inputs` | `list[Variable]` | Input variables (incl. delay states) |
-| `outputs` | `list[Variable]` | Output variables |
-| `parameters` | `list[Variable]` | Parameter variables |
-| `constants` | `list[Variable]` | Constant variables |
-| `string_parameters` | `list[StringVariable]` | String parameters |
-| `string_constants` | `list[StringVariable]` | String constants |
-| `equations` | `list[ca.MX]` | Residual expressions (length = #unknowns) |
-| `initial_equations` | `list[ca.MX]` | Residuals from `initial equation` section |
-| `delay_states` | `list[ca.MX]` | Delay pseudo-state symbols |
-| `delay_arguments` | `list[DelayArgument]` | `(expr, duration)` pairs |
-| `alias_relation` | `AliasRelation` | Detected alias pairs |
+| Attribute           | Type                   | Description                               |
+| ------------------- | ---------------------- | ----------------------------------------- |
+| `time`              | `ca.MX`                | Symbolic time variable                    |
+| `states`            | `list[Variable]`       | Differential state variables              |
+| `der_states`        | `list[Variable]`       | Time derivatives of states                |
+| `alg_states`        | `list[Variable]`       | Algebraic state variables                 |
+| `inputs`            | `list[Variable]`       | Input variables (incl. delay states)      |
+| `outputs`           | `list[Variable]`       | Output variables                          |
+| `parameters`        | `list[Variable]`       | Parameter variables                       |
+| `constants`         | `list[Variable]`       | Constant variables                        |
+| `string_parameters` | `list[StringVariable]` | String parameters                         |
+| `string_constants`  | `list[StringVariable]` | String constants                          |
+| `equations`         | `list[ca.MX]`          | Residual expressions (length = #unknowns) |
+| `initial_equations` | `list[ca.MX]`          | Residuals from `initial equation` section |
+| `delay_states`      | `list[ca.MX]`          | Delay pseudo-state symbols                |
+| `delay_arguments`   | `list[DelayArgument]`  | `(expr, duration)` pairs                  |
+| `alias_relation`    | `AliasRelation`        | Detected alias pairs                      |
 
 **Key functions / properties:**
 
-| Property / Method | Description |
-|-------------------|-------------|
-| `dae_residual_function` | `ca.Function(t, x, ẋ, z, u, c, p) → r` |
-| `initial_residual_function` | Same signature; uses `initial equation` section |
-| `variable_metadata_function` | `ca.Function(p) → (states_meta, ...)` |
-| `delay_arguments_function` | `ca.Function(t, x, ẋ, z, u, c, p) → (expr₁, dur₁, ...)` |
-| `check_balanced()` | Warns if `#equations ≠ #unknowns` |
-| `simplify(options)` | Apply simplification pipeline (see §10) |
+| Property / Method            | Description                                             |
+| ---------------------------- | ------------------------------------------------------- |
+| `dae_residual_function`      | `ca.Function(t, x, ẋ, z, u, c, p) → r`                  |
+| `initial_residual_function`  | Same signature; uses `initial equation` section         |
+| `variable_metadata_function` | `ca.Function(p) → (states_meta, ...)`                   |
+| `delay_arguments_function`   | `ca.Function(t, x, ẋ, z, u, c, p) → (expr₁, dur₁, ...)` |
+| `check_balanced()`           | Warns if `#equations ≠ #unknowns`                       |
+| `simplify(options)`          | Apply simplification pipeline (see §10)                 |
 
 ### `Variable` class
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `symbol` | `ca.MX` | Symbolic variable; use in CasADi expressions |
-| `value` | float / `ca.MX` | Default assigned value (NaN if none) |
-| `start` | float / `ca.MX` | Initial guess / start value |
-| `min` | float / `ca.MX` | Lower bound |
-| `max` | float / `ca.MX` | Upper bound |
-| `nominal` | float / `ca.MX` | Scaling hint |
-| `fixed` | bool | Whether start is fixed (not free) |
-| `python_type` | type | `float`, `int`, or `bool` |
-| `aliases` | set | Set of alias variable names |
+| Attribute     | Type            | Description                                  |
+| ------------- | --------------- | -------------------------------------------- |
+| `symbol`      | `ca.MX`         | Symbolic variable; use in CasADi expressions |
+| `value`       | float / `ca.MX` | Default assigned value (NaN if none)         |
+| `start`       | float / `ca.MX` | Initial guess / start value                  |
+| `min`         | float / `ca.MX` | Lower bound                                  |
+| `max`         | float / `ca.MX` | Upper bound                                  |
+| `nominal`     | float / `ca.MX` | Scaling hint                                 |
+| `fixed`       | bool            | Whether start is fixed (not free)            |
+| `python_type` | type            | `float`, `int`, or `bool`                    |
+| `aliases`     | set             | Set of alias variable names                  |
 
 ### `save_model` / `load_model`
 

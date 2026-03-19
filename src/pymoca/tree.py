@@ -1376,9 +1376,17 @@ def _apply_redeclares(
         return False
 
     if not element.replaceable:
+        raise ModelicaSemanticError(f"Redeclaring {element.full_name} that is not replaceable")
+    if element.final:
+        raise ModelicaSemanticError(f"Redeclaring {element.full_name} that is final is not allowed")
+    if isinstance(element, ast.Symbol) and "constant" in element.prefixes:
         raise ModelicaSemanticError(
-            f"Redeclaring {element.full_reference()} that is not replaceable"
+            f"Redeclaring {element.full_name} that is constant is not allowed"
         )
+
+    # TODO: Disallow redeclaring protected as public or public as protected
+    # TODO: Check type sub-typing rules (section 6.4) w.r.t. array dimensions
+
     # Remove from passed modification_environment
     element.modification_environment.arguments = [
         arg for arg in element.modification_environment.arguments if arg not in redeclares

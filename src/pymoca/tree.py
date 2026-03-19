@@ -1027,6 +1027,9 @@ def _instantiate_symbol(
         symbol_type = find_name(symbol.type, parent)
         if symbol_type is None:
             raise NameLookupError(f"{symbol.type} not found in {parent.full_reference()}")
+        if symbol.replaceable:
+            symbol_type = copy.copy(symbol_type)
+            symbol_type.replaceable = True
         symbol.type = _instantiate_class(
             symbol_type,
             symbol.modification_environment,
@@ -1085,6 +1088,7 @@ def _instantiate_partially(
             name=element.name,
             ast_ref=ast_ref,
             parent=parent,
+            replaceable=element.replaceable,
             final=element.final,
         )
 

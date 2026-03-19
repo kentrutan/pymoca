@@ -943,6 +943,16 @@ class ParseTest(unittest.TestCase):
         # Section 10.1 has some test examples for this.
         # self.assertEqual(x_type_extends.symbols["Real"].dimensions[0], 3)
 
+    def test_instantiation_lookup_scope_with_modifications(self):
+        """Test lookup during instantiation with modifications
+
+        Example taken from ModelicaSpecification issues discussion on
+        Modelica Spec 3.4 Chapter 5 changes.
+        """
+
+        instance = self.parse_and_instantiate_model("LexicalVsInstanceScope.mo", "P.C")
+        self.check_redeclare_expects(instance, [self.redeclare_expect("n", "Integer", 3, False)])
+
     def test_redeclare_class_with_symbol_error(self):
         """Test redeclaration of a class with a symbol is disallowed"""
 

@@ -162,6 +162,18 @@ class ParseTest(unittest.TestCase):
                 tree = file_tree
         return tree
 
+    def test_ast_element_full_name(self):
+        """Test fully-qualified name lookup to element and back to name"""
+        ast_tree = self.parse_model_files("TreeLookup.mo")
+        full_names = (
+            "Level1.Level2.Level3.TestPackage.TestClass",  # Class
+            "Level1.Level2.Level3.TestPackage.c",  # Symbol
+        )
+        for name in full_names:
+            element = tree.find_name(name, ast_tree)
+            self.assertIsNotNone(element)
+            self.assertEqual(ast.element_full_name(element), name)
+
     def test_aircraft(self):
         ast_tree = self.parse_model_files("Aircraft.mo")
         print("AST TREE\n", ast_tree)
@@ -952,6 +964,22 @@ class ParseTest(unittest.TestCase):
 
         instance = self.parse_and_instantiate_model("LexicalVsInstanceScope.mo", "P.C")
         self.check_redeclare_expects(instance, [self.redeclare_expect("n", "Integer", 3, False)])
+
+    def test_redeclare_components(self):
+        """Test redeclaration of components of same type"""
+
+        instance = self.parse_and_instantiate_model("RedeclareComponents.mo", "Package.Model")
+
+        expect = [
+            self.redeclare_expect("M.b1.x", "Integer", 1, False),
+            self.redeclare_expect("M.b2.x", "Integer", 2, False),
+            self.redeclare_expect("M.b0.x", "Real", 0.0, True),
+        ]
+        self.check_redeclare_expects(instance, expect)
+
+        # Symbols themselves were not declared replaceable
+        for name in ("d1", "d2", "d3"):
+            self.assertFalse(instance.symbols[name].replaceable)
 
     def test_redeclare_class_with_symbol_error(self):
         """Test redeclaration of a class with a symbol is disallowed"""

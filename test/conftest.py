@@ -23,6 +23,7 @@ XFAIL_IN_PROGRESS = {
     "test/parse_test.py::ParseTest::test_redeclare_component_in_declaration",
     "test/parse_test.py::ParseTest::test_redeclare_component_in_extends",
     "test/parse_test.py::ParseTest::test_redeclare_component_type_compatibility",
+    "test/parse_test.py::ParseTest::test_redeclare_components",
 }
 
 

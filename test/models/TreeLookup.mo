@@ -1,6 +1,7 @@
 within Level1.Level2.Level3;
 
 package TestPackage
+	constant Real c;
 	class TestClass
 		Integer i;
 		Integer a;

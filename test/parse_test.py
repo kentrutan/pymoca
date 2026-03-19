@@ -992,6 +992,22 @@ class ParseTest(unittest.TestCase):
         instance = self.parse_and_instantiate_model("LexicalVsInstanceScope.mo", "P.C")
         self.check_redeclare_expects(instance, [self.redeclare_expect("n", "Integer", 3, False)])
 
+    def test_redeclare_components(self):
+        """Test redeclaration of components of same type"""
+
+        instance = self.parse_and_instantiate_model("RedeclareComponents.mo", "Package.Model")
+
+        expect = [
+            self.redeclare_expect("M.b1.x", "Integer", 1, False),
+            self.redeclare_expect("M.b2.x", "Integer", 2, False),
+            self.redeclare_expect("M.b0.x", "Real", 0.0, True),
+        ]
+        self.check_redeclare_expects(instance, expect)
+
+        # Symbols themselves were not declared replaceable
+        for name in ("d1", "d2", "d3"):
+            self.assertFalse(instance.symbols[name].replaceable)
+
     def test_redeclare_component_in_extends(self):
         """Test redeclaration of components in extends clause"""
 

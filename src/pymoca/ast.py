@@ -629,7 +629,7 @@ class Class(Node):
     def __init__(self, **kwargs):
         self.name = None  # type: Optional[str]
         self.imports = OrderedDict()  # type: OrderedDict[str, Union[ImportClause, ComponentRef]]
-        self.extends = []  # type: List[ExtendsClause]
+        self.extends = []  # type: List[Union[ExtendsClause, InstanceClass]]
         self.encapsulated = False  # type: bool
         self.partial = False  # type: bool
         self.final = False  # type: bool
@@ -925,27 +925,85 @@ class Class(Node):
         return new
 
     def __repr__(self):
-        return "{}(type={!r}, name={!r})".format(type(self).__name__, self.type, self.name)
+        return "{}(name={!r}, type={!r})".format(type(self).__name__, self.name, self.type)
 
     def __str__(self):
         return '{} {}, Type "{}"'.format(type(self).__name__, self.name, self.type)
 
 
-class InstanceClass(Class):
+class InstanceElement:
     """
-    Class used during instantiation/expansion of the model. Modififcations on
-    symbols and extends clauses are shifted to the modification environment of
-    this InstanceClass.
+    Base class for instance elements (symbols, classes, and "unnamed" extends classes)
+
+    This is the "partially instantiated element" in spec 3.5 section 5.6.1.4.
+    Includes name for lookup and type for redeclares during instantiation.
+    We include the latter two items that are also in sub-classes because we
+    want to allow use of this stand-alone as a "partial instance" for memory
+    efficiency and speed.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.modification_environment = ClassModification()
+    def __init__(
+        self,
+        ast_ref: Optional[Union[Class, Symbol]] = None,
+        modification_environment: Optional[ClassModification] = None,
+        fully_instantiated: bool = False,
+        **kwargs,
+    ):
+        """ast_ref is a reference to the AST node where this instance is defined.
+        All named keyword arguments optional for backward compatibility."""
+
+        # super().__init__() is only needed if 1st in method resolution order
+        super().__init__(**kwargs)
+
+        self.ast_ref = ast_ref
+
+        if modification_environment is not None:
+            self.modification_environment = modification_environment
+        else:
+            self.modification_environment = ClassModification()
+
+        if "name" in kwargs:
+            self.name = kwargs["name"]
+        elif ast_ref is not None:
+            self.name = ast_ref.name
+        else:
+            self.name = ""  # The default in Symbol
+
+        if "type" in kwargs:
+            self.type = kwargs["type"]
+        elif ast_ref is not None:
+            self.type = ast_ref.type
+        else:
+            self.type = ComponentRef()  # The default in Symbol
+
+        self.fully_instantiated = fully_instantiated
 
     def __repr__(self):
-        return "{}(type={!r}, name={!r}, modification_environment={!r})".format(
-            type(self).__name__, self.type, self.name, self.modification_environment
-        )
+        return f"name={self.name!r}, ast_ref={self.ast_ref!r}, modification_environment={self.modification_environment!r}"
+
+
+class InstanceClass(InstanceElement, Class):
+    """
+    Class used during instantiation and flattening of the model.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def __repr__(self):
+        return f"{type(self).__name__}({super().__repr__()!s})"
+
+
+class InstanceSymbol(InstanceElement, Symbol):
+    """
+    Symbol used during instantiation and flattening of the model.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def __repr__(self):
+        return f"{type(self).__name__}({super().__repr__()!s})"
 
 
 class Tree(Class):

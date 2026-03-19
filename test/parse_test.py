@@ -905,6 +905,11 @@ class ParseTest(unittest.TestCase):
 
         self.assertEqual(flat_tree.classes["E"].symbols["c.x"].nominal.value, 2.0)
 
+    def test_nonreplaceable_component_contains_replaceable(self):
+        """Test that nonreplaceable components can contain replaceable components"""
+
+        self.parse_and_instantiate_model("NonReplaceableContainsReplaceable.mo", "P.Test")
+
     redeclare_expect = namedtuple("redeclare_expect", ["name", "type", "value", "replaceable"])
 
     def check_redeclare_expects(self, instance, expects):
@@ -964,6 +969,17 @@ class ParseTest(unittest.TestCase):
 
         instance = self.parse_and_instantiate_model("LexicalVsInstanceScope.mo", "P.C")
         self.check_redeclare_expects(instance, [self.redeclare_expect("n", "Integer", 3, False)])
+
+    @unittest.expectedFailure  # `redeclare class extends` not implemented
+    def test_flattening_redeclare_class_extends(self):
+        """Test redeclare class extends construct"""
+
+        _ = self.parse_and_instantiate_model("RedeclareClassExtends.mo", "P.TestOK")
+
+        # TODO: Test equations
+
+        with self.assertRaisesRegex(tree.ModelicaSemanticError, "TODO: FILL IN ERROR MESSAGE"):
+            _ = self.parse_and_instantiate_model("RedeclareClassExtends.mo", "P.TestFail")
 
     def test_redeclare_components(self):
         """Test redeclaration of components of same type"""

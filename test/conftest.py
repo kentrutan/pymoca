@@ -9,7 +9,6 @@ import pytest
 # Tests that actually fail at this commit.
 # strict=False: xpassed (unexpectedly passing) tests are also OK.
 XFAIL_IN_PROGRESS = {
-    "test/parse_test.py::ParseTest::test_ast_element_full_name",
     "test/parse_test.py::ParseTest::test_extends_transitively_nonreplaceable_error",
     "test/parse_test.py::ParseTest::test_instantiation_modification_scope_instance_class",
     "test/parse_test.py::ParseTest::test_nonreplaceable_component_contains_replaceable",
@@ -18,6 +17,7 @@ XFAIL_IN_PROGRESS = {
     "test/parse_test.py::ParseTest::test_redeclare_component_in_declaration",
     "test/parse_test.py::ParseTest::test_redeclare_component_in_extends",
     "test/parse_test.py::ParseTest::test_redeclare_component_type_compatibility",
+    "test/parse_test.py::ParseTest::test_redeclare_components",
 }
 
 

@@ -751,8 +751,7 @@ def _check_import_rules(
         else:
             message = f"{full_name} is not in a package so can't be imported"
         raise NameLookupError(message)
-    # TODO: Remove ast.Symbol test when visibility is added to ast.Class (see grammar)
-    if isinstance(element, ast.Symbol) and element.visibility != ast.Visibility.PUBLIC:
+    if element.visibility != ast.Visibility.PUBLIC:
         raise NameLookupError(f"Import {element.name} must not be protected")
     # We test on parent and name instead of just "is" because we may have a copy of a Class
     if element.parent is scope.parent and element.name == scope.name:
@@ -1088,6 +1087,9 @@ def _instantiate_partially(
             parent=parent,
             final=element.final,
         )
+
+    # Merge visibility
+    instance.visibility = min(ast_ref.visibility, parent.visibility)
 
     # Modifiers are merged for the element itself
     _apply_modifications(instance, element, modification_environment)

@@ -562,10 +562,12 @@ class ParseTest(unittest.TestCase):
         self.assertIn("b", instance.symbols)
         b_type = instance.symbols["b"].type
         self.assertIn("a", b_type.symbols)
-        a_type = b_type.symbols["a"].type
-        self.assertEqual(a_type.ast_ref.name, "D", "model A not properly redeclared in b")
-        self.assertIn("p", a_type.symbols)
-        p = a_type.symbols["p"]
+        a_extends_names = [extends.ast_ref.name for extends in b_type.symbols["a"].type.extends]
+        self.assertIn("D", a_extends_names, "model A not properly redeclared in b")
+        a_extends_D_index = a_extends_names.index("D")
+        a_extends_D = b_type.symbols["a"].type.extends[a_extends_D_index]
+        self.assertIn("p", a_extends_D.symbols)
+        p = a_extends_D.symbols["p"]
         self.assertIn("parameter", p.prefixes)
         self.assertTrue(isinstance(p.type, ast.InstanceClass), "b.a.p not properly instantiated")
         self.assertEqual(p.type.name, "E")
@@ -575,8 +577,8 @@ class ParseTest(unittest.TestCase):
         p_int_symbol_modification = p_int_symbol.modification_environment.arguments[0]
         p_int_symbol_value = p_int_symbol_modification.value.modifications[0].value
         self.assertEqual(p_int_symbol_value, 1, "b.a.p=1 modification not applied")
-        self.assertEqual(len(a_type.extends), 1, "b.a extends not properly instantiated")
-        a_extends_D_extends_C = a_type.extends[0]
+        self.assertEqual(len(a_extends_D.extends), 1, "b.a extends not properly instantiated")
+        a_extends_D_extends_C = a_extends_D.extends[0]
         self.assertIn("e", a_extends_D_extends_C.symbols)
         b_a_e = a_extends_D_extends_C.symbols["e"]
         e_type = b_a_e.type
@@ -958,6 +960,17 @@ class ParseTest(unittest.TestCase):
             else:
                 self.fail(f"test does not support value modification type {type(value_mod)}")
             self.assertEqual(value_mod_value, value, f"for {name}")
+
+    def test_lookup_needs_instantiation(self):
+        """Test that demonstrates the need for instantiation in name lookup
+
+        Example taken from Modelica MCP 0019 discussion leading to
+        Modelica Spec 3.4 Chapter 5 changes.
+        """
+
+        # Instantiation should fail without instantiation in composite name lookup
+        instance = self.parse_and_instantiate_model("InstantiationInLookup.mo", "MyModel")
+        self.check_redeclare_expects(instance, [self.redeclare_expect("x", "T", 2.0, False)])
 
     def test_instantiation_lookup_scope(self):
         """Test lookup during instantiation

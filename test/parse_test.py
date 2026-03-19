@@ -992,6 +992,17 @@ class ParseTest(unittest.TestCase):
         instance = self.parse_and_instantiate_model("LexicalVsInstanceScope.mo", "P.C")
         self.check_redeclare_expects(instance, [self.redeclare_expect("n", "Integer", 3, False)])
 
+    @unittest.expectedFailure  # `redeclare class extends` not implemented
+    def test_flattening_redeclare_class_extends(self):
+        """Test redeclare class extends construct"""
+
+        _ = self.parse_and_instantiate_model("RedeclareClassExtends.mo", "P.TestOK")
+
+        # TODO: Test equations
+
+        with self.assertRaisesRegex(tree.ModelicaSemanticError, "TODO: FILL IN ERROR MESSAGE"):
+            _ = self.parse_and_instantiate_model("RedeclareClassExtends.mo", "P.TestFail")
+
     def test_redeclare_components(self):
         """Test redeclaration of components of same type"""
 

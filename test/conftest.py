@@ -11,7 +11,6 @@ import pytest
 XFAIL_IN_PROGRESS = {
     "test/parse_test.py::ParseTest::test_extends_transitively_nonreplaceable_error",
     "test/parse_test.py::ParseTest::test_instantiation_modification_scope_instance_class",
-    "test/parse_test.py::ParseTest::test_nonreplaceable_component_contains_replaceable",
     "test/parse_test.py::ParseTest::test_redeclare_class_with_symbol_error",
     "test/parse_test.py::ParseTest::test_redeclare_component_complicated",
     "test/parse_test.py::ParseTest::test_redeclare_component_in_declaration",

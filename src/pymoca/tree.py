@@ -496,8 +496,7 @@ def _find_rest_of_name(
         else:
             type_class = _find_name(first.type, first.parent, check_encapsulated=check_encapsulated)
             if type_class is None:
-                full_ref = str(first.parent.full_reference()) + "." + first.name
-                raise NameLookupError(f"Lookup failed for type of symbol {full_ref}")
+                raise NameLookupError(f"Lookup failed for type of symbol {first.full_name}")
         found = _find_composite_name_in_symbols(rest_of_name, type_class)
         if not found:
             # Can only find in classes if the below rules apply:
@@ -539,9 +538,8 @@ def _find_composite_name_in_symbols(name: str, scope: ast.Class) -> Optional[ast
                 type_name = str(found.type)
                 found_type_class = _find_name(type_name, scope)
                 if found_type_class is None or isinstance(found_type_class, ast.Symbol):
-                    scope_full_reference = str(scope.full_reference())
                     raise NameLookupError(
-                        f'Symbol type "{type_name}" not found in scope "{scope_full_reference}"'
+                        f'Symbol type "{type_name}" not found in scope "{scope.full_name}"'
                     )
             else:
                 # type is already an InstanceClass
@@ -755,20 +753,15 @@ def _check_import_rules(
     if not element.parent:
         raise NameLookupError(f"Import {element.name} must be contained in a package")
     if element.parent.type != "package":
-        full_name = element.name
         if element.parent.name:
-            full_name = str(element.parent.full_reference()) + "." + full_name
-            parent = element.parent.name
-            message = f"{parent} must be a package in import {full_name}"
+            message = f"{element.parent.name} must be a package in import {element.full_name}"
         else:
-            message = f"{full_name} is not in a package so can't be imported"
+            message = f"{element.full_name} is not in a package so can't be imported"
         raise NameLookupError(message)
     if element.visibility != ast.Visibility.PUBLIC:
         raise NameLookupError(f"Import {element.name} must not be protected")
-    # We test on parent and name instead of just "is" because we may have a copy of a Class
-    if element.parent is scope.parent and element.name == scope.name:
-        full_name = str(element.parent.full_reference()) + "." + element.name
-        raise NameLookupError(f"Import {full_name} is recursive")
+    if scope.full_name == element.full_name:
+        raise NameLookupError(f"Import {element.full_name} is recursive")
 
 
 class InstanceTree(ast.Tree):
@@ -985,7 +978,7 @@ def _instantiate_extends(
     extends_names = {}
     for extends in extends_list_orig:
         if isinstance(extends, ast.InstanceClass):
-            extends_names[extends.name] = str(extends.full_reference())
+            extends_names[extends.ast_ref.name] = extends.ast_ref.full_name
         else:
             extends_names[_parse_str_or_ref(extends.component)[0]] = str(extends.component)
 
@@ -1002,7 +995,7 @@ def _instantiate_extends(
             }
             if extends_name in other_names:
                 raise ModelicaSemanticError(
-                    f"Cannot extend '{parent_instance.full_reference()}' with '{extends_component_ref}'; "
+                    f"Cannot extend '{parent_instance.full_name}' with '{extends_component_ref}'; "
                     f"'{extends_name}' also exists in names inherited from '{other_class.ast_ref.name}'"
                 )
 
@@ -1029,7 +1022,7 @@ def _instantiate_extends_single(
         extends_class = _find_name(extends.component, parent_instance, search_inherited=False)
         if extends_class is None:
             raise ModelicaSemanticError(
-                f"Extends name {extends.component} not found in scope {parent_instance.full_reference()}"
+                f"Extends name {extends.component} not found in scope {parent_instance.full_name}"
             )
         extends_mod = extends.class_modification
         if extends_mod.arguments:
@@ -1043,12 +1036,10 @@ def _instantiate_extends_single(
 
     if isinstance(extends_class, ast.Symbol):
         raise ModelicaSemanticError(
-            f"Cannot extend a Symbol: {extends.component} in {parent_instance.full_reference()}"
+            f"Cannot extend a Symbol: {extends_class.name} in {parent_instance.full_name}"
         )
-    if str(extends_class.full_reference()) == str(parent_instance.full_reference()):
-        raise ModelicaSemanticError(
-            f"Cannot extend class '{extends_class.full_reference()}' with itself"
-        )
+    if extends_class.full_name == parent_instance.full_name:
+        raise ModelicaSemanticError(f"Cannot extend class '{extends_class.full_name}' with itself")
     if _is_transitively_replaceable(extends_class):
         # MLS 7.3: A redeclare without `replaceable` drops the flag. During
         # partial instantiation the redeclare hasn't been applied yet, so the
@@ -1064,11 +1055,8 @@ def _instantiate_extends_single(
         # replaceability check is unconditional per MLS 7.1.4.
         has_clearing_redeclare = False
         extends_parent_ref = getattr(extends_class.parent, "ast_ref", extends_class.parent)
-        extends_parent_name = str(
-            getattr(extends_parent_ref, "full_reference", lambda: None)() or ""
-        )
-        parent_inst_ref = getattr(parent_instance, "ast_ref", parent_instance)
-        parent_inst_name = str(getattr(parent_inst_ref, "full_reference", lambda: None)() or "")
+        extends_parent_name = getattr(extends_parent_ref, "full_name", "")
+        parent_inst_name = parent_instance.full_name
         if isinstance(extends_class, ast.InstanceClass) and extends_parent_name != parent_inst_name:
             for arg in extends_class.modification_environment.arguments:
                 if not arg.redeclare:
@@ -1084,10 +1072,9 @@ def _instantiate_extends_single(
                     has_clearing_redeclare = True
                     break
         if not has_clearing_redeclare:
-            comp = extends_class.name
-            full_name = extends_class.parent.full_reference()
+            full_name = parent_instance.full_name
             raise ModelicaSemanticError(
-                f"In {full_name} extends {comp}, {comp} and parents cannot be replaceable"
+                f"In {full_name} extends {extends_class.name}, {extends_class.name} and parents cannot be replaceable"
             )
 
     modifications = _append_modifications(
@@ -1113,13 +1100,6 @@ def _instantiate_extends_single(
         arg for arg in modification_environment.arguments if arg in modifications.arguments
     ]
 
-    if extends_instance.type in InstanceTree.BUILTIN_TYPES:
-        if len(parent_instance.extends) > 1:
-            raise ModelicaSemanticError(
-                "When extending a built-in class (Real, Integer, ...) "
-                "you cannot extend other classes as well"
-            )
-
     # TODO: Step 4 Check class lookup before and after extends
 
     return extends_instance
@@ -1137,7 +1117,7 @@ def _get_lexical_parent_instance(
     if (
         found is not None
         and isinstance(found.parent, ast.InstanceClass)
-        and found.full_reference().to_tuple() == class_.full_reference().to_tuple()
+        and found.full_name == class_.full_name
     ):
         return found.parent
     # Instance parent not found, so create a branch with parent instances of the class
@@ -1186,7 +1166,7 @@ def _instantiate_symbol(
         if symbol_type is None:
             raise NameLookupError(
                 f"Type {symbol.type} of symbol {symbol.name} "
-                f"not found in {parent_instance.full_reference()}"
+                f"not found in {parent_instance.full_name}"
             )
         symbol_type_parent = _get_lexical_parent_instance(symbol_type, parent_instance)
     else:
@@ -1396,9 +1376,17 @@ def _apply_redeclares(
         return False
 
     if not element.replaceable:
+        raise ModelicaSemanticError(f"Redeclaring {element.full_name} that is not replaceable")
+    if element.final:
+        raise ModelicaSemanticError(f"Redeclaring {element.full_name} that is final is not allowed")
+    if isinstance(element, ast.Symbol) and "constant" in element.prefixes:
         raise ModelicaSemanticError(
-            f"Redeclaring {element.full_reference()} that is not replaceable"
+            f"Redeclaring {element.full_name} that is constant is not allowed"
         )
+
+    # TODO: Disallow redeclaring protected as public or public as protected
+    # TODO: Check type sub-typing rules (section 6.4) w.r.t. array dimensions
+
     # Remove from passed modification_environment
     element.modification_environment.arguments = [
         arg for arg in element.modification_environment.arguments if arg not in redeclares
@@ -1415,14 +1403,13 @@ def _apply_redeclares(
     redeclare_class = _find_name(redeclare_name, scope_class)
     if redeclare_class is None:
         raise NameLookupError(
-            f"Redeclare class {redeclare_name} not found"
-            f" in scope {scope_class.full_reference()}"
+            f"Redeclare class {redeclare_name} not found in scope {scope_class.full_name}"
         )
     if isinstance(redeclare_class, ast.Symbol):
         if_symbol_msg = " type" if isinstance(element, ast.Symbol) else ""
         raise ModelicaSemanticError(
             f"Redeclaring {element.name}{if_symbol_msg} with component {redeclare_name}"
-            f" in scope {scope_class.full_reference()}"
+            f" in scope {scope_class.full_name}"
         )
     if isinstance(redeclare, ast.ShortClassDefinition):
         apply_args = redeclare.class_modification.arguments
@@ -1757,7 +1744,7 @@ def _resolve_name(
 
     found = _find_name(name, scope)
     if found is None:
-        raise NameLookupError(f"Unable to resolve {name} in scope {scope.full_reference()}")
+        raise NameLookupError(f"Unable to resolve {name} in scope {scope.full_name}")
     is_symbol = isinstance(found, ast.Symbol)
 
     flat_name = _flatten_name(found, flat_class.name)
@@ -2348,7 +2335,7 @@ class FunctionExpander(TreeListener):
             try:
                 function_class = self.node.find_class(tree.operator)
 
-                full_name = str(function_class.full_reference())
+                full_name = function_class.full_name
 
                 tree.operator = full_name
                 self.function_set[full_name] = function_class
@@ -2389,14 +2376,12 @@ def modify_symbol(sym: ast.Symbol, scope: ast.InstanceClass) -> None:
     apply_args = [
         x
         for x in sym.class_modification.arguments
-        if x.scope is None
-        or x.scope.full_reference().to_tuple() == scope.full_reference().to_tuple()
+        if x.scope is None or x.scope.full_name == scope.full_name
     ]
     skip_args = [
         x
         for x in sym.class_modification.arguments
-        if x.scope is not None
-        and x.scope.full_reference().to_tuple() != scope.full_reference().to_tuple()
+        if x.scope is not None and x.scope.full_name != scope.full_name
     ]
 
     for class_mod_argument in apply_args:
@@ -2798,7 +2783,7 @@ def flatten(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Class:
 
     # Put class in root
     root = ast.Tree()
-    flat_name = str(orig_class.full_reference())
+    flat_name = orig_class.full_name
     flat_class.name = flat_name
     root.classes[flat_name] = flat_class
 

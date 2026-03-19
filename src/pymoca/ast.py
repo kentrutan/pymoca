@@ -831,7 +831,7 @@ class Class(Node):
 
     @property
     def full_name(self) -> str:
-        """Return fully-qualified name of this class"""
+        """Return fully-qualified lexical name of this class"""
         return element_full_name(self)
 
     def _extend(self, other: "Class") -> None:

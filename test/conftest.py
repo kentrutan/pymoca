@@ -17,8 +17,6 @@ XFAIL_IN_PROGRESS = {
     "test/parse_test.py::ParseTest::test_msl3_twopin_units",
     "test/parse_test.py::ParseTest::test_msl_flange_units",
     "test/parse_test.py::ParseTest::test_msl_opamp_units",
-    "test/parse_test.py::ParseTest::test_nonreplaceable_component_contains_replaceable",
-    "test/parse_test.py::ParseTest::test_redeclare_class_with_symbol_error",
     "test/parse_test.py::ParseTest::test_redeclare_component_complicated",
     "test/parse_test.py::ParseTest::test_redeclare_component_in_declaration",
     "test/parse_test.py::ParseTest::test_redeclare_component_in_extends",

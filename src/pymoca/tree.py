@@ -858,7 +858,7 @@ def _instantiate_class(
         parent.classes[new_class.name] = new_class
 
     # 1.3. Redeclare of element itself is done
-    new_class = _apply_class_redeclares(new_class, modification_environment)
+    new_class = _apply_redeclares(new_class, modification_environment)
 
     # 2.1 Partially instantiate local classes and symbols
     if (
@@ -965,11 +965,45 @@ def _instantiate_extends_single(
             f"Cannot extend class '{extends_class.full_reference()}' with itself"
         )
     if _is_transitively_replaceable(extends_class):
-        comp = extends_class.name
-        full_name = extends_class.parent.full_reference()
-        raise ModelicaSemanticError(
-            f"In {full_name} extends {comp}, {comp} and parents cannot be replaceable"
+        # MLS 7.3: A redeclare without `replaceable` drops the flag. During
+        # partial instantiation the redeclare hasn't been applied yet, so the
+        # InstanceClass still carries the original replaceable=True.
+        #
+        # When the extends class was found through a composite name (e.g.,
+        # `extends P2.A` where P2 = P(redeclare model A = B)), the class
+        # comes from a different scope than the extends clause.  In that case
+        # a pending redeclare that drops replaceability makes the extends OK.
+        #
+        # When the extends class is a direct child of the scope (e.g.,
+        # `extends C` inside D where C is a local replaceable class), the
+        # replaceability check is unconditional per MLS 7.1.4.
+        has_clearing_redeclare = False
+        extends_parent_ref = getattr(extends_class.parent, "ast_ref", extends_class.parent)
+        parent_ref = getattr(parent, "ast_ref", parent)
+        extends_parent_name = str(
+            getattr(extends_parent_ref, "full_reference", lambda: None)() or ""
         )
+        parent_name = str(getattr(parent_ref, "full_reference", lambda: None)() or "")
+        if isinstance(extends_class, ast.InstanceClass) and extends_parent_name != parent_name:
+            for arg in extends_class.modification_environment.arguments:
+                if not arg.redeclare:
+                    continue
+                rdecl = arg.value
+                matches = (
+                    isinstance(rdecl, ast.ShortClassDefinition)
+                    and rdecl.name == extends_class.name
+                    or isinstance(rdecl, ast.ComponentClause)
+                    and rdecl.symbol_list[0].name == extends_class.name
+                )
+                if matches and not rdecl.replaceable:
+                    has_clearing_redeclare = True
+                    break
+        if not has_clearing_redeclare:
+            comp = extends_class.name
+            full_name = extends_class.parent.full_reference()
+            raise ModelicaSemanticError(
+                f"In {full_name} extends {comp}, {comp} and parents cannot be replaceable"
+            )
     # TODO: Check with spec about what to do with extends.class_modification in case of redeclare
     extend_mod = _append_modifications(
         extends.class_modification,
@@ -1023,20 +1057,39 @@ def _instantiate_symbol(
         symbol.fully_instantiated = True
         return
 
+    symbol_before_redeclare = symbol
+    modification_environment = symbol.modification_environment
+    symbol = _apply_redeclares(symbol, modification_environment)
+
+    instantiated = False
     if not isinstance(symbol.type, ast.InstanceClass):
-        symbol_type = find_name(symbol.type, parent)
+        # Symbol type parent is symbol.ast_ref.parent if redeclared
+        if symbol is not symbol_before_redeclare:
+            type_parent = symbol.ast_ref.parent
+        else:
+            type_parent = parent
+        symbol_type = find_name(symbol.type, type_parent)
         if symbol_type is None:
-            raise NameLookupError(f"{symbol.type} not found in {parent.full_reference()}")
+            raise NameLookupError(
+                f"Type {symbol.type} of symbol {symbol.name} "
+                f"not found in {parent.full_reference()}"
+            )
         if symbol.replaceable:
             symbol_type = copy.copy(symbol_type)
             symbol_type.replaceable = True
         symbol.type = _instantiate_class(
             symbol_type,
-            symbol.modification_environment,
+            modification_environment,
             symbol_type.parent,
         )
+        instantiated = True
 
     _copy_symbol_contents(symbol)
+
+    # May have redeclared the type during instantiation, so update symbol replaceable
+    # We have to do this after copying contents which also sets replaceable
+    if instantiated:
+        symbol.replaceable = symbol.type.replaceable
 
     symbol.fully_instantiated = True
 
@@ -1166,23 +1219,9 @@ def _apply_modifications(
                             sub_arg.value = copy.copy(arg.value)
                             sub_arg.value.component = ast.ComponentRef(name="value")
                             mod.arguments.append(sub_arg)
-        elif isinstance(arg.value, ast.ShortClassDefinition):
+        elif isinstance(arg.value, (ast.ShortClassDefinition, ast.ComponentClause)):
+            # Redeclares are handled separately
             mod.arguments.append(arg)
-        elif isinstance(arg.value, ast.ComponentClause):
-            # Separate component redeclare into class and sub-component modifications
-            if arg.redeclare:
-                # Turn class redeclare into a class modification
-                sub_arg = copy.copy(arg)
-                sub_arg.value = ast.ShortClassDefinition(
-                    name=instance.type.name,
-                    component=arg.value.type,
-                )
-                mod.arguments.append(sub_arg)
-            # Move component modification down a level and propagate replaceable
-            sym = arg.value.symbol_list[0]
-            if sym.class_modification is not None:
-                for sym_mod in sym.class_modification.arguments:
-                    mod.arguments.append(sym_mod)
         else:
             raise NotImplementedError(f"{arg.value.__class__} modification")
 
@@ -1244,55 +1283,71 @@ def _append_modifications(*mods: ast.ClassModification) -> ast.ClassModification
     return combined_modification
 
 
-def _apply_class_redeclares(
-    element: ast.InstanceClass,
+def _apply_redeclares(
+    element: Union[ast.InstanceClass, ast.InstanceSymbol],
     modification_environment: ast.ClassModification,
-) -> ast.InstanceClass:
-    """Apply redeclare if any and remove from environment"""
+) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
+    """Apply redeclare if any and remove from environment
 
+    :return: The same element if no redeclare, or the new redeclared element"""
+
+    # TODO: Reduce the number of if statements and isinstance checks (separate class and symbol)?
     redeclares = []
     for arg in element.modification_environment.arguments:
         if not arg.redeclare:
             continue
-        if isinstance(arg.value, ast.ShortClassDefinition) and arg.value.name == element.name:
+        if (
+            isinstance(arg.value, ast.ShortClassDefinition)
+            and arg.value.name == element.name
+            or isinstance(arg.value, ast.ComponentClause)
+            and arg.value.symbol_list[0].name == element.name
+        ):
             redeclares.append(arg)
-    if redeclares:
-        redeclare = redeclares[-1]
-        if not element.replaceable:
-            raise ModelicaSemanticError(
-                f"Redeclaring {element.full_reference()} that is not replaceable"
-            )
-        scope_class = redeclare.scope
-        assert scope_class, "Redeclare scope should have been set by now"
-        redeclare_name = redeclare.value.component
-        redeclare_class = find_name(redeclare_name, scope_class)
-        if redeclare_class is None:
-            raise NameLookupError(
-                f"Redeclare class {redeclare_name} not found"
-                f" in scope {scope_class.full_reference()}"
-            )
-        if isinstance(redeclare_class, ast.Symbol):
-            raise ModelicaSemanticError(
-                f"Redeclaring class {element.name}"
-                f" with a component ({redeclare_name})"
-                f" in scope {scope_class.full_reference()}"
-            )
-        element.ast_ref = (
-            redeclare_class.ast_ref
-            if isinstance(redeclare_class, ast.InstanceClass)
-            else redeclare_class
-        )
-        element.modification_environment.arguments.remove(redeclare)
-        modification_environment.arguments = (
-            redeclare.value.class_modification.arguments + modification_environment.arguments
-        )
-        element = _instantiate_partially(
-            element.ast_ref,
-            modification_environment,
-            element.parent,
-        )
+    if not redeclares:
+        return element
 
-    return element
+    if not element.replaceable:
+        raise ModelicaSemanticError(
+            f"Redeclaring {element.full_reference()} that is not replaceable"
+        )
+    # Last redeclare takes precedence
+    apply_redeclare = redeclares[-1]
+    redeclare = apply_redeclare.value
+    scope_class = apply_redeclare.scope
+    assert scope_class, "Redeclare scope should have been set by now"
+    if isinstance(redeclare, ast.ShortClassDefinition):
+        redeclare_name = redeclare.component
+    else:  # ast.ComponentClause
+        redeclare_name = redeclare.type.name
+    redeclare_class = find_name(redeclare_name, scope_class)
+    if redeclare_class is None:
+        raise NameLookupError(
+            f"Redeclare class {redeclare_name} not found"
+            f" in scope {scope_class.full_reference()}"
+        )
+    if isinstance(redeclare_class, ast.Symbol):
+        if_symbol_msg = " type" if isinstance(element, ast.Symbol) else ""
+        raise ModelicaSemanticError(
+            f"Redeclaring {element.name}{if_symbol_msg} with component {redeclare_name}"
+            f" in scope {scope_class.full_reference()}"
+        )
+    apply_args = []
+    if isinstance(redeclare, ast.ShortClassDefinition):
+        apply_args = redeclare.class_modification.arguments
+    else:  # ast.ComponentClause
+        if redeclare.symbol_list[0].class_modification is not None:
+            apply_args = redeclare.symbol_list[0].class_modification.arguments
+    modification_environment.arguments = modification_environment.arguments + apply_args
+    redeclared_element = _instantiate_partially(
+        redeclare_class,
+        modification_environment,
+        element.parent,
+    )
+    redeclared_element.replaceable = redeclare.replaceable
+    if isinstance(redeclared_element, ast.InstanceSymbol):
+        redeclared_element.parent.symbols[redeclared_element.name] = redeclared_element
+
+    return redeclared_element
 
 
 def _copy_class_contents(

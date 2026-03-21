@@ -168,7 +168,13 @@ def _flatten_instance(
         # 1.4 Resolve modifications of value attributes of simple types and records
         # 1.5 Resolve modifications of other attributes of simple types
         if flat_symbol.type.name in InstanceTree.BUILTIN_TYPES or "record" in flat_symbol.prefixes:
-            _resolve_modifications(flat_symbol, flat_class)
+            _resolve_modifications(
+                flat_symbol,
+                flat_class,
+                current_instances=current_instances,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+            )
         else:
             # 1.6 Recursively "handle" non-simple types
             _flatten_instance(flat_symbol.type, flat_class, prefix=flat_name)
@@ -231,7 +237,13 @@ def _resolve_dimensions(
                     dim_list[i] = ast.Primary(value=int(result))
 
 
-def _resolve_modifications(symbol: ast.InstanceSymbol, flat_class: ast.InstanceClass) -> None:
+def _resolve_modifications(
+    symbol: ast.InstanceSymbol,
+    flat_class: ast.InstanceClass,
+    current_instances: Optional[Set[ast.InstanceClass]],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
+) -> None:
     """Resolve modifications of a symbol
     :param symbol: The symbol to resolve modifications for
     :param flat_class: The flattened class
@@ -253,12 +265,21 @@ def _resolve_modifications(symbol: ast.InstanceSymbol, flat_class: ast.InstanceC
         if arg.value.component == "value" and "record" in symbol.prefixes:
             # TODO: record value modification
             continue
-        _resolve_modification_attribute(symbol, arg)
+        _resolve_modification_attribute(
+            symbol,
+            arg,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
 
 
 def _resolve_modification_attribute(
     symbol: ast.InstanceSymbol,
     arg: ast.ClassModificationArgument,
+    current_instances: Optional[Set[ast.InstanceClass]],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
 ):
     # The spec says the modifications are resolved by creating equations, but we are
     # going to set the symbol attributes now and create equations for them in another
@@ -272,21 +293,34 @@ def _resolve_modification_attribute(
         value = value.value
     elif isinstance(value, ast.ComponentRef):
         assert isinstance(symbol.parent, ast.InstanceClass)
-        value = _resolve_name(value, arg.scope, symbol.parent)
-        value = cast(ast.InstanceSymbol, value)
-    elif isinstance(value, ast.Array):
-        # TODO: Handle array modifications
-        raise NotImplementedError("Array modifications not implemented yet")
-        # value = _resolve_array(value, arg.scope, symbol.parent)
-    elif isinstance(value, ast.Expression):
-        value = _resolve_expression(
+        value = _resolve_name(
             value,
             arg.scope,
             symbol.parent_instance,
-            current_instances=None,
-            current_extends=None,
-            instantiate_in_place=False,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
         )
+        value = cast(ast.InstanceSymbol, value)
+    elif isinstance(value, (ast.Array, ast.Expression)):
+        pass  # fall through to Expression handling below
+    if isinstance(value, ast.Expression):
+        # Try to evaluate constant expressions (e.g. +1 → 1, -1.0 → -1.0);
+        # keep the original Expression if evaluation fails (e.g. references
+        # to non-constant variables or unsupported operators).
+        try:
+            result = _resolve_expression(
+                value,
+                arg.scope,
+                symbol.parent_instance,
+                current_instances=current_instances,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+            )
+            if result is not None:
+                value = result
+        except (NotImplementedError, ModelicaSemanticError):
+            pass  # keep original ast.Expression
 
     setattr(symbol, mod.component.name, value)
 
@@ -335,9 +369,9 @@ class ExpressionEvaluator(TreeListener):
         super().__init__()
 
     def enterExpression(self, tree: ast.Expression):
-        operator = self.transform_operator[str(tree.operator)]
+        operator = self.transform_operator.get(str(tree.operator))
         if operator is None:
-            raise NotImplementedError(f"Unsupported operator {tree.operator} in {tree:r}")
+            raise NotImplementedError(f"Unsupported operator {tree.operator} in {tree!r}")
         operands = []
         for operand in tree.operands:
             if isinstance(operand, ast.ComponentRef):

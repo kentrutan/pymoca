@@ -12,7 +12,11 @@ from collections import defaultdict
 from typing import Optional, Set, Union, cast
 
 from ._base import ModelicaSemanticError, NameLookupError, TreeListener, TreeWalker
-from ._instantiation import InstanceTree, _instantiate_class
+from ._instantiation import (
+    InstanceTree,
+    _get_lexical_parent_instance,
+    _instantiate_class,
+)
 from ._name_lookup import _find_name
 from .. import ast
 
@@ -441,25 +445,22 @@ def _process_transitions(flat_class: ast.InstanceClass):
 
 
 def _flatten_name(
-    element: Union[ast.Class, ast.InstanceClass, ast.Symbol, ast.InstanceSymbol],
+    element: ast.InstanceElement,
     remove_prefix: str = "",
 ) -> str:
-    """Flatten the instance full_reference() into a name str
+    """Flatten the instance path into a name str
 
     :param instance: The instance having the name to flatten
     :param remove_prefix: The prefix to remove from the name
     :return: The flattened name
     """
-    if isinstance(element, ast.InstanceElement):
-        assert element.ast_ref is not None
-        global_ref = element.ast_ref.full_reference()
-    else:
-        global_ref = element.full_reference()
-    for name in remove_prefix.split("."):
-        if global_ref.name != name:
-            break
-        global_ref = global_ref.child[0]
-    return str(global_ref)
+    assert isinstance(element, ast.InstanceElement)
+    element_full_name = ast.element_instance_name_tuple(element)
+    flat_name_start = 0
+    for names in zip(element_full_name, remove_prefix.split(".")):
+        if names[0] == names[1]:
+            flat_name_start += 1
+    return ".".join(element_full_name[flat_name_start:])
 
 
 def _resolve_name(
@@ -491,12 +492,30 @@ def _resolve_name(
     #   - Recursively flatten the function call
     #   - Add to the list of functions
 
+    # When scope is a raw ast.Class (not yet an InstanceClass), find the
+    # corresponding InstanceClass by walking up the instance tree from
+    # flat_class.  This happens for deeply-nested modifications whose scope
+    # wasn't resolved to an InstanceClass during instantiation.
+    if not isinstance(scope, ast.InstanceClass):
+        current = flat_class
+        while current is not None:
+            if isinstance(current, ast.InstanceClass) and (
+                current.ast_ref is scope or current.ast_ref.full_name == scope.full_name
+            ):
+                scope = current
+                break
+            current = getattr(current, "parent_instance", None)
+        if not isinstance(scope, ast.InstanceClass):
+            raise NameLookupError(
+                f"Unable to find instance for scope {scope.full_name} from {flat_class.full_name}"
+            )
+
+    # Step C: Fully instantiate the scope class if needed
     if not scope.fully_instantiated:
-        # Fully instantiate the scope class to get instantiated symbol
         scope = _instantiate_class(
             scope,
             ast.ClassModification(),
-            scope.parent,
+            scope.parent_instance,
             current_instances=current_instances,
             current_extends=current_extends,
             instantiate_in_place=instantiate_in_place,
@@ -511,43 +530,92 @@ def _resolve_name(
     )
     if found is None:
         raise NameLookupError(f"Unable to resolve {name} in scope {scope.full_name}")
+
     is_symbol = isinstance(found, ast.Symbol)
 
-    flat_name = _flatten_name(found, flat_class.name)
+    if not isinstance(found, ast.InstanceElement) or not found.fully_instantiated:
+        element = _instantiate_element(
+            found,
+            scope,
+            ast.ClassModification(),
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
+    else:
+        element = found
 
-    # Check if the name is already resolved
+    flat_name = _flatten_name(element, flat_class.full_instance_name)
+
+    # Check to see if the name is already resolved
     if is_symbol and flat_name in flat_class.symbols:
-        # Return the already-resolved symbol
         return flat_class.symbols[flat_name]
     elif flat_name in flat_class.classes:
-        # Return the already-resolved class
         return flat_class.classes[flat_name]
 
-    if not isinstance(found, ast.InstanceElement) or not found.fully_instantiated:
+    # Make copy so we can flatten name without changing originals.
+    # Reparent under flat_class so full_instance_name / full_name reflect
+    # the flat path (flat_name already encodes the ancestor components).
+    element = element.clone()
+    element.name = flat_name
+    element.parent_instance = flat_class
+    element.parent = flat_class
+    if is_symbol:
+        flat_class.symbols[flat_name] = element
+    else:
+        flat_class.classes[flat_name] = element
+
+    return element
+
+
+def _instantiate_element(
+    element: Union[ast.Class, ast.Symbol, ast.InstanceClass, ast.InstanceSymbol],
+    scope: ast.InstanceClass,
+    modification_environment: ast.ClassModification,
+    current_instances: Optional[Set[ast.InstanceClass]],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
+    instantiate_in_place: bool = False,
+    update_parent_instance: bool = True,
+    partially: bool = False,
+) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
+
+    is_symbol = isinstance(element, ast.Symbol)
+
+    if isinstance(element, ast.InstanceElement):
         if is_symbol:
-            # TODO: Implement direct instantiation of symbols
-            # Fully instantiate the symbol parent class to get instantiated symbol
-            assert found.parent is not None
-            found.parent = _instantiate_class_update_name(found.parent, scope, flat_name)
-            found = found.parent.symbols[found.name]
-            flat_class.symbols[flat_name] = found
-        else:  # class
-            found = _instantiate_class_update_name(found, scope, flat_name)
-            flat_class.classes[flat_name] = found
+            # For symbols, class_to_instantiate (below) will be the
+            # containing class (element.parent).  Its parent in the instance
+            # tree is element.parent_instance.parent_instance, NOT
+            # element.parent_instance (which IS the containing class).
+            parent_instance = element.parent_instance.parent_instance
+        else:
+            parent_instance = element.parent_instance
+        parent = element.parent
+    else:
+        element_class = element.parent if is_symbol else element
+        parent = _get_lexical_parent_instance(
+            element_class,
+            scope,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
+        parent_instance = parent
 
-    return found
+    class_to_instantiate = element.parent if is_symbol else element
+    instance = _instantiate_class(
+        class_to_instantiate,
+        ast.ClassModification(),
+        parent_instance,
+        current_instances=current_instances,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+        update_parent_instance=update_parent_instance,
+        partially=partially,
+    )
 
+    if is_symbol:
+        return instance.symbols[element.name]
+    else:
+        return instance
 
-def _instantiate_class_update_name(
-    class_: Union[ast.Class, ast.InstanceClass],
-    parent: ast.InstanceClass,
-    flat_name: str,
-) -> ast.InstanceClass:
-    assert class_.parent is not None
-    instance = _instantiate_class(class_, ast.ClassModification(), parent)
-    # Update the instance tree with the fully instantiated class
-    assert instance.name is not None
-    assert instance.parent is not None
-    # If "unnamed" extends class, it reverts back to original name
-    instance.name = flat_name if instance.name else instance.ast_ref.name
-    return instance

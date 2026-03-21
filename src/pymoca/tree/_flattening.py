@@ -156,7 +156,14 @@ def _flatten_instance(
         _evaluate_conditional_declarations(flat_symbol, flat_class)
 
         # 1.3 Resolve dimensions, including enclosing instances
-        _resolve_dimensions(flat_symbol, flat_class)
+        _resolve_dimensions(
+            flat_symbol,
+            instance,
+            flat_class,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
 
         # 1.4 Resolve modifications of value attributes of simple types and records
         # 1.5 Resolve modifications of other attributes of simple types
@@ -181,9 +188,47 @@ def _evaluate_conditional_declarations(symbol: ast.InstanceSymbol, parent: ast.C
     pass
 
 
-def _resolve_dimensions(symbol: ast.InstanceSymbol, parent: ast.Class):
-    # TODO: 1.3 Resolve dimensions, including enclosing instances
-    pass
+def _resolve_dimensions(
+    symbol: ast.InstanceSymbol,
+    instance: ast.InstanceClass,
+    flat_class: ast.InstanceClass,
+    current_instances: Optional[Set[ast.InstanceClass]],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
+) -> None:
+    """Resolve parametric array dimensions to concrete integers.
+
+    Each element in symbol.dimensions is a list of dimension specifiers.
+    ComponentRef and Expression elements are resolved to Primary(value=int(...)).
+    """
+    for dim_list in symbol.dimensions:
+        for i, elem in enumerate(dim_list):
+            if isinstance(elem, ast.Primary) or isinstance(elem, ast.Slice):
+                continue
+            elif isinstance(elem, ast.ComponentRef):
+                resolved = _resolve_name(
+                    elem,
+                    instance,
+                    flat_class,
+                    current_instances=current_instances,
+                    current_extends=current_extends,
+                    instantiate_in_place=instantiate_in_place,
+                )
+                if isinstance(resolved, ast.InstanceSymbol) and isinstance(
+                    resolved.value, (int, float)
+                ):
+                    dim_list[i] = ast.Primary(value=int(resolved.value))
+            elif isinstance(elem, ast.Expression):
+                result = _resolve_expression(
+                    elem,
+                    instance,
+                    flat_class,
+                    current_instances=current_instances,
+                    current_extends=current_extends,
+                    instantiate_in_place=instantiate_in_place,
+                )
+                if isinstance(result, (int, float)):
+                    dim_list[i] = ast.Primary(value=int(result))
 
 
 def _resolve_modifications(symbol: ast.InstanceSymbol, flat_class: ast.InstanceClass) -> None:
@@ -387,6 +432,9 @@ def _resolve_name(
     name: Union[str, ast.ComponentRef],
     scope: ast.InstanceClass,
     flat_class: ast.InstanceClass,
+    current_instances: Optional[Set[ast.InstanceClass]] = None,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
+    instantiate_in_place: bool = False,
 ) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
     """Flatten and resolve a name reference"""
     # * A. "all references by name in conditional declarations, modifications, dimension
@@ -411,9 +459,22 @@ def _resolve_name(
 
     if not scope.fully_instantiated:
         # Fully instantiate the scope class to get instantiated symbol
-        scope = _instantiate_class(scope, ast.ClassModification(), scope.parent)
+        scope = _instantiate_class(
+            scope,
+            ast.ClassModification(),
+            scope.parent,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
 
-    found = _find_name(name, scope)
+    found = _find_name(
+        name,
+        scope,
+        current_instances=current_instances,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
     if found is None:
         raise NameLookupError(f"Unable to resolve {name} in scope {scope.full_name}")
     is_symbol = isinstance(found, ast.Symbol)

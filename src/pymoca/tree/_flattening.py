@@ -7,8 +7,9 @@ Entry: flatten_instance(instance) → _flatten_instance()
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import copy  # TODO
-from collections import defaultdict
+import copy
+import sys
+from collections import OrderedDict, defaultdict
 from typing import Optional, Set, Union, cast
 
 from ._base import ModelicaSemanticError, NameLookupError, TreeListener, TreeWalker
@@ -147,6 +148,11 @@ def _flatten_instance(
         else:
             flat_name = name
         flat_symbol = copy.copy(symbol)
+        # Strip input/output prefixes from nested symbols — these are
+        # connector-local causality markers (MLS 9.1.1) and should not
+        # propagate to the parent model's flattened namespace.
+        if prefix:
+            flat_symbol.prefixes = [p for p in flat_symbol.prefixes if p not in ("input", "output")]
         if symbol.type.name in InstanceTree.BUILTIN_TYPES:
             flat_symbol.name = flat_name
             flat_class.symbols[flat_name] = flat_symbol
@@ -184,7 +190,7 @@ def _flatten_instance(
             _flatten_instance(flat_symbol.type, flat_class, prefix=flat_name)
 
     # 1.7 Resolve references in equations and algorithms
-    _resolve_equation_and_algorithm_references(flat_class)
+    _collect_and_resolve_equations(instance, flat_class, prefix)
 
     # 1.8 Recursively "handle" unnamed extends instances
     for extends in instance.extends:
@@ -424,9 +430,145 @@ def _resolve_expression(
     return listener.result
 
 
-def _resolve_equation_and_algorithm_references(flat_class: ast.InstanceClass):
-    # TODO: 1.7 Resolve references in equations and algorithms
-    pass
+class _EquationRefResolver(TreeListener):
+    """Resolve ComponentRef names in equations to flattened dot-separated names.
+
+    Follows the same depth/cutoff pattern as legacy ComponentRefFlattener:
+    when a ComponentRef resolves to a known flat symbol, rewrite it in place;
+    when it doesn't (builtins like ``time``, function names, for-loop indices),
+    skip it and all its children.
+    """
+
+    def __init__(self, flat_class: ast.InstanceClass, prefix: str):
+        self.flat_class = flat_class
+        self.prefix = prefix
+        self.depth = 0
+        self.cutoff_depth = sys.maxsize
+        super().__init__()
+
+    def reset(self):
+        self.depth = 0
+        self.cutoff_depth = sys.maxsize
+
+    def enterComponentRef(self, tree: ast.ComponentRef):
+        self.depth += 1
+        if self.depth > self.cutoff_depth:
+            return
+
+        # Compose candidate flat name: prefix.name.child1.child2...
+        if self.prefix:
+            new_name = self.prefix + "." + tree.name
+        else:
+            new_name = tree.name
+        c = tree
+        while len(c.child) > 0:
+            assert len(c.child) <= 1
+            c = c.child[0]
+            new_name += "." + c.name
+
+        if new_name in self.flat_class.symbols:
+            tree.name = new_name
+            # Merge child indices into parent
+            c = tree
+            while len(c.child) > 0:
+                assert len(c.child) <= 1
+                c = c.child[0]
+                tree.indices += c.indices
+            tree.child = []
+        else:
+            # Not a known symbol — leave alone (builtin, function, for-index, etc.)
+            self.cutoff_depth = self.depth
+
+    def exitComponentRef(self, tree: ast.ComponentRef):
+        self.depth -= 1
+        if self.depth < self.cutoff_depth:
+            self.cutoff_depth = sys.maxsize
+
+
+def _flatten_connect_ref(ref: ast.ComponentRef, prefix: str) -> None:
+    """Flatten a connect clause ComponentRef by prepending prefix and collapsing children."""
+    parts = [ref.name]
+    c = ref
+    last_indices = ref.indices
+    while len(c.child) > 0:
+        assert len(c.child) <= 1
+        c = c.child[0]
+        parts.append(c.name)
+        last_indices = c.indices
+    ref.name = prefix + "." + ".".join(parts) if prefix else ".".join(parts)
+    ref.indices = last_indices
+    ref.child = []
+
+
+def _is_inner_connector(ref: ast.ComponentRef, instance: ast.InstanceClass) -> bool:
+    """Determine if a connect ref is 'inner' (belongs to a sub-component) per MLS 9.2.
+
+    A connector is 'inner' if the first name in the ref resolves to a non-connector
+    component (i.e., the connector is a port of that component). It is 'outer' if the
+    first name resolves directly to a connector declared in the current class.
+    """
+    first_name = ref.name
+    sym = instance.symbols.get(first_name)
+    if sym is None:
+        return False
+    if (
+        isinstance(sym.type, ast.InstanceClass)
+        and sym.type.type == "connector"
+        and len(ref.child) == 0
+    ):
+        # Bare connector name in this scope → outer
+        return False
+    # Component with sub-connector (or deeper path) → inner
+    return True
+
+
+def _collect_and_resolve_equations(
+    instance: ast.InstanceClass,
+    flat_class: ast.InstanceClass,
+    prefix: str,
+) -> None:
+    """Deep-copy equations from *instance*, resolve refs, append to *flat_class*."""
+    walker = TreeWalker()
+    resolver = _EquationRefResolver(flat_class, prefix)
+
+    # Snapshot lists before iteration to avoid mutation issues if the
+    # instance's lists are modified during extends processing.
+    equations = instance.equations
+    initial_equations = instance.initial_equations
+    statements = instance.statements
+    initial_statements = instance.initial_statements
+
+    for eq in equations:
+        eq_copy = copy.deepcopy(eq)
+        if isinstance(eq_copy, ast.ConnectClause):
+            # Annotate inner/outer per MLS 9.2 (before flattening collapses children)
+            eq_copy.__left_inner = _is_inner_connector(eq.left, instance)
+            eq_copy.__right_inner = _is_inner_connector(eq.right, instance)
+            # Manually flatten connect refs (connector names aren't in flat_class.symbols)
+            _flatten_connect_ref(eq_copy.left, prefix)
+            _flatten_connect_ref(eq_copy.right, prefix)
+        else:
+            resolver.reset()
+            walker.walk(resolver, eq_copy)
+        flat_class.equations.append(eq_copy)
+
+    for eq in initial_equations:
+        eq_copy = copy.deepcopy(eq)
+        resolver.reset()
+        walker.walk(resolver, eq_copy)
+        flat_class.initial_equations.append(eq_copy)
+
+    for stmt in statements:
+        stmt_copy = copy.deepcopy(stmt)
+        resolver.reset()
+        walker.walk(resolver, stmt_copy)
+        flat_class.statements.append(stmt_copy)
+
+    for stmt in initial_statements:
+        stmt_copy = copy.deepcopy(stmt)
+        resolver.reset()
+        walker.walk(resolver, stmt_copy)
+        flat_class.initial_statements.append(stmt_copy)
 
 
 def _check_all_references_valid(flat_class: ast.InstanceClass):
@@ -435,8 +577,131 @@ def _check_all_references_valid(flat_class: ast.InstanceClass):
 
 
 def _generate_connect_equations(flat_class: ast.InstanceClass):
-    # TODO: 2. Generate connect equations for all connections in the flattened tree
-    pass
+    """Generate equations from connect clauses (MLS 9.2).
+
+    For each ConnectClause, expand into variable-level equations:
+    - Non-flow variables (no prefix, input, output): equality equations
+    - Flow variables: Kirchhoff sum-to-zero equations
+    - Constant/parameter: skipped
+    Disconnected flow variables default to 0.
+    """
+    # Track disconnected flow variables
+    disconnected_flow_variables = OrderedDict()
+    for name, sym in flat_class.symbols.items():
+        if "flow" in sym.prefixes:
+            disconnected_flow_variables[name] = name
+
+    flow_connections = OrderedDict()
+    orig_equations = flat_class.equations[:]
+    flat_class.equations = []
+
+    for equation in orig_equations:
+        if not isinstance(equation, ast.ConnectClause):
+            flat_class.equations.append(equation)
+            continue
+
+        left_inner = getattr(equation, "__left_inner", False)
+        right_inner = getattr(equation, "__right_inner", False)
+        left_name = equation.left.name
+        right_name = equation.right.name
+
+        # Find connector variables by prefix in flat_class.symbols
+        left_prefix = left_name + "."
+        connector_vars = []
+        for sym_name, sym in flat_class.symbols.items():
+            if sym_name.startswith(left_prefix):
+                suffix = sym_name[len(left_prefix) :]
+                type_indices = sym.type.indices if hasattr(sym.type, "indices") else []
+                connector_vars.append((suffix, sym.prefixes, type_indices))
+
+        if not connector_vars:
+            # Elementary type connection (e.g., connecting Reals directly)
+            flat_class.equations.append(ast.Equation(left=equation.left, right=equation.right))
+            continue
+
+        for suffix, prefixes, type_indices in connector_vars:
+            l_name = left_name + "." + suffix
+            r_name = right_name + "." + suffix
+            left = ast.ComponentRef(
+                name=l_name,
+                indices=equation.left.indices + type_indices,
+            )
+            right = ast.ComponentRef(
+                name=r_name,
+                indices=equation.right.indices + type_indices,
+            )
+
+            if len(prefixes) == 0 or prefixes[0] in ["input", "output"]:
+                flat_class.equations.append(ast.Equation(left=left, right=right))
+            elif "flow" in prefixes:
+                # Build flow connection groups for sum-to-zero equations
+                left_key = (
+                    l_name,
+                    tuple(
+                        i.value
+                        for index_array in left.indices
+                        for i in index_array
+                        if i is not None
+                    ),
+                    left_inner,
+                )
+                right_key = (
+                    r_name,
+                    tuple(
+                        i.value
+                        for index_array in right.indices
+                        for i in index_array
+                        if i is not None
+                    ),
+                    right_inner,
+                )
+
+                left_connected = flow_connections.get(left_key, OrderedDict())
+                right_connected = flow_connections.get(right_key, OrderedDict())
+
+                left_connected.update(right_connected)
+                connected = left_connected
+                connected[left_key] = (left, left_inner)
+                connected[right_key] = (right, right_inner)
+
+                for k in connected:
+                    flow_connections[k] = connected
+
+                disconnected_flow_variables.pop(l_name, None)
+                disconnected_flow_variables.pop(r_name, None)
+            elif prefixes[0] in ["constant", "parameter"]:
+                pass
+            else:
+                raise Exception("Unsupported connector variable prefixes {}".format(prefixes))
+
+    # Generate flow sum-to-zero equations
+    processed: Set[int] = set()
+    for connected_variables in flow_connections.values():
+        if id(connected_variables) not in processed:
+            processed.add(id(connected_variables))
+            operand_specs = list(connected_variables.values())
+            if all(not op_spec[1] for op_spec in operand_specs):
+                # All outer variables — no sign inversion needed
+                operands = [op_spec[0] for op_spec in operand_specs]
+            else:
+                operands = [
+                    (
+                        op_spec[0]
+                        if op_spec[1]
+                        else ast.Expression(operator="-", operands=[op_spec[0]])
+                    )
+                    for op_spec in operand_specs
+                ]
+            expr = operands[-1]
+            for op in reversed(operands[:-1]):
+                expr = ast.Expression(operator="+", operands=[op, expr])
+            flat_class.equations.append(ast.Equation(left=expr, right=ast.Primary(value=0)))
+
+    # Disconnected flow variables default to 0
+    for name in disconnected_flow_variables.values():
+        flat_class.equations.append(
+            ast.Equation(left=ast.ComponentRef(name=name), right=ast.Primary(value=0))
+        )
 
 
 def _process_transitions(flat_class: ast.InstanceClass):

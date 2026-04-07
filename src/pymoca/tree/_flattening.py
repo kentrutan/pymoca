@@ -9,8 +9,9 @@ Adapter: flatten_to_tree(root, class_name) → ast.Tree (for backend compatibili
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import copy
+import operator
 import sys
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict
 from typing import Optional, Set, Union, cast
 
 from . import ModelicaSemanticError, NameLookupError
@@ -392,26 +393,27 @@ class ExpressionEvaluator(TreeListener):
 
     TODO: Ensure expression evaluation is according to Modelica spec"""
 
-    # How to transform Modelica operators to Python
-    transform_operator = defaultdict(
-        None,
-        {
-            "+": "+",
-            "-": "-",
-            "*": "*",
-            "/": "/",
-            "^": "**",
-            "and": "and",
-            "or": "or",
-            "not": "not",
-            "<": "<",
-            "<=": "<=",
-            ">": ">",
-            ">=": ">=",
-            "==": "==",
-            "<>": "!=",
-        },
-    )
+    # Unary and binary operator callables for Modelica → Python dispatch
+    unary_operator = {
+        "+": operator.pos,
+        "-": operator.neg,
+        "not": operator.not_,
+    }
+    binary_operator = {
+        "+": operator.add,
+        "-": operator.sub,
+        "*": operator.mul,
+        "/": operator.truediv,
+        "^": operator.pow,
+        "and": operator.and_,
+        "or": operator.or_,
+        "<": operator.lt,
+        "<=": operator.le,
+        ">": operator.gt,
+        ">=": operator.ge,
+        "==": operator.eq,
+        "<>": operator.ne,
+    }
 
     def __init__(
         self,
@@ -431,9 +433,7 @@ class ExpressionEvaluator(TreeListener):
         super().__init__()
 
     def enterExpression(self, tree: ast.Expression):
-        operator = self.transform_operator.get(str(tree.operator))
-        if operator is None:
-            raise NotImplementedError(f"Unsupported operator {tree.operator} in {tree!r}")
+        op_str = str(tree.operator)
         operands = []
         for operand in tree.operands:
             if isinstance(operand, ast.ComponentRef):
@@ -449,15 +449,23 @@ class ExpressionEvaluator(TreeListener):
                 raise NotImplementedError(f"Expression operand type not implemented: {operand!r}")
             operands.append(operand)
 
-        if len(operands) == 1:
-            expr_parts = (operator, operands[0].value)
-        else:
-            expr_parts = (operands[0].value, operator, operands[1].value)
-        expr = " ".join(str(part) for part in expr_parts)
         try:
-            self.result = eval(expr)
-        except Exception:
-            raise ModelicaSemanticError(f"Unable to evaluate expression: {expr}")
+            if len(operands) == 1:
+                op_func = self.unary_operator.get(op_str)
+                if op_func is None:
+                    raise NotImplementedError(f"Unsupported unary operator {op_str!r} in {tree!r}")
+                self.result = op_func(operands[0].value)
+            else:
+                op_func = self.binary_operator.get(op_str)
+                if op_func is None:
+                    raise NotImplementedError(f"Unsupported binary operator {op_str!r} in {tree!r}")
+                self.result = op_func(operands[0].value, operands[1].value)
+        except (NotImplementedError, ModelicaSemanticError):
+            raise
+        except Exception as exc:
+            raise ModelicaSemanticError(
+                f"Unable to evaluate expression: {op_str!r} on {[o.value for o in operands]}"
+            ) from exc
 
 
 def _resolve_expression(

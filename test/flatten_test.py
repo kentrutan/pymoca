@@ -586,6 +586,108 @@ def _is_flow_sum_equation(eq, var_names):
     return refs == var_names
 
 
+def _flatten_inline(txt, model_name):
+    """Parse inline Modelica, instantiate, and flatten. Returns the flat InstanceClass."""
+    ast_tree = parser.parse(txt)
+    instance = tree.instantiate(model_name, ast_tree)
+    return tree.flatten_instance(instance)
+
+
+def test_expression_evaluator_via_modifications_binary():
+    """_resolve_modifications evaluates a binary literal expression and sets symbol value."""
+    flat = _flatten_inline(
+        """
+    model M
+        constant Real x = 3.0 * 4.0;
+    end M;""",
+        "M",
+    )
+    assert flat.symbols["x"].value == 12.0
+
+
+def test_expression_evaluator_via_modifications_unary():
+    """_resolve_modifications evaluates a unary literal expression and sets symbol value."""
+    flat = _flatten_inline(
+        """
+    model M
+        constant Real x = -5.0;
+    end M;""",
+        "M",
+    )
+    assert flat.symbols["x"].value == -5.0
+
+
+def test_expression_evaluator_via_modifications_componentref():
+    """_resolve_modifications enters the ComponentRef branch but swallows the error.
+
+    When operand 'n' resolves to an InstanceSymbol whose .value is still Primary
+    at modification time (ordering), op_func raises TypeError → ModelicaSemanticError
+    → swallowed. The expression is kept as-is, same as an unevaluable expression.
+    """
+    flat = _flatten_inline(
+        """
+    model M
+        constant Real n = 3.0;
+        constant Real x = n * 2.0;
+    end M;""",
+        "M",
+    )
+    # ComponentRef branch fires but evaluation fails; expression kept
+    assert isinstance(flat.symbols["x"].value, ast.Expression)
+
+
+def test_expression_evaluator_via_modifications_error_kept():
+    """_resolve_modifications swallows evaluation errors and keeps the expression as-is.
+
+    Division by zero raises ZeroDivisionError → ModelicaSemanticError inside
+    _resolve_expression, which _resolve_modifications catches and ignores.
+    The symbol value should remain as ast.Expression.
+    """
+    flat = _flatten_inline(
+        """
+    model M
+        constant Real x = 1.0 / 0.0;
+    end M;""",
+        "M",
+    )
+    assert isinstance(flat.symbols["x"].value, ast.Expression)
+
+
+def test_expression_evaluator_via_dimensions_literal():
+    """_resolve_dimensions evaluates a pure-literal expression dimension."""
+    flat = _flatten_inline(
+        """
+    model M
+        Real x[2 + 1];
+    end M;""",
+        "M",
+    )
+    dims = flat.symbols["x"].dimensions
+    assert len(dims) == 1
+    assert isinstance(dims[0][0], ast.Primary)
+    assert dims[0][0].value == 3
+
+
+def test_expression_evaluator_via_dimensions_componentref():
+    """_resolve_dimensions resolves a ComponentRef operand then evaluates.
+
+    Unlike _resolve_modifications, _resolve_dimensions processes dimensions after
+    symbols are instantiated, so parameter values are available.
+    """
+    flat = _flatten_inline(
+        """
+    model M
+        parameter Integer n = 3;
+        Real x[n + 1];
+    end M;""",
+        "M",
+    )
+    dims = flat.symbols["x"].dimensions
+    assert len(dims) == 1
+    assert isinstance(dims[0][0], ast.Primary)
+    assert dims[0][0].value == 4
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

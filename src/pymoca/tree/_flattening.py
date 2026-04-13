@@ -58,8 +58,7 @@ def _create_partial_flat_instance(instance: ast.InstanceClass) -> ast.InstanceCl
         ast_ref=instance.ast_ref,
         parent=instance.parent,
         parent_instance=instance.parent_instance,
-        fully_instantiated=instance.fully_instantiated,
-        partially_instantiated=instance.partially_instantiated,
+        instantiation_state=instance.instantiation_state,
     )
 
     # Populate classes and extends for name lookup
@@ -676,7 +675,10 @@ def _flatten_discovered_functions(
             func_class = functions[full_name]
 
             # Instantiate if needed
-            if not isinstance(func_class, ast.InstanceClass) or not func_class.fully_instantiated:
+            if (
+                not isinstance(func_class, ast.InstanceClass)
+                or func_class.instantiation_state < ast.InstantiationState.FULL
+            ):
                 func_instance = _instantiate_element(
                     func_class,
                     func_class.parent,
@@ -905,7 +907,7 @@ def _resolve_name(
             )
 
     # Step C: Fully instantiate the scope class if needed
-    if not scope.fully_instantiated:
+    if scope.instantiation_state < ast.InstantiationState.FULL:
         scope = _instantiate_class(
             scope,
             ast.ClassModification(),
@@ -927,7 +929,10 @@ def _resolve_name(
 
     is_symbol = isinstance(found, ast.Symbol)
 
-    if not isinstance(found, ast.InstanceElement) or not found.fully_instantiated:
+    if (
+        not isinstance(found, ast.InstanceElement)
+        or found.instantiation_state < ast.InstantiationState.FULL
+    ):
         element = _instantiate_element(
             found,
             scope,
@@ -970,7 +975,7 @@ def _instantiate_element(
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
     instantiate_in_place: bool = False,
     update_parent_instance: bool = True,
-    partially: bool = False,
+    target_state: ast.InstantiationState = ast.InstantiationState.FULL,
 ) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
 
     is_symbol = isinstance(element, ast.Symbol)
@@ -1005,7 +1010,7 @@ def _instantiate_element(
         current_extends=current_extends,
         instantiate_in_place=instantiate_in_place,
         update_parent_instance=update_parent_instance,
-        partially=partially,
+        target_state=target_state,
     )
 
     if is_symbol:

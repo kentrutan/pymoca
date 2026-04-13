@@ -52,9 +52,9 @@ def instantiate(class_name: str, class_tree: ast.Tree) -> ast.InstanceClass:
 
     The returned class will be fully instantiated, but name lookup
     in the instance tree may return `ast.Class` or
-    `ast.InstanceClass` with the `fully_instantiated` flag set to
-    `False`. If so, these cases will need to be fully instantiated
-    for flattening by calling this function on the class.
+    `ast.InstanceClass` with `instantiation_state` less than FULL.
+    If so, these cases will need to be fully instantiated for
+    flattening by calling this function on the class.
     """
     instance_tree = InstanceTree(class_tree)
     class_ = find_name(class_name, instance_tree)
@@ -77,7 +77,7 @@ def _instantiate_class(
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
     instantiate_in_place: bool = False,
     update_parent_instance: bool = True,
-    partially: bool = False,
+    target_state: ast.InstantiationState = ast.InstantiationState.FULL,
 ) -> ast.InstanceClass:
     """Instantiate a class
 
@@ -137,7 +137,7 @@ def _instantiate_class(
     else:
         # Class already at least partially instantiated and no modifications
         new_class = parent_instance.classes[orig_class.name]
-        if new_class.fully_instantiated or (partially and new_class.partially_instantiated):
+        if new_class.instantiation_state >= target_state:
             return new_class
 
     if current_instances is None:
@@ -159,7 +159,7 @@ def _instantiate_class(
     # 2.1 Partially instantiate local classes, symbols, and extends
     if (
         isinstance(orig_class, ast.InstanceClass)
-        and not orig_class.fully_instantiated
+        and orig_class.instantiation_state < ast.InstantiationState.FULL
         or orig_class.name in InstanceTree.BUILTIN_TYPES
     ):
         from_class = new_class.ast_ref
@@ -178,7 +178,7 @@ def _instantiate_class(
         )
         assert isinstance(lexical_parent, (ast.InstanceClass, InstanceTree))
 
-    if not new_class.partially_instantiated:
+    if new_class.instantiation_state < ast.InstantiationState.PARTIAL:
 
         for class_ in from_class.classes.values():
             _instantiate_partially(
@@ -206,10 +206,10 @@ def _instantiate_class(
             current_instances=current_instances,
             current_extends=current_extends,
             instantiate_in_place=instantiate_in_place,
-            partially=True,
+            target_state=ast.InstantiationState.PARTIAL,
         )
 
-    new_class.partially_instantiated = True
+    new_class.instantiation_state = ast.InstantiationState.PARTIAL
     current_instances.remove(new_class)
 
     # 2.2 Copy local contents into the element itself
@@ -217,7 +217,7 @@ def _instantiate_class(
     # by extends) so that flattening can collect them without falling back to ast_ref.
     _copy_equations_contents(new_class)
 
-    if partially:
+    if target_state <= ast.InstantiationState.PARTIAL:
         return new_class
 
     _copy_class_contents(new_class, copy_extends=False)
@@ -256,7 +256,7 @@ def _instantiate_class(
     # Unconsumed args at this point indicate typos (e.g., b(x=3) when symbol is X).
     _check_modification_targets(new_class, modification_environment)
 
-    new_class.fully_instantiated = True
+    new_class.instantiation_state = ast.InstantiationState.FULL
 
     return new_class
 
@@ -352,35 +352,6 @@ def _check_extends_rules(extends_list: List[ast.InstanceClass], class_: ast.Inst
         )
 
 
-def _instantiate_extends_list_partially(
-    extends_list: List[Union[ast.ExtendsClause, ast.Class, ast.InstanceClass]],
-    modification_environment: ast.ClassModification,
-    parent_instance: ast.InstanceClass,
-    current_instances: Optional[Set[ast.InstanceClass]],
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
-    instantiate_in_place: bool,
-) -> List[ast.InstanceClass]:
-    """Instantiate extends list of clause, class, or instance"""
-
-    partially_instantiated_extends = []
-
-    for extends in extends_list:
-        assert isinstance(extends, (ast.ExtendsClause, ast.Class))
-        extends_instance = _instantiate_extends_partially(
-            extends,
-            modification_environment,
-            parent_instance,
-            current_instances,
-            current_extends,
-            instantiate_in_place,
-        )
-        partially_instantiated_extends.append(extends_instance)
-
-    _check_extends_rules(partially_instantiated_extends, parent_instance)
-
-    return partially_instantiated_extends
-
-
 def _instantiate_extends_partially(
     extends: Union[ast.ExtendsClause, ast.Class, ast.InstanceClass],
     modification_environment: ast.ClassModification,
@@ -456,7 +427,7 @@ def _instantiate_extends_list(
     current_instances: Optional[Set[ast.InstanceClass]],
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
     instantiate_in_place: bool,
-    partially: bool = False,
+    target_state: ast.InstantiationState = ast.InstantiationState.FULL,
 ) -> List[ast.InstanceClass]:
     """Instantiate extends in given list either partially for name lookup or fully"""
 
@@ -489,7 +460,7 @@ def _instantiate_extends_list(
             current_extends=current_extends,
             instantiate_in_place=instantiate_in_place,
             update_parent_instance=False,
-            partially=partially,
+            target_state=target_state,
         )
         extends_list_instantiated.append(extends_instance)
 
@@ -670,7 +641,7 @@ def _instantiate_symbol(
     assert isinstance(parent_instance, ast.InstanceClass)
 
     if symbol.name in InstanceTree.BUILTIN_TYPES:
-        symbol.fully_instantiated = True
+        symbol.instantiation_state = ast.InstantiationState.FULL
         return
 
     modification_environment = symbol.modification_environment
@@ -715,7 +686,7 @@ def _instantiate_symbol(
     # chain reflects component names, not class names
     symbol.type.parent_instance = symbol
 
-    symbol.fully_instantiated = True
+    symbol.instantiation_state = ast.InstantiationState.FULL
 
 
 def _instantiate_partially(
@@ -873,7 +844,6 @@ def _apply_redeclares(
     current_instances: Optional[Set[ast.InstanceClass]],
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
     instantiate_in_place: bool,
-    partially: bool = False,
 ) -> bool:
     """Apply redeclare if any and remove from environment
 
@@ -962,7 +932,6 @@ def _apply_redeclares(
         current_instances=current_instances,
         current_extends=current_extends,
         instantiate_in_place=instantiate_in_place,
-        partially=partially,
     )
     redeclare_class = extends_list_instantiated[0]
     redeclare_class.replaceable = redeclare.replaceable
@@ -991,7 +960,6 @@ def _apply_redeclares(
             current_instances=current_instances,
             current_extends=current_extends,
             instantiate_in_place=instantiate_in_place,
-            partially=partially,
         )
         element.type = redeclared
 

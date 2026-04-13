@@ -159,7 +159,7 @@ def _instantiate_class_if_needed_for_lookup(
     if isinstance(class_, ast.Tree) or not isinstance(class_, ast.InstanceClass):
         return class_
     # Same if already at least partially instantiated
-    if class_.fully_instantiated or class_.partially_instantiated:
+    if class_.instantiation_state >= ast.InstantiationState.PARTIAL:
         return class_
     # Only instantiate if we are not already instantiating this class
     # If a name is not available yet in class_ in process of being instantiated,
@@ -176,7 +176,7 @@ def _instantiate_class_if_needed_for_lookup(
         current_instances=current_instances,
         current_extends=current_extends,
         instantiate_in_place=instantiate_in_place,
-        partially=True,
+        target_state=ast.InstantiationState.PARTIAL,
     )
     return instance
     # TODO: Full instantiation in place for flattening
@@ -590,8 +590,9 @@ def _flatten_first_and_find_rest(
     from ._flattening import _create_partial_flat_instance, _flatten_instance
 
     # Per spec v3.5 section 5.3.2 bullet 4, class is temporarily flattened
-    if not isinstance(first, ast.InstanceClass) or not (
-        first.partially_instantiated or first.fully_instantiated
+    if (
+        not isinstance(first, ast.InstanceClass)
+        or first.instantiation_state < ast.InstantiationState.PARTIAL
     ):
         parent_instance = getattr(first, "parent_instance", None)
         if parent_instance is None:
@@ -609,7 +610,7 @@ def _flatten_first_and_find_rest(
             current_instances=current_instances,
             current_extends=current_extends,
             instantiate_in_place=instantiate_in_place,
-            partially=True,
+            target_state=ast.InstantiationState.PARTIAL,
         )
     else:
         first_instance = first

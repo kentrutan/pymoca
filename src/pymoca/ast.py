@@ -9,7 +9,7 @@ import json
 import math
 import sys
 from collections import OrderedDict
-from enum import Enum
+from enum import Enum, IntEnum
 from typing import List, Optional, Type, Union  # noqa: F401
 
 
@@ -43,6 +43,12 @@ class Visibility(Enum):
 
     def __lt__(self, other):
         return self.value < other.value
+
+
+class InstantiationState(IntEnum):
+    NONE = 0  # Not yet instantiated
+    PARTIAL = 1  # Local classes/symbols/extends instantiated (step 2.1)
+    FULL = 2  # All steps done, symbols recursively instantiated
 
 
 nan = float("nan")
@@ -984,8 +990,7 @@ class InstanceElement:
         ast_ref: Optional[Union[Class, Symbol]] = None,
         modification_environment: Optional[ClassModification] = None,
         parent_instance: Optional["InstanceClass"] = None,
-        fully_instantiated: bool = False,
-        partially_instantiated: bool = False,
+        instantiation_state: InstantiationState = InstantiationState.NONE,
         **kwargs,
     ):
         """ast_ref is a reference to the AST node where this instance is defined.
@@ -1015,8 +1020,7 @@ class InstanceElement:
         else:
             self.type = ComponentRef()  # The default in Symbol
 
-        self.fully_instantiated = fully_instantiated
-        self.partially_instantiated = partially_instantiated
+        self.instantiation_state = instantiation_state
         self.parent_instance = parent_instance
 
     @property

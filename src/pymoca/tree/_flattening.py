@@ -53,6 +53,8 @@ def flatten_instance(
         flat_class.extends.append(extends_copy)
 
     _flatten_instance(instance, flat_class)
+    _check_all_references_valid(flat_class)
+    _process_transitions(flat_class)
     return flat_class
 
 
@@ -159,15 +161,11 @@ def _flatten_instance(
     for extends in instance.extends:
         _flatten_instance(extends, flat_class, prefix)
 
-    # 1.9 Check that all references now point to a valid instance (not conditionally false)
-    _check_all_references_valid(flat_class)
+    # Steps 1.9 and 3 are done outside the recursion in the caller
 
     # 2. Generate connect equations for all connections in the flattened tree
     if not keep_connectors:
         _generate_connect_equations(flat_class)
-
-    # 3. Process transitions in the flattened tree
-    _process_transitions(flat_class)
 
 
 def _evaluate_conditional_declarations(symbol: ast.InstanceSymbol, parent: ast.Class):

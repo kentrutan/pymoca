@@ -330,6 +330,7 @@ def _resolve_modifications(
         _resolve_modification_attribute(
             symbol,
             arg,
+            flat_class=flat_class,
             guard=guard,
             opts=opts,
             functions=functions,
@@ -340,6 +341,7 @@ def _resolve_modification_attribute(
     symbol: ast.InstanceSymbol,
     arg: ast.ClassModificationArgument,
     *,
+    flat_class: ast.InstanceClass,
     guard: RecursionGuard,
     opts: LookupOptions,
     functions: Optional[OrderedDict] = None,
@@ -365,6 +367,7 @@ def _resolve_modification_attribute(
             value,
             arg.scope,
             symbol.parent_instance,
+            name_flat_class=flat_class,
             guard=guard,
             opts=opts,
         )
@@ -915,8 +918,31 @@ def _resolve_name(
     *,
     guard: RecursionGuard,
     opts: LookupOptions,
+    name_flat_class: Optional[ast.InstanceClass] = None,
 ) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
-    """Flatten and resolve a name reference"""
+    """Resolve a name reference and return a flat-named element.
+
+    Two contexts govern resolution, which usually coincide but can differ for
+    modifications written in a base class that reference symbols in a derived class
+    (MLS section 4.5.1 and 5.6):
+
+    - ``scope``: where to look the name up (the syntactic scope where the reference
+      appears, e.g. the base class containing a modification expression).
+    - ``flat_class`` / ``name_flat_class``: the root model relative to which the
+      returned element's flat path is computed.  ``flat_class`` is also where the
+      element is cached/registered; ``name_flat_class`` overrides the naming root
+      without touching ``flat_class.symbols``.
+
+    Pass ``name_flat_class`` when ``scope`` and the flat-naming root differ — for
+    example, when resolving a ComponentRef that appears in a modification value
+    (``_resolve_modification_attribute``).  When ``name_flat_class`` is given the
+    returned element is a clone with the correct flat name, but it is *not*
+    registered in ``name_flat_class.symbols``; the element will be registered
+    through its own definition site when it is processed in the normal flattening
+    pass.
+    """
+
+    # Implements MLS section 5.6 steps:
     # * A. "all references by name in conditional declarations, modifications, dimension
     #   definitions, annotations, equations and algorithms are resolved to the real
     #   instance to which they are referring to ... [Either the referenced instance
@@ -989,6 +1015,20 @@ def _resolve_name(
         )
     else:
         element = found
+
+    # Deduplication against name_flat_class.symbols is intentionally skipped: entries
+    # there may have been registered by _flatten_instance's direct path without updating
+    # parent_instance, so returning them would give the wrong parent for
+    # modification-value clones.  Multiple modifications referencing the same symbol
+    # will receive distinct clones — safe as long as consumers key off the name string
+    # rather than object identity (which is the current convention).
+    if name_flat_class is not None:
+        flat_name = _flatten_name(element, name_flat_class.full_instance_name)
+        element = element.clone()
+        element.name = flat_name
+        element.parent_instance = name_flat_class
+        element.parent = name_flat_class
+        return element
 
     flat_name = _flatten_name(element, flat_class.full_instance_name)
 

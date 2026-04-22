@@ -30,3 +30,21 @@ model MainModel
 	Linear e(H_b=-2.0, A=1000.0);
 equation
 end MainModel;
+
+// LinearExpr: same as Linear but the cross-scope modification value is an
+// Expression (2 * H_b) rather than a bare ComponentRef.  This exercises the
+// expression-operand path of _resolve_modification_attribute with a
+// base-class scope (PartialStorage) that differs from the flat-naming root
+// (MainModelExpr).
+model LinearExpr
+  extends PartialStorage(HQ.H(min = 2 * H_b));
+  parameter Real A;
+  parameter Real H_b;
+equation
+  V = A * (HQ.H - H_b);
+end LinearExpr;
+
+model MainModelExpr
+  LinearExpr e(H_b=-2.0, A=1000.0);
+equation
+end MainModelExpr;

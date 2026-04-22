@@ -167,6 +167,8 @@ def _flatten_instance(
             flat_symbol.name = flat_name
             flat_class.symbols[flat_name] = flat_symbol
         elif not isinstance(flat_symbol.type, ast.InstanceClass):
+            # scope==instance (declaring class) already differs from flat_class (root); no
+            # derived-vs-base asymmetry here, so name_flat_class is not needed.
             resolved = _resolve_name(
                 flat_symbol.type,
                 instance,
@@ -275,6 +277,8 @@ def _resolve_dimensions(
             if isinstance(elem, ast.Primary) or isinstance(elem, ast.Slice):
                 continue
             elif isinstance(elem, ast.ComponentRef):
+                # Dimension refs are always declared in the same class (instance);
+                # no base-vs-derived asymmetry, so name_flat_class is not needed.
                 resolved = _resolve_name(
                     elem,
                     instance,
@@ -399,6 +403,20 @@ def _resolve_modification_attribute(
                 value = result
         except (NotImplementedError, ModelicaSemanticError):
             pass  # keep original ast.Expression
+        # When the expression cannot be folded to a scalar, rewrite any
+        # ComponentRef operands to their flat names so that the stored
+        # Expression is consistent with the rest of the flattened tree.
+        # This mirrors the name_flat_class treatment in the ComponentRef branch
+        # above (MLS §5.6.2 point B).
+        if isinstance(value, ast.Expression):
+            value = _flatten_expression_crefs(
+                value,
+                arg.scope,
+                symbol.parent_instance,
+                flat_class,
+                guard,
+                opts,
+            )
 
     setattr(symbol, mod.component.name, value)
 
@@ -478,6 +496,52 @@ class ExpressionEvaluator(TreeListener):
             raise ModelicaSemanticError(
                 f"Unable to evaluate expression: {op_str!r} on {[o.value for o in operands]}"
             ) from exc
+
+
+def _flatten_expression_crefs(
+    expr: ast.Expression,
+    scope: ast.InstanceClass,
+    flat_class: ast.InstanceClass,
+    name_flat_class: ast.InstanceClass,
+    guard: RecursionGuard,
+    opts: LookupOptions,
+) -> ast.Expression:
+    """Return a deep copy of expr with ComponentRef operands rewritten to flat names.
+
+    Mirrors the name_flat_class treatment in _resolve_name: each ComponentRef is
+    resolved in scope and renamed relative to name_flat_class (MLS §5.6.2 point B).
+    Operands that cannot be resolved are left unchanged.
+    """
+    result = copy.deepcopy(expr)
+    _rewrite_expression_crefs(result, scope, flat_class, name_flat_class, guard, opts)
+    return result
+
+
+def _rewrite_expression_crefs(
+    expr: ast.Expression,
+    scope: ast.InstanceClass,
+    flat_class: ast.InstanceClass,
+    name_flat_class: ast.InstanceClass,
+    guard: RecursionGuard,
+    opts: LookupOptions,
+) -> None:
+    for operand in expr.operands:
+        if isinstance(operand, ast.ComponentRef):
+            try:
+                resolved = _resolve_name(
+                    operand,
+                    scope,
+                    flat_class,
+                    name_flat_class=name_flat_class,
+                    guard=guard,
+                    opts=opts,
+                )
+                operand.name = resolved.name
+                operand.child = []
+            except Exception:
+                pass  # leave un-resolvable refs (builtins, for-indices) unchanged
+        elif isinstance(operand, ast.Expression):
+            _rewrite_expression_crefs(operand, scope, flat_class, name_flat_class, guard, opts)
 
 
 def _resolve_expression(

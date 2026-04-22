@@ -334,6 +334,32 @@ def test_extends_modification():
     assert flat_tree.symbols["e.HQ.H"].min.name == "e.H_b"
 
 
+def test_extends_modification_expression():
+    """Cross-scope modification whose value is an Expression, not a bare ComponentRef.
+
+    LinearExpr has `extends PartialStorage(HQ.H(min = 2 * H_b))`.  At flatten
+    time the modification scope is PartialStorage (base class) but the flat-
+    naming root is MainModelExpr.  The expression `2 * H_b` refers to H_b from
+    LinearExpr; the flattened result on e.HQ.H.min should either be the
+    evaluated scalar (2 * -2.0 = -4.0) or an ast.Expression whose inner
+    ComponentRef names "e.H_b" relative to MainModelExpr.
+    """
+    instance = parse_and_instantiate_model("ExtendsModification.mo", "MainModelExpr")
+
+    flat_tree = tree.flatten_instance(instance)
+
+    min_val = flat_tree.symbols["e.HQ.H"].min
+    if isinstance(min_val, (int, float)):
+        # Constant-folding path: -2.0 * 2 = -4.0
+        assert min_val == pytest.approx(-4.0)
+    else:
+        # Symbolic path: the ComponentRef inside the Expression must be flat-named
+        assert isinstance(min_val, ast.Expression)
+        operand = min_val.operands[1]
+        assert isinstance(operand, ast.ComponentRef)
+        assert operand.name == "e.H_b"
+
+
 def test_custom_units():
     instance = parse_and_instantiate_model("CustomUnits.mo", "A")
 

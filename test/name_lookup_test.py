@@ -186,7 +186,7 @@ def test_enclosing_class_lookup_nonconstant():
     scope = find_name("A", scope)
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
-    with pytest.raises(NameLookupError):
+    with pytest.raises(NameLookupError, match=r"Non-constant Symbol found in enclosing class"):
         find_name("x", scope)
 
 
@@ -205,7 +205,7 @@ def test_enclosing_class_lookup_shadowed_constant():
     scope = find_name("B", scope)
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
-    with pytest.raises(NameLookupError):
+    with pytest.raises(NameLookupError, match=r"Non-constant Symbol found in enclosing class"):
         find_name("x", scope)
 
 
@@ -362,8 +362,9 @@ def test_non_package_lookup_comp():
         "Scoping.NameLookup.Composite.NonPackageLookupComp",
         ast.classes["ModelicaCompliance"],
     )
-    # TODO: Implement assertRaisesRegex for this and other NameLookupError cases
-    with pytest.raises(pymoca.tree.NameLookupError):
+    with pytest.raises(
+        pymoca.tree.NameLookupError, match=r"A is not a package so x must be encapsulated"
+    ):
         _ = find_name("A.x", scope)
 
 
@@ -387,7 +388,9 @@ def test_non_package_lookup_non_encapsulated():
         "Scoping.NameLookup.Composite.NonPackageLookupNonEncapsulated",
         ast.classes["ModelicaCompliance"],
     )
-    with pytest.raises(pymoca.tree.NameLookupError):
+    with pytest.raises(
+        pymoca.tree.NameLookupError, match=r"A is not a package so B must be encapsulated"
+    ):
         _ = find_name("A.B", scope)
 
 
@@ -412,7 +415,7 @@ def test_function_lookup_via_comp_non_call():
         "Scoping.NameLookup.Composite.FunctionLookupViaComp",
         ast.classes["ModelicaCompliance"],
     )
-    with pytest.raises(pymoca.tree.NameLookupError):
+    with pytest.raises(pymoca.tree.NameLookupError, match=r"ADD REGEX WHEN UNSKIPPED"):
         _ = find_name("a.f", scope)
 
 
@@ -449,7 +452,7 @@ def test_function_in_operator_lookup_via_comp():
         "Scoping.NameLookup.Composite.FunctionInOperatorLookupViaComp.FunctionInOperatorLookupViaComp",
         ast.classes["ModelicaCompliance"],
     )
-    with pytest.raises(pymoca.tree.NameLookupError):
+    with pytest.raises(pymoca.tree.NameLookupError, match=r"ADD REGEX WHEN UNSKIPPED"):
         _ = find_name("or1.'+'.add", scope)
 
 
@@ -462,7 +465,7 @@ def test_operator_function_lookup_via_comp():
         "Scoping.NameLookup.Composite.OperatorFunctionLookupViaComp.OperatorFunctionLookupViaComp",
         ast.classes["ModelicaCompliance"],
     )
-    with pytest.raises(pymoca.tree.NameLookupError):
+    with pytest.raises(pymoca.tree.NameLookupError, match=r"ADD REGEX WHEN UNSKIPPED"):
         _ = find_name("or1.'+'", scope)
 
 
@@ -474,8 +477,9 @@ def test_function_lookup_via_array_comp():
         "Scoping.NameLookup.Composite.FunctionLookupViaArrayComp",
         ast.classes["ModelicaCompliance"],
     )
-    # with pytest.raises(pymoca.tree.NameLookupError):
-    with pytest.raises(pymoca.tree.NameLookupError):
+    with pytest.raises(
+        pymoca.tree.NameLookupError, match=r"Array a must have subscripts to lookup function f"
+    ):
         _ = find_name("a.f", scope)
 
 
@@ -536,7 +540,6 @@ def test_encapsulated_global_lookup():
     found = find_name("a.y", scope)
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
-    # TODO: flatten and check a.y.value = 1.4
 
 
 # Imported name lookup tests from ModelicaCompliance
@@ -650,7 +653,10 @@ def test_qualified_import_non_package():
         "Scoping.NameLookup.Imports.QualifiedImportNonPackage",
         ast.classes["ModelicaCompliance"],
     )
-    with pytest.raises(pymoca.tree.NameLookupError):
+    with pytest.raises(
+        pymoca.tree.NameLookupError,
+        match=r"QualifiedImportNonPackage must be a package in import ModelicaCompliance.Scoping.NameLookup.Imports.QualifiedImportNonPackage.A in scope ModelicaCompliance.Scoping.NameLookup.Imports.QualifiedImportNonPackage",
+    ):
         _ = find_name("A2", scope)
 
 
@@ -661,7 +667,10 @@ def test_qualified_import_protected():
         "Scoping.NameLookup.Imports.QualifiedImportProtected",
         ast.classes["ModelicaCompliance"],
     )
-    with pytest.raises(pymoca.tree.NameLookupError):
+    with pytest.raises(
+        pymoca.tree.NameLookupError,
+        match=r"Import y must not be protected in scope ModelicaCompliance.Scoping.NameLookup.Imports.QualifiedImportProtected.A",
+    ):
         _ = find_name("A.y", scope)
 
 
@@ -672,7 +681,10 @@ def test_recursive():
         "Scoping.NameLookup.Imports.Recursive",
         ast.classes["ModelicaCompliance"],
     )
-    with pytest.raises(pymoca.tree.NameLookupError):
+    with pytest.raises(
+        pymoca.tree.NameLookupError,
+        match=r"Import ModelicaCompliance.Scoping.NameLookup.Imports.Recursive in scope ModelicaCompliance.Scoping.NameLookup.Imports.Recursive is recursive",
+    ):
         _ = find_name("A", scope)
 
 
@@ -712,7 +724,10 @@ def test_renaming_import_non_package():
         "Scoping.NameLookup.Imports.RenamingImportNonPackage",
         ast.classes["ModelicaCompliance"],
     )
-    with pytest.raises(pymoca.tree.NameLookupError):
+    with pytest.raises(
+        pymoca.tree.NameLookupError,
+        match=r"RenamingImportNonPackage must be a package in import ModelicaCompliance.Scoping.NameLookup.Imports.RenamingImportNonPackage.A in scope ModelicaCompliance.Scoping.NameLookup.Imports.RenamingImportNonPackage",
+    ):
         _ = find_name("A2", scope)
 
 
@@ -776,7 +791,7 @@ def test_unqualified_import_conflict():
         "Scoping.NameLookup.Imports.UnqualifiedImportConflict",
         ast.classes["ModelicaCompliance"],
     )
-    with pytest.raises(pymoca.tree.NameLookupError):
+    with pytest.raises(pymoca.tree.NameLookupError, match=r"ADD REGEX WHEN UNSKIPPED"):
         _ = find_name("A.x", scope)
 
 
@@ -798,7 +813,10 @@ def test_unqualified_import_non_package():
     """Checks that an unqualified import is not allowed to import
     from a non-package"""
     ast = parse_imported_lookup_file("UnqualifiedImportNonPackage.mo")
-    with pytest.raises(pymoca.tree.NameLookupError):
+    with pytest.raises(
+        pymoca.tree.NameLookupError,
+        match=r"A must be a package in import ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImportNonPackage.A.B in scope ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImportNonPackage",
+    ):
         _ = find_name(
             "ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImportNonPackage.B",
             ast,
@@ -836,7 +854,10 @@ def test_unqualified_import_protected():
         "Scoping.NameLookup.Imports.UnqualifiedImportProtected",
         ast.classes["ModelicaCompliance"],
     )
-    with pytest.raises(pymoca.tree.NameLookupError):
+    with pytest.raises(
+        pymoca.tree.NameLookupError,
+        match=r"Import y must not be protected in scope ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImportProtected.A",
+    ):
         _ = find_name("A.y", scope)
 
 

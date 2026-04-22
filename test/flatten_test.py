@@ -249,9 +249,9 @@ def test_flattening_modification_scope():
     expect = (  # symbol_name, value_type, value, value_parent_name
         ("R", "literal", 3.0, None),  # Literal has no value parent
         ("a.R", "literal", 4.0, "A"),
-        ("b.R", "symbol", "R", ""),  # Unnamed extends node is parent
+        ("b.R", "symbol", "R", "A"),  # Reparented to flat class
         ("c.R", "literal", 5.0, "A"),
-        ("d.R", "symbol", "R", ""),  # Unnamed extends node is parent
+        ("d.R", "symbol", "d.R", "A"),  # Self-ref in LoadError: d.R=d.R; reparented to flat class
     )
     for symbol_name, value_type, value, value_parent_name in expect:
         symbol_value = flat_tree.symbols[symbol_name].value
@@ -318,6 +318,20 @@ def test_parameter_modification_scope():
     flat_tree = tree.flatten_instance(instance)
 
     assert flat_tree.symbols["nc.p"].value.name == "p"
+
+
+def test_extends_modification():
+    instance = parse_and_instantiate_model("ExtendsModification.mo", "MainModel")
+
+    e_HQ_H = instance.symbols["e"].type.extends[0].extends[0].symbols["HQ"].type.symbols["H"]
+    H_mod = e_HQ_H.type.symbols["Real"].modification_environment.arguments[0].value
+    assert H_mod.component.name == "min"
+    min_mod = H_mod.modifications[0]
+    assert min_mod.name == "H_b"
+
+    flat_tree = tree.flatten_instance(instance)
+
+    assert flat_tree.symbols["e.HQ.H"].min.name == "e.H_b"
 
 
 def test_custom_units():

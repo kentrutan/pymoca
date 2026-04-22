@@ -504,21 +504,6 @@ def test_inheritance_symbol_modifiers():
     assert flat_tree.symbols["x"].max == 30.0
 
 
-@pytest.mark.xfail  # "New flattening expression modification not implemented yet"
-def test_extends_modification():
-    instance = parse_and_instantiate_model("ExtendsModification.mo", "MainModel")
-
-    e_HQ_H = instance.symbols["e"].type.extends[0].extends[0].symbols["HQ"].type.symbols["H"]
-    H_mod = e_HQ_H.type.symbols["Real"].modification_environment.arguments[0].value
-    assert H_mod.component.name == "min"
-    min_mod = H_mod.modifications[0]
-    assert min_mod.name == "H_b"
-
-    flat_tree = tree.flatten_instance(instance)
-
-    assert flat_tree.symbols["e.HQ.H"].min.name == "e.H_b"
-
-
 def test_modification_typo():
     with open(os.path.join(MODEL_DIR, "ModificationTypo.mo"), "r") as f:
         txt = f.read()

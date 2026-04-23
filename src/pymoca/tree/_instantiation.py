@@ -9,7 +9,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import copy  # TODO
 from collections import OrderedDict
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 from . import (
     InstantiationError,
@@ -319,34 +319,35 @@ def _update_class_modification_scopes(
     return element
 
 
-def _check_extends_rules(extends_list: List[ast.InstanceClass], class_: ast.InstanceClass) -> None:
+def _check_extends_rules(
+    extends_list: List[ast.InstanceClass],
+    extends_refs: List[Tuple[str, ...]],
+    class_: ast.InstanceClass,
+) -> None:
     """Check the extends rules over the full extends list"""
-
-    # Check we do not extend from any symbols/classes inherited
-    extends_names = {}
-    for extends in extends_list:
-        extends_names[extends.ast_ref.name] = extends.ast_ref.full_name
 
     extends_builtin = set()
     extends_other = set()
-    for extends_name, extends_component_ref in extends_names.items():
-        if extends_name in InstanceTree.BUILTIN_TYPES:
-            extends_builtin.add(extends_name)
+    for ref_tuple, _partial in zip(extends_refs, extends_list):
+        composite_name = ".".join(ref_tuple)
+        if len(ref_tuple) == 1 and ref_tuple[0] in InstanceTree.BUILTIN_TYPES:
+            extends_builtin.add(ref_tuple[0])
             # Built-in classes contain a symbol with the same name. This causes an error
             # in the check below, so skip them. Built-in names are checked after this
             # loop completes.
             continue
-        extends_other.add(extends_name)
-        for other_class in extends_list:
-            other_names = {
-                *other_class.ast_ref.symbols.keys(),
-                *other_class.ast_ref.classes.keys(),
-            }
-            if extends_name in other_names:
-                raise ModelicaSemanticError(
-                    f"Cannot extend '{class_.full_name}' with '{extends_component_ref}'; "
-                    f"'{extends_name}' also exists in names inherited from '{other_class.ast_ref.name}'"
-                )
+        extends_other.add(composite_name)
+        for ident in ref_tuple:
+            for other_class in extends_list:
+                other_names = {
+                    *other_class.ast_ref.symbols.keys(),
+                    *other_class.ast_ref.classes.keys(),
+                }
+                if ident in other_names:
+                    raise ModelicaSemanticError(
+                        f"Cannot extend '{class_.full_name}' with '{composite_name}'; "
+                        f"'{ident}' also exists in names inherited from '{other_class.ast_ref.name}'"
+                    )
     if len(extends_builtin) > 1 or len(extends_builtin) and len(extends_other):
         raise ModelicaSemanticError(
             "When extending a built-in class (Real, Integer, ...) you cannot extend other classes as well"
@@ -446,7 +447,11 @@ def _instantiate_extends_list(
         )
         extends_partially_instantiated.append(extends_instance)
 
-    _check_extends_rules(extends_partially_instantiated, parent_instance)
+    extends_refs = [
+        extends.component.to_tuple() if isinstance(extends, ast.ExtendsClause) else (extends.name,)
+        for extends in extends_list
+    ]
+    _check_extends_rules(extends_partially_instantiated, extends_refs, parent_instance)
 
     extends_list_instantiated = []
     for extends in extends_partially_instantiated:

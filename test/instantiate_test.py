@@ -421,8 +421,6 @@ def test_error_extends_class_also_extended_name_of_self():
         instance = tree.instantiate("C", ast_tree)  # noqa: F841
 
 
-# FIXME: Where does the spec or ModelicaCompliance say this test is valid?
-@pytest.mark.xfail
 def test_error_extends_class_also_extended_name_nested():
     """
     Check that we are not allowed to inherit from `model B.C`, because a

@@ -937,20 +937,29 @@ def _apply_redeclares(
     # Next cases are ast.InstanceSymbol
     elif isinstance(element.type, ast.InstanceClass):
         redeclared = element.type
+    elif element.type.name in InstanceTree.BUILTIN_TYPES:
+        # Builtin types are always re-instantiated from their ast_ref, so mutating
+        # the resolved type's extends would be lost. Use the already-instantiated
+        # redeclare_class (which carries the modifications in its symbols) directly.
+        element.type = redeclare_class
+        element.replaceable = redeclare.replaceable
+        redeclare_class.replaceable = redeclare.replaceable
+        return True
     else:
-        # element.type is an ast.ComponentRef
-        redeclared = _find_name(
+        # element.type is an ast.ComponentRef — fully instantiate the resolved class
+        # before mutating its extends, else re-instantiation would overwrite the mutation.
+        resolved = _find_name(
             element.type,
             element.parent_instance,
             guard,
             LookupOptions(instantiate_in_place=opts.instantiate_in_place),
         )
-        if redeclared is None:
+        if resolved is None:
             raise ModelicaSemanticError(
-                f"Redeclared type {element.type} not found in {scope_class}"
+                f"Redeclared type {element.type} not found in {scope_class.full_name}"
             )
         redeclared = _instantiate_class(
-            redeclared,
+            resolved,
             modification_environment,
             element.parent_instance,
             guard=guard,

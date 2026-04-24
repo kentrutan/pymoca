@@ -605,8 +605,8 @@ def test_scope_type():
     flat = flatten_compliance_model(
         ast, "ModelicaCompliance.Scoping.NameLookup.Imports.ImportScopeType"
     )
-    assert "a" in flat.symbols  # a references P2.y (2.0) via InstanceSymbol
-    assert "m.y" in flat.symbols  # m.y references P.x via InstanceSymbol
+    assert "a" in flat.symbols  # a = P2.y; value not literal-traceable (ref chain)
+    assert get_flat_symbol_value(flat, "m.y") == 2.0
 
 
 @pytest.mark.skip("Needs import modification validation")
@@ -879,6 +879,13 @@ def test_qualified_import_priority():
         found = find_name(name, scope)
         assert found is not None, f" for {name}"
 
+    flat = flatten_compliance_model(
+        ast, "ModelicaCompliance.Scoping.NameLookup.Simple.QualifiedImportPriority"
+    )
+    assert get_flat_symbol_value(flat, "d.y") == 2.0
+    assert get_flat_symbol_value(flat, "b.x") == 3.0
+    assert get_flat_symbol_value(flat, "c.x") == 1.0
+
 
 def test_unqualified_import_priority():
     """Tests that unqualified imports have lowest priority"""
@@ -893,6 +900,14 @@ def test_unqualified_import_priority():
     for name, _value in expect:
         found = find_name(name, scope)
         assert found is not None, f" for {name}"
+
+    flat = flatten_compliance_model(
+        ast, "ModelicaCompliance.Scoping.NameLookup.Simple.UnqualifiedImportPriority"
+    )
+    assert get_flat_symbol_value(flat, "e.y") == 2.0
+    assert get_flat_symbol_value(flat, "b.x") == 3.0
+    assert get_flat_symbol_value(flat, "c.x") == 1.0
+    assert get_flat_symbol_value(flat, "d.y") == 4.0
 
 
 if __name__ == "__main__":

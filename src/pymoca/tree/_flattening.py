@@ -43,6 +43,7 @@ def flatten_instance(
     functions = OrderedDict()
     _flatten_instance(instance, flat_class, functions=functions)
     _flatten_discovered_functions(functions, flat_class)
+    _flatten_value_ref_names(flat_class)
     _generate_value_equations(flat_class)  # MLS 5.6.2 step 1.4
     _check_all_references_valid(flat_class)
     _process_transitions(flat_class)
@@ -908,6 +909,38 @@ def _generate_connect_equations(flat_class: ast.InstanceClass):
         flat_class.equations.append(
             ast.Equation(left=ast.ComponentRef(name=name), right=ast.Primary(value=0))
         )
+
+
+def _flatten_value_ref_names(flat_class: ast.InstanceClass) -> None:
+    """Rewrite InstanceSymbol references in symbol value attributes to flat names.
+
+    Per MLS 5.6.2, value modifications are resolved (in source scope) before the
+    enclosing extends clauses are processed.  When a value references an inherited
+    symbol, ``_resolve_name`` must therefore fall back to the class tree — producing
+    an InstanceSymbol whose ``.name`` is the full class path (e.g. ``Pkg.A.x``)
+    rather than the flat name (``x``), because the extends instance isn't yet
+    registered in ``flat_class.symbols``.
+
+    Once all extends have been processed, every referenced inherited symbol exists
+    under its flat name.  Rewrite references by matching on ``ast_ref.full_name``
+    so that downstream passes (``_to_ast_value`` and ``_generate_value_equations``)
+    emit equations with flat names.
+    """
+    flat_name_by_ref = {}
+    for flat_name, sym in flat_class.symbols.items():
+        ref_name = getattr(getattr(sym, "ast_ref", None), "full_name", None)
+        if ref_name is not None:
+            flat_name_by_ref[ref_name] = flat_name
+
+    for sym in flat_class.symbols.values():
+        for attr in _VALUE_ATTRS:
+            value = getattr(sym, attr, None)
+            if not isinstance(value, ast.InstanceSymbol):
+                continue
+            ref_name = getattr(getattr(value, "ast_ref", None), "full_name", None)
+            flat_name = flat_name_by_ref.get(ref_name)
+            if flat_name is not None and value.name != flat_name:
+                value.name = flat_name
 
 
 def _generate_value_equations(flat_class: ast.InstanceClass) -> None:

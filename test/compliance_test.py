@@ -285,9 +285,6 @@ _FLATTEN_WIP = {
     "ModelicaCompliance.Modification.Flattening.Complicated": (
         "Value check WIP: nested modification scope resolution (d1.c.b.x)"
     ),
-    "ModelicaCompliance.Scoping.Visibility.RedeclareInheritedProtectedComp": (
-        "Flattening WIP: redeclare of protected component via extends A(redeclare Real x=4.0) not resolved"
-    ),
 }
 for _model, _reason in _FLATTEN_WIP.items():
     KNOWN_FAILURES[_model] = _reason

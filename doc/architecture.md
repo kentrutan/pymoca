@@ -58,11 +58,12 @@ Adapter: `flatten_to_tree(root, class_name)` → `ast.Tree` (for backend compati
 - **1.8** Recurse into unnamed extends instances (their symbols/equations are appended after the locals already inserted in 1.1–1.7)
 - **1.9** `_check_all_references_valid()` — TODO stub
 
-After `_flatten_instance()` returns, `flatten_instance()` runs:
+After `_flatten_instance()` returns, `flatten_instance()` runs in order:
+- **Deferred ref-name fixup** — `_flatten_value_ref_names()` rewrites `InstanceSymbol` values whose `.name` is still the class path (e.g. `Pkg.A.x`) to the correct flat name (e.g. `x`). This happens when a value modification references an inherited symbol: `_resolve_name` falls back to the class tree and returns an InstanceSymbol with the full class path because the extends instance is not yet registered in `flat_class.symbols`. The fix runs after the entire extends chain has been walked (when the flat namespace is complete), matching by `ast_ref.full_name`.
 - **1.4 (2nd pass)** `_generate_value_equations()` — converts resolved `.value` on non-parameter/non-constant symbols into equations, clears symbol `.value` to sentinel. RHS `ComponentRef`s still in source scope are resolved to flat names via `_EquationRefResolver`.
-- **Deferred ref-name fixup** — fixes flat names on value-modification `ComponentRef`s that point to inherited symbols. The fix runs after the entire extends chain has been walked because the flat namespace is only complete then; eager resolution would have to re-resolve as later extends register new symbols.
-- **2** `_generate_connect_equations()` — connect expansion; uses `_flatten_connect_ref`, `_is_inner_connector`
+- **1.9** `_check_all_references_valid()` — TODO stub
 - **3** `_process_transitions()` — TODO stub
+- **2** `_generate_connect_equations()` — connect expansion; uses `_flatten_connect_ref`, `_is_inner_connector`
 
 `_flatten_discovered_functions()` recursively flattens functions found during step 1.7 (E).
 

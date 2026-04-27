@@ -681,6 +681,13 @@ class ASTListener(ModelicaListener):
     def exitRegular_element(self, ctx: ModelicaParser.Regular_elementContext):
         if ctx.comp_elem is not None:
             self.ast[ctx] = self.ast[ctx.comp_elem]
+            for sym in self.ast[ctx].symbol_list:
+                if ctx.INNER() is not None:
+                    sym.inner = True
+                if ctx.OUTER() is not None:
+                    sym.outer = True
+                if ctx.FINAL() is not None:
+                    sym.final = True
         else:
             self.ast[ctx] = self.ast[ctx.class_elem]
 
@@ -689,6 +696,12 @@ class ASTListener(ModelicaListener):
             self.ast[ctx] = self.ast[ctx.comp_elem]
             for sym in self.ast[ctx].symbol_list:
                 sym.replaceable = True
+                if ctx.INNER() is not None:
+                    sym.inner = True
+                if ctx.OUTER() is not None:
+                    sym.outer = True
+                if ctx.FINAL() is not None:
+                    sym.final = True
         else:
             self.ast[ctx] = self.ast[ctx.class_elem]
         self.ast[ctx].replaceable = True

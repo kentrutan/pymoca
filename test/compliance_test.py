@@ -200,9 +200,6 @@ _SHOULD_FAIL_UNDETECTED = {
     "ModelicaCompliance.Redeclare.Flattening.InheritanceProtectedComp": (
         "shouldPass=false: pymoca does not enforce protected component redeclare restrictions"
     ),
-    "ModelicaCompliance.Redeclare.Flattening.InheritanceVariabilityConst": (
-        "shouldPass=false: pymoca does not reject variability violation in redeclared constant"
-    ),
     "ModelicaCompliance.Redeclare.Flattening.InheritanceVisibilityComp": (
         "shouldPass=false: pymoca does not enforce visibility restrictions in redeclared component"
     ),

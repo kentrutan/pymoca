@@ -260,6 +260,129 @@ def test_redeclare_nested():
         _ = parse_model_files("RedeclareNestedClass.mo.fail_parse")
 
 
+# --- Prefix check/preserve tests (MLS 7.3) ---
+
+
+def _flatten_inline(txt, model_name):
+    ast_tree = parser.parse(txt)
+    instance = tree.instantiate(model_name, ast_tree)
+    return tree.flatten_instance(instance)
+
+
+def test_redeclare_connector_prefix_preserved_from_original():
+    """flow prefix from original is preserved when redeclare omits it."""
+    flat = _flatten_inline(
+        """
+    connector C
+        replaceable flow Real x;
+    end C;
+    connector D
+        extends C(redeclare Real x);
+    end D;""",
+        "D",
+    )
+    assert "flow" in flat.symbols["x"].prefixes
+
+
+def test_redeclare_connector_prefix_matches_original():
+    """Redeclare that repeats the original flow prefix is accepted."""
+    flat = _flatten_inline(
+        """
+    connector C
+        replaceable flow Real x;
+    end C;
+    connector D
+        extends C(redeclare flow Real x);
+    end D;""",
+        "D",
+    )
+    assert "flow" in flat.symbols["x"].prefixes
+
+
+def test_redeclare_connector_prefix_mismatch_raises():
+    """Adding flow to a non-flow original raises ModelicaSemanticError."""
+    with pytest.raises(
+        tree.ModelicaSemanticError,
+        match=r"Redeclare of 'C\.x' changes connector prefix from None to 'flow'",
+    ):
+        _flatten_inline(
+            """
+    connector C
+        replaceable Real x;
+    end C;
+    connector D
+        extends C(redeclare flow Real x);
+    end D;""",
+            "D",
+        )
+
+
+def test_redeclare_variability_strengthen_accepted():
+    """Redeclare may strengthen variability from continuous to parameter."""
+    flat = _flatten_inline(
+        """
+    model Base
+        replaceable Real x = 0.0;
+    end Base;
+    model Derived
+        extends Base(redeclare parameter Real x = 1.0);
+    end Derived;""",
+        "Derived",
+    )
+    assert "parameter" in flat.symbols["x"].prefixes
+
+
+def test_redeclare_variability_loosen_raises():
+    """Explicit weakening of variability from parameter to discrete raises."""
+    with pytest.raises(
+        tree.ModelicaSemanticError,
+        match=r"Redeclare of 'Base\.x' loosens variability from 'parameter' to 'discrete'",
+    ):
+        _flatten_inline(
+            """
+    model Base
+        replaceable parameter Real x = 0.0;
+    end Base;
+    model Derived
+        extends Base(redeclare discrete Real x = 1.0);
+    end Derived;""",
+            "Derived",
+        )
+
+
+def test_redeclare_variability_omit_preserves():
+    """Omitting variability in a redeclare preserves the original prefix (MLS 7.3)."""
+    flat = _flatten_inline(
+        """
+    model Base
+        replaceable parameter Real x = 0.0;
+    end Base;
+    model Derived
+        extends Base(redeclare Real x = 1.0);
+    end Derived;""",
+        "Derived",
+    )
+    assert "parameter" in flat.symbols["x"].prefixes
+
+
+def test_redeclare_causality_mismatch_raises():
+    """Redeclare that changes causality from input to output raises."""
+    with pytest.raises(
+        tree.ModelicaSemanticError,
+        match=r"Redeclare of 'Base\.x' changes causality prefix from 'input' to 'output'",
+    ):
+        _flatten_inline(
+            """
+    block Base
+        replaceable input Real x;
+    end Base;
+    block Derived
+        extends Base(redeclare output Real x);
+    end Derived;""",
+            "Derived",
+        )
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

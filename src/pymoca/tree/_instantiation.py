@@ -740,6 +740,7 @@ def _instantiate_partially(
             final=element.final,
             inner=element.inner,
             outer=element.outer,
+            prefixes=list(ast_ref.prefixes),
         )
         if update_parent_instance:
             parent_instance.symbols[element.name] = instance
@@ -912,7 +913,9 @@ def _apply_redeclares(
             f"Redeclaring {element.name}{if_symbol_msg} with component {redeclare_name}"
             f" in scope {scope_class.full_name}"
         )
-    # FIXME: Check/preserve prefixes (section 7.3)
+    merged_prefixes: Optional[List[str]] = None
+    if isinstance(element, ast.InstanceSymbol) and isinstance(redeclare, ast.ComponentClause):
+        merged_prefixes = _check_and_preserve_prefixes(element, redeclare)
     # FIXME: Check type compatibility, constraining type
 
     if isinstance(redeclare, ast.ShortClassDefinition):
@@ -946,6 +949,8 @@ def _apply_redeclares(
         element.type = redeclare_class
         element.replaceable = redeclare.replaceable
         redeclare_class.replaceable = redeclare.replaceable
+        if merged_prefixes is not None:
+            element.prefixes = merged_prefixes
         return True
     else:
         # element.type is an ast.ComponentRef — fully instantiate the resolved class
@@ -971,9 +976,64 @@ def _apply_redeclares(
 
     element.replaceable = redeclare.replaceable
     redeclared.replaceable = redeclare.replaceable
+    if merged_prefixes is not None:
+        element.prefixes = merged_prefixes
     redeclared.extends.insert(0, redeclare_class)
 
     return True
+
+
+_CONNECTOR_PREFIXES = frozenset({"flow", "stream"})
+_CAUSALITY_PREFIXES = frozenset({"input", "output"})
+_VARIABILITY_ORDER = ["constant", "parameter", "discrete"]  # strictest first
+
+
+def _check_and_preserve_prefixes(
+    element: ast.InstanceSymbol, redeclare: ast.ComponentClause
+) -> List[str]:
+    """Merge redeclare prefixes with original element prefixes per MLS 7.3.
+
+    Returns the merged prefix list to assign to element.prefixes.
+    Raises ModelicaSemanticError on incompatible prefix changes.
+    """
+    orig = (
+        element.ast_ref.prefixes
+    )  # element.prefixes not yet populated (pre-_copy_symbol_contents)
+    new = redeclare.prefixes
+
+    orig_conn = next((p for p in orig if p in _CONNECTOR_PREFIXES), None)
+    new_conn = next((p for p in new if p in _CONNECTOR_PREFIXES), None)
+    if new_conn is not None and new_conn != orig_conn:
+        raise ModelicaSemanticError(
+            f"Redeclare of {element.full_name!r} changes connector prefix"
+            f" from {orig_conn!r} to {new_conn!r}"
+        )
+
+    orig_caus = next((p for p in orig if p in _CAUSALITY_PREFIXES), None)
+    new_caus = next((p for p in new if p in _CAUSALITY_PREFIXES), None)
+    if new_caus is not None and new_caus != orig_caus:
+        raise ModelicaSemanticError(
+            f"Redeclare of {element.full_name!r} changes causality prefix"
+            f" from {orig_caus!r} to {new_caus!r}"
+        )
+
+    orig_var = next((p for p in _VARIABILITY_ORDER if p in orig), None)
+    new_var = next((p for p in _VARIABILITY_ORDER if p in new), None)
+
+    def _var_rank(v: Optional[str]) -> int:
+        return _VARIABILITY_ORDER.index(v) if v is not None else len(_VARIABILITY_ORDER)
+
+    if new_var is not None and _var_rank(new_var) > _var_rank(orig_var):
+        raise ModelicaSemanticError(
+            f"Redeclare of {element.full_name!r} loosens variability"
+            f" from {orig_var!r} to {new_var!r}"
+        )
+
+    return [
+        p
+        for p in [orig_conn, new_var if new_var is not None else orig_var, orig_caus]
+        if p is not None
+    ]
 
 
 def _copy_equations_contents(to_class: ast.InstanceClass) -> None:
@@ -1016,6 +1076,7 @@ def _copy_symbol_contents(to_symbol: ast.InstanceSymbol) -> None:
             "class_modification",
             "parent",
             "replaceable",
+            "prefixes",
         )
     ):
         setattr(to_symbol, attr_name, getattr(from_symbol, attr_name))

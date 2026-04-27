@@ -738,6 +738,8 @@ def _instantiate_partially(
             parent=parent,
             replaceable=element.replaceable,
             final=element.final,
+            inner=element.inner,
+            outer=element.outer,
         )
         if update_parent_instance:
             parent_instance.symbols[element.name] = instance

@@ -848,6 +848,65 @@ def test_generate_value_equations_ref_rhs_flattened():
     assert rhs.name == "sub.a", f"Expected flat ref 'sub.a', got {rhs.name!r}"
 
 
+def test_builtin_redeclare_replaceable_propagated():
+    """replaceable on a builtin-type symbol survives the redeclare → flatten path."""
+    flat = _flatten_inline(
+        """
+    model Base
+        replaceable Real x = 0.0, y = 1.0;
+    end Base;
+    model Derived
+        extends Base(replaceable Integer x = 3, redeclare Integer y = 4);
+    end Derived;""",
+        "Derived",
+    )
+    assert flat.symbols["x"].type.name == "Integer"
+    assert flat.symbols["x"].replaceable is True
+    assert flat.symbols["y"].type.name == "Integer"
+    assert flat.symbols["y"].replaceable is False
+
+
+def test_builtin_redeclare_replaceable_nested_component():
+    """replaceable propagates for a builtin-type component inside a nested instance."""
+    flat = _flatten_inline(
+        """
+    model Base
+        replaceable Real x = 0.0;
+    end Base;
+    model Derived
+        extends Base(replaceable Integer x = 3);
+    end Derived;
+    model Outer
+        Derived d;
+    end Outer;""",
+        "Outer",
+    )
+    assert flat.symbols["d.x"].type.name == "Integer"
+    assert flat.symbols["d.x"].replaceable is True
+
+
+def test_builtin_alias_final_inner_outer_propagated():
+    """prefixes declared on a type-alias component reach the flattened builtin symbol."""
+    flat = _flatten_inline(
+        """
+    model M
+        type MyReal = Real;
+        MyReal a;
+        final MyReal x;
+        inner MyReal y;
+        outer MyReal z;
+    end M;""",
+        "M",
+    )
+    assert flat.symbols["a"].type.name == "Real"
+    assert flat.symbols["a"].final is False
+    assert flat.symbols["a"].inner is False
+    assert flat.symbols["a"].outer is False
+    assert flat.symbols["x"].final is True
+    assert flat.symbols["y"].inner is True
+    assert flat.symbols["z"].outer is True
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

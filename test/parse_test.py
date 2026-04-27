@@ -348,6 +348,18 @@ def test_syntax_error():
     assert re.search(expected_regex, error_text.getvalue())
 
 
+def test_inner_outer_final_parsed_on_symbol():
+    """inner, outer, and final are set on parsed symbols (MLS 5.4, 7.3)."""
+    ast_tree = parser.parse("model M inner Real x; outer Real y; final Integer n = 1; end M;")
+    m = ast_tree.classes["M"]
+    assert m.symbols["x"].inner is True
+    assert m.symbols["x"].outer is False
+    assert m.symbols["y"].outer is True
+    assert m.symbols["y"].inner is False
+    assert m.symbols["n"].final is True
+    assert m.symbols["n"].inner is False
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

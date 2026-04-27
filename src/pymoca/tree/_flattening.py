@@ -227,16 +227,16 @@ def _flatten_instance(
                     sym = flat_class.symbols[sym_name]
                     sym.dimensions = outer_dims + sym.dimensions
 
-            # Propagate outer symbol prefixes to the leaf builtin symbol that
-            # inherited this component's slot (e.g. 'parameter' from
-            # 'parameter DummyUnit x' must reach x's flattened Real symbol).
-            # This applies when a type alias (DummyUnit = Real(...)) maps the
-            # outer name directly onto the builtin slot (same flat_name, no dot).
+            # Propagate outer symbol prefixes and replaceable to the leaf builtin symbol
             inner_sym = flat_class.symbols.get(flat_name)
             if inner_sym is not None and flat_name in new_sym_names:
                 for pfx in flat_symbol.prefixes:
                     if pfx not in ("input", "output") and pfx not in inner_sym.prefixes:
                         inner_sym.prefixes.insert(0, pfx)
+                inner_sym.replaceable = flat_symbol.replaceable
+                inner_sym.final = flat_symbol.final
+                inner_sym.inner = flat_symbol.inner
+                inner_sym.outer = flat_symbol.outer
 
     # 1.7 Resolve references in equations and algorithms
     _collect_and_resolve_equations(instance, flat_class, prefix, functions=functions)

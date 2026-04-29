@@ -916,7 +916,7 @@ def _apply_redeclares(
     merged_prefixes: Optional[List[str]] = None
     if isinstance(element, ast.InstanceSymbol) and isinstance(redeclare, ast.ComponentClause):
         merged_prefixes = _check_and_preserve_prefixes(element, redeclare)
-    # FIXME: Check type compatibility, constraining type
+    _check_type_compatibility(element, redeclare_class)
 
     if isinstance(redeclare, ast.ShortClassDefinition):
         apply_args = redeclare.class_modification.arguments
@@ -1034,6 +1034,36 @@ def _check_and_preserve_prefixes(
         for p in [orig_conn, new_var if new_var is not None else orig_var, orig_caus]
         if p is not None
     ]
+
+
+def _canon_class(c: Union[ast.Class, ast.InstanceClass]) -> ast.Class:
+    return c.ast_ref if isinstance(c, ast.InstanceClass) else c
+
+
+def _check_type_compatibility(
+    element: Union[ast.InstanceClass, ast.InstanceSymbol],
+    redeclare_class: Union[ast.Class, ast.InstanceClass],
+) -> None:
+    """Partial type-compatibility check for class redeclares (MLS 7.3.2, 6.4).
+
+    Enforces that a class redeclare preserves the specialized class kind
+    (model, connector, package, etc.) per MLS 6.4. Full structural subtype
+    checking is not yet implemented — it requires interface comparison.
+
+    Component redeclares (InstanceSymbol) are not checked here.
+    """
+    if not isinstance(element, ast.InstanceClass):
+        return
+
+    declared_kind = _canon_class(element).type
+    replacement_kind = _canon_class(redeclare_class).type
+    if not declared_kind or not replacement_kind or declared_kind == replacement_kind:
+        return
+
+    raise ModelicaSemanticError(
+        f"Redeclare of {element.full_name!r} changes class kind"
+        f" from {declared_kind!r} to {replacement_kind!r}"
+    )
 
 
 def _copy_equations_contents(to_class: ast.InstanceClass) -> None:

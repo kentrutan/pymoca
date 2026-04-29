@@ -49,6 +49,7 @@ def flatten_instance(
     functions = OrderedDict()
     _flatten_instance(instance, flat_class, functions=functions)
     _flatten_discovered_functions(functions, flat_class)
+    _generate_value_equations(flat_class)  # MLS 5.6.2 step 1.4
     _check_all_references_valid(flat_class)
     _process_transitions(flat_class)
     if not keep_connectors:
@@ -223,10 +224,22 @@ def _flatten_instance(
             # call to avoid double-prepending when extends chains share component names.
             outer_dims = flat_symbol.dimensions
             flat_name_prefix = flat_name + "."
-            for sym_name in set(flat_class.symbols.keys()) - symbols_before_recursive:
+            new_sym_names = set(flat_class.symbols.keys()) - symbols_before_recursive
+            for sym_name in new_sym_names:
                 if sym_name.startswith(flat_name_prefix):
                     sym = flat_class.symbols[sym_name]
                     sym.dimensions = outer_dims + sym.dimensions
+
+            # Propagate outer symbol prefixes to the leaf builtin symbol that
+            # inherited this component's slot (e.g. 'parameter' from
+            # 'parameter DummyUnit x' must reach x's flattened Real symbol).
+            # This applies when a type alias (DummyUnit = Real(...)) maps the
+            # outer name directly onto the builtin slot (same flat_name, no dot).
+            inner_sym = flat_class.symbols.get(flat_name)
+            if inner_sym is not None and flat_name in new_sym_names:
+                for pfx in flat_symbol.prefixes:
+                    if pfx not in ("input", "output") and pfx not in inner_sym.prefixes:
+                        inner_sym.prefixes.insert(0, pfx)
 
     # 1.7 Resolve references in equations and algorithms
     _collect_and_resolve_equations(instance, flat_class, prefix, functions=functions)
@@ -337,9 +350,14 @@ def _resolve_modification_attribute(
     opts: LookupOptions,
     functions: Optional[OrderedDict] = None,
 ):
-    # The spec says the modifications are resolved by creating equations, but we are
-    # going to set the symbol attributes now and create equations for them in another
-    # pass.
+    # MLS 5.6.2 step 1.4 says value modifications on non-parameter/non-constant
+    # simple-type variables become equations. We don't emit those equations here;
+    # instead we set the raw resolved value on the symbol (`setattr` below) and
+    # let `_generate_value_equations` (called once at the top of `flatten_instance`
+    # after all recursion completes) decide what to do with it. We defer emitting
+    # equations to a 2nd pass because a value expression may reference a
+    # non-yet-processed symbol and each `_flatten_instance` recursion can mutate
+    # `flat_class.symbols`.
     # Process the various ElementModification types
     # type: List[Union[Primary, Expression, ClassModification, Array, ComponentRef]]
     mod = cast(ast.ElementModification, arg.value)
@@ -831,6 +849,47 @@ def _generate_connect_equations(flat_class: ast.InstanceClass):
         )
 
 
+def _generate_value_equations(flat_class: ast.InstanceClass) -> None:
+    """Convert resolved value modifications to equations (MLS 5.6.2 step 1.4).
+
+    For each non-parameter/non-constant flat symbol with a resolved .value,
+    emit an equation  sym = value  and clear sym.value to the sentinel.
+
+    Parameters and constants retain their .value as a declaration binding
+    (used by backends as the constant/parameter value).
+
+    ComponentRef operands that remain in source scope (when expression
+    evaluation failed) are flattened to dot-separated names by
+    _EquationRefResolver using the symbol's own prefix.
+    """
+    _NON_EQUATION_PREFIXES = frozenset({"constant", "parameter"})
+    walker = TreeWalker()
+    for flat_name, sym in list(flat_class.symbols.items()):
+        value = sym.value
+        if value is None or (isinstance(value, ast.Primary) and value.value is None):
+            continue
+        if _NON_EQUATION_PREFIXES & set(sym.prefixes):
+            continue
+
+        rhs = copy.deepcopy(_to_ast_value(value))
+
+        # Resolve any source-scope ComponentRefs remaining in rhs (happens when
+        # _resolve_expression fails and keeps the original ast.Expression).
+        # The prefix for source-scope refs inside this symbol's value equals the
+        # instance path containing the symbol (everything before the last dot).
+        prefix = flat_name.rsplit(".", 1)[0] if "." in flat_name else ""
+        resolver = _EquationRefResolver(flat_class, prefix)
+        walker.walk(resolver, rhs)
+
+        flat_class.equations.append(
+            ast.Equation(
+                left=ast.ComponentRef(name=flat_name),
+                right=rhs,
+            )
+        )
+        sym.value = ast.Primary(value=None)
+
+
 def _process_transitions(flat_class: ast.InstanceClass):
     # TODO: 3. Process transitions in the flattened tree
     pass
@@ -1171,7 +1230,6 @@ def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
     Plug-compatible with legacy ``flatten(root, class_name)``.
     """
     from ._legacy import (
-        add_state_value_equations,
         add_variable_value_statements,
         annotate_states,
         expand_connectors,
@@ -1206,7 +1264,6 @@ def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
 
     # 6. Post-processing (same order as legacy flatten)
     expand_connectors(flat_class)
-    add_state_value_equations(flat_class)
     for func in flat_class.functions.values():
         add_variable_value_statements(func)
     annotate_states(flat_class)

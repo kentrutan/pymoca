@@ -691,12 +691,17 @@ def test_derived_type_value_modification():
     assert d_c_y_mod.value.modifications[0].value == 4
 
     flat_tree = tree.flatten_instance(instance)
-    # TODO: Uncomment when modifications are added as equations
-    # self.assertEqual(flat_tree.equations[0].left.name, "d.c.y")
-    # self.assertEqual(flat_tree.equations[0].right.value, 4)
-    # For now, the symbol value attribute is assigned the modification value
+    # Value modification on a plain variable becomes an equation (MLS 5.6.2 step 1.4)
     assert "d.c.y" in flat_tree.symbols
-    assert flat_tree.symbols["d.c.y"].value == 4
+    assert isinstance(flat_tree.symbols["d.c.y"].value, ast.Primary)
+    assert flat_tree.symbols["d.c.y"].value.value is None  # cleared to sentinel
+    eq_map = {
+        eq.left.name: eq.right
+        for eq in flat_tree.equations
+        if isinstance(eq, ast.Equation) and isinstance(eq.left, ast.ComponentRef)
+    }
+    assert "d.c.y" in eq_map, f"No value equation for d.c.y; equations: {flat_tree.equations}"
+    assert isinstance(eq_map["d.c.y"], ast.Primary) and eq_map["d.c.y"].value == 4
 
 
 if __name__ == "__main__":

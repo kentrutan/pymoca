@@ -80,6 +80,29 @@ def flatten_compliance_model(ast_tree, full_model_name):
     return flatten_instance(instance)
 
 
+def get_flat_symbol_value(flat, sym_name):
+    """Return the effective numeric value of a flat symbol.
+
+    Constants/parameters keep their value on the symbol; plain variables have
+    their value moved to an equation by _generate_value_equations (MLS 5.6.2
+    step 1.4).  This helper checks both places.
+    """
+    sym = flat.symbols[sym_name]
+    v = sym.value
+    if isinstance(v, (int, float)):
+        return v
+    # Check equations for  ComponentRef(sym_name) = Primary(literal)
+    for eq in flat.equations:
+        if (
+            isinstance(eq, pymoca.ast.Equation)
+            and isinstance(eq.left, pymoca.ast.ComponentRef)
+            and eq.left.name == sym_name
+            and isinstance(eq.right, pymoca.ast.Primary)
+        ):
+            return eq.right.value
+    return None
+
+
 # Simple name lookup tests from ModelicaCompliance
 
 
@@ -129,7 +152,7 @@ def test_enclosing_class_lookup_class():
     flat = flatten_compliance_model(
         ast, "ModelicaCompliance.Scoping.NameLookup.Simple.EnclosingClassLookupClass"
     )
-    assert flat.symbols["b.a.x"].value == 2
+    assert get_flat_symbol_value(flat, "b.a.x") == 2
 
 
 def test_enclosing_class_lookup_constant():
@@ -150,7 +173,7 @@ def test_enclosing_class_lookup_constant():
     flat = flatten_compliance_model(
         ast, "ModelicaCompliance.Scoping.NameLookup.Simple.EnclosingClassLookupConstant"
     )
-    assert flat.symbols["x"].value == 4
+    assert get_flat_symbol_value(flat, "x") == 4
 
 
 def test_enclosing_class_lookup_nonconstant():
@@ -267,7 +290,7 @@ def test_package_lookup_class():
     flat = flatten_compliance_model(
         ast, "ModelicaCompliance.Scoping.NameLookup.Composite.PackageLookupClass"
     )
-    assert flat.symbols["a.x"].value == 531.0
+    assert get_flat_symbol_value(flat, "a.x") == 531.0
 
 
 def test_package_lookup_constant():
@@ -283,12 +306,8 @@ def test_package_lookup_constant():
     flat = flatten_compliance_model(
         ast, "ModelicaCompliance.Scoping.NameLookup.Composite.PackageLookupConstant"
     )
-    assert "y" in flat.symbols
-    y_val = flat.symbols["y"].value
-    assert isinstance(y_val, pymoca.ast.InstanceSymbol)
-    assert y_val.name == "P.x"
-    assert y_val.full_instance_name == "PackageLookupConstant.P.x"
-    assert y_val.full_name.endswith("PackageLookupConstant.P.x")
+    # y = P.x folds the constant reference to its value in the value equation
+    assert get_flat_symbol_value(flat, "y") == 5.1
 
 
 def test_nested_comp_lookup():
@@ -304,7 +323,7 @@ def test_nested_comp_lookup():
     flat = flatten_compliance_model(
         ast, "ModelicaCompliance.Scoping.NameLookup.Composite.NestedCompLookup"
     )
-    assert flat.symbols["c.b.a.x"].value == 17
+    assert get_flat_symbol_value(flat, "c.b.a.x") == 17
 
 
 def test_partial_class_lookup():
@@ -536,7 +555,7 @@ def test_encapsulated():
     flat = flatten_compliance_model(
         ast, "ModelicaCompliance.Scoping.NameLookup.Imports.EncapsulatedImport"
     )
-    assert flat.symbols["a.m.x"].value == 2.0
+    assert get_flat_symbol_value(flat, "a.m.x") == 2.0
 
 
 def test_extend_import():
@@ -612,7 +631,7 @@ def test_qualified_import():
     flat = flatten_compliance_model(
         ast, "ModelicaCompliance.Scoping.NameLookup.Imports.QualifiedImport"
     )
-    assert flat.symbols["b.a.x"].value == 1.0
+    assert get_flat_symbol_value(flat, "b.a.x") == 1.0
 
 
 def test_qualified_import_conflict():
@@ -682,7 +701,7 @@ def test_renaming_import():
     flat = flatten_compliance_model(
         ast, "ModelicaCompliance.Scoping.NameLookup.Imports.RenamingImport"
     )
-    assert flat.symbols["b.a.x"].value == 1.0
+    assert get_flat_symbol_value(flat, "b.a.x") == 1.0
 
 
 def test_renaming_import_non_package():
@@ -710,7 +729,7 @@ def test_renaming_single_definition_import():
     flat = flatten_compliance_model(
         ast, "ModelicaCompliance.Scoping.NameLookup.Imports.RenamingSingleDefinitionImport"
     )
-    assert flat.symbols["b.a.x"].value == 1.0
+    assert get_flat_symbol_value(flat, "b.a.x") == 1.0
 
 
 def test_single_definition_import():
@@ -726,7 +745,7 @@ def test_single_definition_import():
     flat = flatten_compliance_model(
         ast, "ModelicaCompliance.Scoping.NameLookup.Imports.SingleDefinitionImport"
     )
-    assert flat.symbols["b.a.x"].value == 1.0
+    assert get_flat_symbol_value(flat, "b.a.x") == 1.0
 
 
 def test_unqualified_import():
@@ -742,7 +761,7 @@ def test_unqualified_import():
     flat = flatten_compliance_model(
         ast, "ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImport"
     )
-    assert flat.symbols["b.a.x"].value == 1.0
+    assert get_flat_symbol_value(flat, "b.a.x") == 1.0
 
 
 @pytest.mark.skip("Unqualified import name lookup conflicts not implemented")

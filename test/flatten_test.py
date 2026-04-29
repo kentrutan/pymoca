@@ -101,17 +101,33 @@ def test_flattening_inheritance_tree():
     """Test flattening multi-level class hierarchy with modifications but no equations"""
     instance = parse_and_instantiate_model("InstantiationTree.mo", "TreeModel.Tree")
     flat_tree = tree.flatten_instance(instance)
-    expect = (
+
+    # Non-value attribute modifications stay on the symbol
+    expect_attrs = (
         ("w", "nominal", 2.0),
         ("b.t", "nominal", 1.0),
-        ("l.c", "value", 1),
-        ("l2.c", "value", 2),
         ("t", "nominal", 2.0),
     )
-    for name, attr, value in expect:
+    for name, attr, value in expect_attrs:
         assert name in flat_tree.symbols
         symbol = flat_tree.symbols[name]
         assert getattr(symbol, attr) == value
+
+    # Value modifications on plain variables (Integer l.c, l2.c) become equations;
+    # the symbol .value is cleared to sentinel.
+    for name in ("l.c", "l2.c"):
+        assert name in flat_tree.symbols
+        sym = flat_tree.symbols[name]
+        assert isinstance(sym.value, ast.Primary) and sym.value.value is None
+
+    # Equations contain l.c = 1 and l2.c = 2
+    eq_map = {
+        eq.left.name: eq.right
+        for eq in flat_tree.equations
+        if isinstance(eq, ast.Equation) and isinstance(eq.left, ast.ComponentRef)
+    }
+    assert isinstance(eq_map["l.c"], ast.Primary) and eq_map["l.c"].value == 1
+    assert isinstance(eq_map["l2.c"], ast.Primary) and eq_map["l2.c"].value == 2
 
 
 def test_flattening_spring_system():
@@ -686,6 +702,110 @@ def test_expression_evaluator_via_dimensions_componentref():
     assert len(dims) == 1
     assert isinstance(dims[0][0], ast.Primary)
     assert dims[0][0].value == 4
+
+
+def test_generate_value_equations_variable():
+    """Value modification on a plain variable becomes an equation (MLS 5.6.2 step 1.4)."""
+    flat = _flatten_inline(
+        """
+    model M
+        Real x = 3.0;
+    end M;""",
+        "M",
+    )
+    # Symbol value cleared to sentinel
+    assert isinstance(flat.symbols["x"].value, ast.Primary)
+    assert flat.symbols["x"].value.value is None
+    # Equation x = 3.0 emitted
+    eq_map = {
+        eq.left.name: eq.right
+        for eq in flat.equations
+        if isinstance(eq, ast.Equation) and isinstance(eq.left, ast.ComponentRef)
+    }
+    assert "x" in eq_map, "Expected value equation for x"
+    assert isinstance(eq_map["x"], ast.Primary) and eq_map["x"].value == 3.0
+
+
+def test_generate_value_equations_parameter_retained():
+    """Parameter value stays on the symbol — no equation emitted (MLS 5.6.2 step 1.4)."""
+    flat = _flatten_inline(
+        """
+    model M
+        parameter Real p = 1.0;
+    end M;""",
+        "M",
+    )
+    assert flat.symbols["p"].value == 1.0
+    eq_names = {
+        eq.left.name
+        for eq in flat.equations
+        if isinstance(eq, ast.Equation) and isinstance(eq.left, ast.ComponentRef)
+    }
+    assert "p" not in eq_names, "Parameter should not get a value equation"
+
+
+def test_generate_value_equations_constant_retained():
+    """Constant value stays on the symbol — no equation emitted."""
+    flat = _flatten_inline(
+        """
+    model M
+        constant Real c = 2.0;
+    end M;""",
+        "M",
+    )
+    assert flat.symbols["c"].value == 2.0
+    eq_names = {
+        eq.left.name
+        for eq in flat.equations
+        if isinstance(eq, ast.Equation) and isinstance(eq.left, ast.ComponentRef)
+    }
+    assert "c" not in eq_names, "Constant should not get a value equation"
+
+
+def test_generate_value_equations_nested_component():
+    """Value equation for a nested component uses the flat symbol name as LHS."""
+    flat = _flatten_inline(
+        """
+    model Inner
+        Real y = 2.0;
+    end Inner;
+    model Outer
+        Inner sub;
+    end Outer;""",
+        "Outer",
+    )
+    eq_map = {
+        eq.left.name: eq.right
+        for eq in flat.equations
+        if isinstance(eq, ast.Equation) and isinstance(eq.left, ast.ComponentRef)
+    }
+    assert "sub.y" in eq_map, "Expected value equation for sub.y"
+    assert isinstance(eq_map["sub.y"], ast.Primary) and eq_map["sub.y"].value == 2.0
+
+
+def test_generate_value_equations_ref_rhs_flattened():
+    """Value equation RHS ComponentRef is resolved to flat name."""
+    flat = _flatten_inline(
+        """
+    model Inner
+        Real a = 1.0;
+        Real b = a;
+    end Inner;
+    model Outer
+        Inner sub;
+    end Outer;""",
+        "Outer",
+    )
+    eq_map = {
+        eq.left.name: eq.right
+        for eq in flat.equations
+        if isinstance(eq, ast.Equation) and isinstance(eq.left, ast.ComponentRef)
+    }
+    assert "sub.b" in eq_map, "Expected value equation for sub.b"
+    rhs = eq_map["sub.b"]
+    # RHS must be a ComponentRef with the flat name (sub.a), not the source-scope name (a)
+    assert isinstance(rhs, ast.ComponentRef), f"Expected ComponentRef, got {rhs!r}"
+    assert rhs.name == "sub.a", f"Expected flat ref 'sub.a', got {rhs.name!r}"
 
 
 if __name__ == "__main__":

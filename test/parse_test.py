@@ -158,7 +158,7 @@ def test_basemodelica_scalarized():
     assert "parameter" in symbol.prefixes
     found_y_equation = False
     for eqn in flat_tree.classes[class_name].equations:
-        if isinstance(eqn.left, ast.Symbol) and eqn.left.name == "'y'":
+        if isinstance(eqn.left, (ast.Symbol, ast.ComponentRef)) and eqn.left.name == "'y'":
             assert eqn.right.name == "'root.m.x'"
             found_y_equation = True
             break
@@ -181,7 +181,7 @@ def test_basemodelica_hierarchical():
     assert [2.0, 3.0] == values
     found_y_equation = False
     for eqn in flat_tree.classes[class_name].equations:
-        if isinstance(eqn.left, ast.Symbol) and eqn.left.name == "'y'":
+        if isinstance(eqn.left, (ast.Symbol, ast.ComponentRef)) and eqn.left.name == "'y'":
             assert eqn.right.name == "'root'.'m'.'x'"
             found_y_equation = True
             break

@@ -383,6 +383,66 @@ def test_redeclare_causality_mismatch_raises():
         )
 
 
+# --- Class-kind compatibility tests (MLS 6.4 / 7.3.2) ---
+
+
+def test_redeclare_class_same_kind_accepted():
+    """Redeclare a replaceable class with another class of the same kind."""
+    flat = _flatten_inline(
+        """
+    model A Real x = 1.0; end A;
+    model B extends A; Real y = 2.0; end B;
+    model M
+        replaceable model Inner = A;
+        Inner m;
+    end M;
+    model D
+        extends M(redeclare model Inner = B);
+    end D;""",
+        "D",
+    )
+    assert "m.x" in flat.symbols
+    assert "m.y" in flat.symbols
+
+
+def test_redeclare_class_kind_mismatch_rejected():
+    """Redeclare that changes class kind from model to connector raises."""
+    with pytest.raises(
+        tree.ModelicaSemanticError,
+        match=r"changes class kind from 'model' to 'connector'",
+    ):
+        _flatten_inline(
+            """
+    connector C Real x; end C;
+    model M
+        replaceable model Inner end Inner;
+        Inner m;
+    end M;
+    model D
+        extends M(redeclare connector Inner = C);
+    end D;""",
+            "D",
+        )
+
+
+def test_redeclare_package_with_package_accepted():
+    """Replacing one package with another of the same kind is accepted."""
+    flat = _flatten_inline(
+        """
+    package PA constant Real k = 1.0; end PA;
+    package PB constant Real k = 2.0; end PB;
+    model M
+        replaceable package P = PA;
+        parameter Real v = P.k;
+    end M;
+    model D
+        extends M(redeclare package P = PB);
+    end D;""",
+        "D",
+    )
+    assert "v" in flat.symbols
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

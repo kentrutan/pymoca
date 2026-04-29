@@ -745,16 +745,11 @@ def test_unqualified_import():
     assert flat.symbols["b.a.x"].value == 1.0
 
 
-@pytest.mark.skip("ModelicaCompliance test case has a bug")
+@pytest.mark.skip("Unqualified import name lookup conflicts not implemented")
 def test_unqualified_import_conflict():
     """Checks that it's an error if the same name is found in
     multiple unqualified imports"""
-    # This ModelicaCompliance test case has a bug.
-    # See PR https://github.com/modelica/Modelica-Compliance/pull/75
-    # UnqualifiedImportConflict.mo imports from QualifiedImportConflict which is OK
-    # if ModelicaCompliance is in MODELICAPATH but not OK as a standalone test that
-    # we prefer here. If we do implement this after the ModelicaCompliance bug is
-    # fixed it will slow down already slow unqualified name lookup. Unqualified
+    # This will slow down already slow unqualified name lookup. Unqualified
     # imports are rare and this test case is even more rare, so it seems like maybe
     # not a good idea at this stage for Pymoca.
     ast = parse_imported_lookup_file("UnqualifiedImportConflict.mo")

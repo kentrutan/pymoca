@@ -542,6 +542,23 @@ def _find_imported(
     """Find simple name in imports per MLS v3.5 section 13.2.1"""
     # TODO: Rewrite this to work with parser rewrite of import_clause handler.
     # TODO: Can we do a scope.imports[name] = found Class or Symbol to speed up future calls?
+
+    def _lookup_via_import(
+        import_ref: ast.ComponentRef, search_imports: bool = True
+    ) -> Tuple[Optional[Union[ast.Class, ast.Symbol]], bool]:
+        """Resolve a single import ref to a class or symbol"""
+        # Detect self-referential imports to prevent infinite recursion during instantiation
+        common_parent, children = _get_common_parent(scope, str(import_ref))
+        if common_parent is not None:
+            found = _find_composite_name(children, common_parent, guard, opts)
+            _check_import_rules(found, scope)
+            return found, True
+        fallback_opts = replace(opts, search_parent=False, search_imports=search_imports)
+        found = _find_name(import_ref, scope.root, guard, fallback_opts)
+        # TODO: Should _check_import_rules be inside `if found is not None` check? (fix in rewrite)
+        _check_import_rules(found, scope)
+        return found, False
+
     # Search qualified imports (most common case)
     if name in scope.imports:
         import_: Union[ast.ImportClause, ast.ComponentRef] = scope.imports[name]
@@ -550,47 +567,19 @@ def _find_imported(
             import_ = import_.components[0]
         if scope.full_name == str(import_):
             raise NameLookupError(f"Import {import_} in scope {scope.full_name} is recursive")
-        # FIXME: Make this and copy below DRY
-        # Detect self-referential imports to prevent infinite recursion during instantiation
-        common_parent, children = _get_common_parent(scope, str(import_))
-        if common_parent is not None:
-            found = _find_composite_name(children, common_parent, guard, opts)
-            _check_import_rules(found, scope)
-            return found
-
-        found = _find_name(
-            import_,
-            scope.root,
-            guard,
-            replace(opts, search_parent=False),
-        )
-        _check_import_rules(found, scope)
+        found, _ = _lookup_via_import(import_)
         return found
     # Unqualified imports
     if "*" in scope.imports:
-        c = None
         for package_ref in scope.imports["*"].components:
             imported_comp_ref = package_ref.concatenate(ast.ComponentRef(name=name))
-            # Search within the package
-            # Detect self-referential imports to prevent infinite recursion during instantiation
-            common_parent, children = _get_common_parent(scope, str(imported_comp_ref))
-            if common_parent is not None:
-                found = _find_composite_name(children, common_parent, guard, opts)
-                _check_import_rules(found, scope)
+            found, stop_search = _lookup_via_import(imported_comp_ref, search_imports=False)
+            if stop_search:
                 return found
-            # Avoid infinite recursion with search_imports = False
-            c = _find_name(
-                imported_comp_ref,
-                scope.root,
-                guard,
-                replace(opts, search_imports=False, search_parent=False),
-            )
-            # TODO: Should _check_import_rules be inside `if c is not None` check? (fix in rewrite)
-            _check_import_rules(c, scope)
-            if c is not None:
+            if found is not None:
                 # Store result for next lookup
                 scope.imports[name] = imported_comp_ref
-                return c
+                return found
     return None
 
 

@@ -285,11 +285,8 @@ _FLATTEN_WIP = {
     "ModelicaCompliance.Modification.Flattening.Complicated": (
         "Value check WIP: nested modification scope resolution (d1.c.b.x)"
     ),
-    "ModelicaCompliance.Scoping.MemberAccess.AccessEquation": (
-        "Value check WIP: y = c.x equation-based member access not resolved until equation search added"
-    ),
-    "ModelicaCompliance.Scoping.MemberAccess.AccessNestedEquation": (
-        "Value check WIP: y = c.b.x nested equation-based member access not resolved until equation search added"
+    "ModelicaCompliance.Scoping.Visibility.InheritedAccessProtectedComp": (
+        "Flattening WIP: inherited protected Real x resolves to Primary(None) when accessed by simple name"
     ),
     "ModelicaCompliance.Scoping.Visibility.RedeclareInheritedProtectedComp": (
         "Flattening WIP: redeclare of protected component via extends A(redeclare Real x=4.0) not resolved"
@@ -428,10 +425,25 @@ def _resolve_symbol_value(flat, var_name, _visited=None):
     if isinstance(v, (int, float)):
         return v, ""
     if not isinstance(v, ast.InstanceSymbol):
-        if hasattr(v, "operator"):
-            reason = f"non-literal value: Expression({v.operator})"
-        elif hasattr(v, "value") and v.value is None:
+        # Value may have been moved to an equation by _generate_value_equations.
+        # Search flat.equations for  ComponentRef(var_name) = rhs.
+        if hasattr(v, "value") and v.value is None:
+            for eq in getattr(flat, "equations", []):
+                if (
+                    isinstance(eq, ast.Equation)
+                    and isinstance(eq.left, ast.ComponentRef)
+                    and eq.left.name == var_name
+                ):
+                    rhs = eq.right
+                    if isinstance(rhs, ast.Primary) and isinstance(rhs.value, (int, float)):
+                        return rhs.value, ""
+                    if isinstance(rhs, ast.ComponentRef):
+                        result, _ = _resolve_symbol_value(flat, rhs.name, set(_visited))
+                        if result is not None:
+                            return result, ""
             reason = "non-literal value: Primary(None)"
+        elif hasattr(v, "operator"):
+            reason = f"non-literal value: Expression({v.operator})"
         else:
             reason = f"non-literal value: {type(v).__name__}"
         return None, reason

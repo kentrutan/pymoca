@@ -185,8 +185,19 @@ def _instantiate_class(
         assert isinstance(lexical_parent, (ast.InstanceClass, InstanceTree))
 
     if new_class.instantiation_state < ast.InstantiationState.PARTIAL:
-
-        for class_ in from_class.classes.values():
+        # When orig_class is already partial-instantiated, re-source its child
+        # classes from the existing instances rather than the AST so any pending
+        # modifications already attached to those instances (e.g. redeclares
+        # waiting to apply) propagate into the fresh new_class.
+        reuse_orig = (
+            isinstance(orig_class, ast.InstanceClass)
+            and orig_class is not new_class
+            and orig_class.instantiation_state >= ast.InstantiationState.PARTIAL
+        )
+        classes_source = (
+            list(orig_class.classes.values()) if reuse_orig else list(from_class.classes.values())
+        )
+        for class_ in classes_source:
             _instantiate_partially(
                 class_,
                 modification_environment,

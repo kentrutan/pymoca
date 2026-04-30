@@ -247,6 +247,11 @@ def _instantiate_class(
         instantiate_in_place=instantiate_in_place,
     )
 
+    # Validate modification targets: check that all remaining ElementModification
+    # args in modification_environment target existing symbols or known attributes.
+    # Unconsumed args at this point indicate typos (e.g., b(x=3) when symbol is X).
+    _check_modification_targets(new_class, modification_environment)
+
     new_class.fully_instantiated = True
 
     return new_class
@@ -598,6 +603,44 @@ def _get_lexical_parent_instance(
         parent = _instantiate_partially(cls, modifications, parent, parent, update_parent)
         modifications = parent.modification_environment
     return parent
+
+
+def _check_modification_targets(
+    instance: ast.InstanceClass,
+    modification_environment: ast.ClassModification,
+) -> None:
+    """Check for unconsumed modification args targeting non-existent symbols.
+
+    After all symbols (local + inherited) are instantiated, any remaining
+    ElementModification args in modification_environment that don't match
+    a symbol or known attribute indicate a typo in the model.
+    """
+    all_names = set(instance.symbols.keys()) | set(instance.classes.keys())
+
+    # Also collect names from extends chain
+    def _collect_extends_names(extends_list, names):
+        for ext in extends_list:
+            names.update(ext.symbols.keys())
+            names.update(ext.classes.keys())
+            _collect_extends_names(ext.extends, names)
+
+    _collect_extends_names(instance.extends, all_names)
+
+    for arg in modification_environment.arguments:
+        if not isinstance(arg.value, ast.ElementModification):
+            continue
+        component = arg.value.component
+        target = component.name
+        # Skip dotted paths (e.g. x.y=3) — the first segment was already validated
+        # when the parent modification was shifted down; validating sub-paths would
+        # require recursing into the target's type.
+        if component.child:
+            continue
+        if target not in all_names and target not in ast.Symbol.ATTRIBUTES:
+            raise ModelicaSemanticError(
+                f'Trying to modify symbol "{target}", which does not exist '
+                f"in class {instance.full_name}"
+            )
 
 
 def _is_transitively_replaceable(class_: ast.Class) -> bool:

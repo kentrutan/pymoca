@@ -212,10 +212,15 @@ def _instantiate_class(
 
     new_class.partially_instantiated = True
     current_instances.remove(new_class)
+
+    # 2.2 Copy local contents into the element itself
+    # Equations/statements are always copied (even for partial instantiation used
+    # by extends) so that flattening can collect them without falling back to ast_ref.
+    _copy_equations_contents(new_class)
+
     if partially:
         return new_class
 
-    # 2.2 Copy local contents into the element itself
     _copy_class_contents(new_class, copy_extends=False)
 
     # We changed step 3. Instantiate extends to partial instantiation including contents
@@ -998,19 +1003,25 @@ def _apply_redeclares(
     return True
 
 
-def _copy_class_contents(
-    to_class: ast.InstanceClass,
-    copy_extends=True,
-) -> None:
-    """Shallow copy of references from original to new class"""
+def _copy_equations_contents(to_class: ast.InstanceClass) -> None:
+    """Copy equations and statements from ast_ref so extends instances carry them."""
     from_class = to_class.ast_ref
-    to_class.imports.update(from_class.imports)
-    if copy_extends:
-        to_class.extends += from_class.extends
     to_class.equations += from_class.equations
     to_class.initial_equations += from_class.initial_equations
     to_class.statements += from_class.statements
     to_class.initial_statements += from_class.initial_statements
+
+
+def _copy_class_contents(
+    to_class: ast.InstanceClass,
+    copy_extends=True,
+) -> None:
+    """Shallow copy of references from original to new class (excluding equations)"""
+    from_class = to_class.ast_ref
+    to_class.imports.update(from_class.imports)
+    if copy_extends:
+        to_class.extends += from_class.extends
+    # Equations/statements already copied by _copy_equations_contents
     if isinstance(from_class.annotation, ast.ClassModification):
         to_class.annotation.arguments += from_class.annotation.arguments
     to_class.functions.update(from_class.functions)

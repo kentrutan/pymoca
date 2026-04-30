@@ -9,7 +9,7 @@ import pytest
 
 import pymoca.ast
 import pymoca.parser
-from pymoca.tree import NameLookupError, find_name, flatten, instantiate  # noqa: F401
+from pymoca.tree import NameLookupError, find_name, flatten, flatten_instance, instantiate
 
 MY_DIR = os.path.dirname(os.path.realpath(__file__))
 COMPLIANCE_DIR = os.path.join(MY_DIR, "libraries", "Modelica-Compliance", "ModelicaCompliance")
@@ -74,9 +74,13 @@ def parse_imported_lookup_file(pathname):
     return parse_lookup_file(pathname, IMPORTED_LOOKUP_DIR)
 
 
-# Simple name lookup tests from ModelicaCompliance
+def flatten_compliance_model(ast_tree, full_model_name):
+    """Instantiate and flatten a compliance model by full dotted name."""
+    instance = instantiate(full_model_name, ast_tree)
+    return flatten_instance(instance)
 
-# TODO: Update when new name lookup is connected to flattening (see todos hints below)
+
+# Simple name lookup tests from ModelicaCompliance
 
 
 def test_encapsulation():
@@ -88,7 +92,11 @@ def test_encapsulation():
     found = find_name("x", scope)
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
-    # TODO: flatten and check x.value
+
+    flat = flatten_compliance_model(
+        ast, "ModelicaCompliance.Scoping.NameLookup.Simple.Encapsulation"
+    )
+    assert "a.x" in flat.symbols
 
     # Now go in the reverse direction, bumping into encapsulation
     found = find_name("Encapsulation", found.parent)
@@ -118,7 +126,10 @@ def test_enclosing_class_lookup_class():
     found = lookup_composite_using_simple_only("Scoping.NameLookup", found.parent)
     assert found is not None
     assert isinstance(found, pymoca.ast.Class)
-    # TODO: flatten and check x.value == 2
+    flat = flatten_compliance_model(
+        ast, "ModelicaCompliance.Scoping.NameLookup.Simple.EnclosingClassLookupClass"
+    )
+    assert flat.symbols["b.a.x"].value == 2
 
 
 def test_enclosing_class_lookup_constant():
@@ -136,7 +147,10 @@ def test_enclosing_class_lookup_constant():
     found = find_name("x", scope)
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
-    # TODO: flatten and check y.value == 4
+    flat = flatten_compliance_model(
+        ast, "ModelicaCompliance.Scoping.NameLookup.Simple.EnclosingClassLookupConstant"
+    )
+    assert flat.symbols["x"].value == 4
 
 
 def test_enclosing_class_lookup_nonconstant():
@@ -239,8 +253,6 @@ def test_outside_encapsulation_multi():
 
 # Composite name lookup tests from ModelicaCompliance or us
 
-# TODO: Update when new name lookup is connected to flattening (see todos hints below)
-
 
 def test_package_lookup_class():
     """Checks that it's possible to look up a class in a package"""
@@ -252,7 +264,10 @@ def test_package_lookup_class():
     found = find_name("a.x", scope)
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
-    # TODO: flatten and check a.x.value = 531.0
+    flat = flatten_compliance_model(
+        ast, "ModelicaCompliance.Scoping.NameLookup.Composite.PackageLookupClass"
+    )
+    assert flat.symbols["a.x"].value == 531.0
 
 
 def test_package_lookup_constant():
@@ -265,7 +280,15 @@ def test_package_lookup_constant():
     found = find_name("P.x", scope)
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
-    # TODO: flatten and check y.value = 5.1
+    flat = flatten_compliance_model(
+        ast, "ModelicaCompliance.Scoping.NameLookup.Composite.PackageLookupConstant"
+    )
+    assert "y" in flat.symbols
+    y_val = flat.symbols["y"].value
+    assert isinstance(y_val, pymoca.ast.InstanceSymbol)
+    assert y_val.name == "P.x"
+    assert y_val.full_instance_name == "PackageLookupConstant.P.x"
+    assert y_val.full_name.endswith("PackageLookupConstant.P.x")
 
 
 def test_nested_comp_lookup():
@@ -278,7 +301,10 @@ def test_nested_comp_lookup():
     found = find_name("c.b.a.x", scope)
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
-    # TODO: flatten and check y.value = 17 (integer)
+    flat = flatten_compliance_model(
+        ast, "ModelicaCompliance.Scoping.NameLookup.Composite.NestedCompLookup"
+    )
+    assert flat.symbols["c.b.a.x"].value == 17
 
 
 def test_partial_class_lookup():
@@ -357,7 +383,7 @@ def test_function_lookup_via_comp():
     assert found is not None
 
 
-@pytest.mark.skip("TODO: Do this test when new instantiation/flattening is implemented")
+@pytest.mark.skip("Needs function-call-context tracking in name lookup")
 def test_function_lookup_via_comp_non_call():
     """Checks that it's only legal to look up a function name via a
     component if the name is used as a function call"""
@@ -434,7 +460,7 @@ def test_function_lookup_via_array_comp():
         _ = find_name("a.f", scope)
 
 
-@pytest.mark.skip("TODO: Do this test when new instantiation/flattening is implemented")
+@pytest.mark.skip("Needs array subscript handling in find_name")
 def test_function_lookup_via_array_element():
     """Checks that it's allowed to look up a function via an
     array element if the element is a scalar component"""
@@ -448,7 +474,6 @@ def test_function_lookup_via_array_element():
     assert found is not None
 
 
-@pytest.mark.skip("TODO: Do this test when new instantiation/flattening is implemented")
 def test_need_for_temporary_flattening():
     """Test name lookup through 2 levels of inheritance with symbol value modifications
 
@@ -473,16 +498,11 @@ def test_need_for_temporary_flattening():
     ast_tree = pymoca.parser.parse(txt)
     class_name = "M"
     comp_ref = pymoca.ast.ComponentRef.from_string(class_name)
-    # TODO: Remove this `use_find_name` call if `find_name` becomes default
-    pymoca.ast.Class.use_find_name(True)
     flat_tree = flatten(ast_tree, comp_ref)
     assert flat_tree.classes[class_name].symbols["bla"].value.value == 1
-    pymoca.ast.Class.use_find_name(False)
 
 
 # Global name lookup tests from ModelicaCompliance
-
-# TODO: Update when new name lookup is connected to flattening (see todos hints below)
 
 
 @pytest.mark.skip("TODO: Do these after global name syntax is implemented")
@@ -502,8 +522,6 @@ def test_encapsulated_global_lookup():
 
 # Imported name lookup tests from ModelicaCompliance
 
-# TODO: Update when new name lookup is connected to flattening (see todos hints below)
-
 
 def test_encapsulated():
     """Checks that it's possible to import from inside an
@@ -515,7 +533,10 @@ def test_encapsulated():
     )
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
-    # TODO: flatten and check a.m.x.value = 2.0
+    flat = flatten_compliance_model(
+        ast, "ModelicaCompliance.Scoping.NameLookup.Imports.EncapsulatedImport"
+    )
+    assert flat.symbols["a.m.x"].value == 2.0
 
 
 def test_extend_import():
@@ -558,10 +579,15 @@ def test_scope_type():
     assert found is not None
     found = find_name("m.y", scope)
     assert found is not None
-    # TODO: flatten and check a.value = 2.0, b.value = 8.0, and m.y.value = 2.0
+
+    flat = flatten_compliance_model(
+        ast, "ModelicaCompliance.Scoping.NameLookup.Imports.ImportScopeType"
+    )
+    assert "a" in flat.symbols  # a references P2.y (2.0) via InstanceSymbol
+    assert "m.y" in flat.symbols  # m.y references P.x via InstanceSymbol
 
 
-@pytest.mark.skip("TODO: Do this test when new instantiation/flattening is implemented")
+@pytest.mark.skip("Needs import modification validation")
 def test_modify_import():
     """Checks that it's not allowed to modify an import"""
     ast = parse_imported_lookup_file("ModifyImport.mo")
@@ -582,7 +608,11 @@ def test_qualified_import():
     )
     found = find_name("b.a.x", scope)
     assert found is not None
-    # TODO: flatten and check a.value = 2.0, b.value = 8.0, and m.y.value = 2.0
+
+    flat = flatten_compliance_model(
+        ast, "ModelicaCompliance.Scoping.NameLookup.Imports.QualifiedImport"
+    )
+    assert flat.symbols["b.a.x"].value == 1.0
 
 
 def test_qualified_import_conflict():
@@ -627,7 +657,7 @@ def test_recursive():
         _ = find_name("A", scope)
 
 
-@pytest.mark.skip("TODO: Do this test when new instantiation/flattening is implemented")
+@pytest.mark.skip("Needs import redeclaration validation")
 def test_redeclare_import():
     """Checks that it's not allowed to redeclare an import"""
     ast = parse_imported_lookup_file("RedeclareImport.mo")
@@ -648,7 +678,11 @@ def test_renaming_import():
     )
     found = find_name("b.a.x", scope)
     assert found is not None
-    # TODO: flatten and check b.a.x.value = 1.0
+
+    flat = flatten_compliance_model(
+        ast, "ModelicaCompliance.Scoping.NameLookup.Imports.RenamingImport"
+    )
+    assert flat.symbols["b.a.x"].value == 1.0
 
 
 def test_renaming_import_non_package():
@@ -672,7 +706,11 @@ def test_renaming_single_definition_import():
     )
     found = find_name("b.a.x", scope)
     assert found is not None
-    # TODO: flatten and check b.a.x.value = 1.0
+
+    flat = flatten_compliance_model(
+        ast, "ModelicaCompliance.Scoping.NameLookup.Imports.RenamingSingleDefinitionImport"
+    )
+    assert flat.symbols["b.a.x"].value == 1.0
 
 
 def test_single_definition_import():
@@ -684,7 +722,11 @@ def test_single_definition_import():
     )
     found = find_name("b.a.x", scope)
     assert found is not None
-    # TODO: flatten and check b.a.x.value = 1.0
+
+    flat = flatten_compliance_model(
+        ast, "ModelicaCompliance.Scoping.NameLookup.Imports.SingleDefinitionImport"
+    )
+    assert flat.symbols["b.a.x"].value == 1.0
 
 
 def test_unqualified_import():
@@ -696,7 +738,11 @@ def test_unqualified_import():
     )
     found = find_name("b.a.x", scope)
     assert found is not None
-    # TODO: flatten and check b.a.x.value = 1.0
+
+    flat = flatten_compliance_model(
+        ast, "ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImport"
+    )
+    assert flat.symbols["b.a.x"].value == 1.0
 
 
 @pytest.mark.skip("ModelicaCompliance test case has a bug")
@@ -720,7 +766,6 @@ def test_unqualified_import_conflict():
         _ = find_name("A.x", scope)
 
 
-@pytest.mark.skip("TODO: Do this test when new instantiation/flattening is implemented")
 def test_unqualified_import_non_conflict():
     """Checks that it's not an error to be able to find a name in
     multiple unqualified imports, it's only an error if such a name is
@@ -795,7 +840,6 @@ def test_qualified_import_priority():
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
     expect = (("d.x", 2.0), ("b.x", 3.0), ("c.x", 1.0))
-    # TODO: flatten and check values
     for name, _value in expect:
         found = find_name(name, scope)
         assert found is not None, f" for {name}"
@@ -811,7 +855,6 @@ def test_unqualified_import_priority():
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
     expect = (("e.x", 2.0), ("b.x", 3.0), ("c.x", 1.0), ("d.x", 4.0))
-    # TODO: flatten and check value
     for name, _value in expect:
         found = find_name(name, scope)
         assert found is not None, f" for {name}"

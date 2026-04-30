@@ -135,10 +135,10 @@ def test_redeclare_component_complicated():
 def test_redeclare_component_type_compatibility():
     """Test type compatibility for redeclaration of components of builtin types"""
 
-    # TODO: Update when new flattening is implemented
-    # For now we expect the values from the base class modifications.
-    # Flattening should catch the value assignment errors noted in the model
-    # when the modifiers are flattened.
+    # TODO: Update when value/type compatibility checking is added to flattening
+    # The redeclare clears the original value, so all flattened values are None.
+    # Type compatibility errors (e.g. Boolean x = true redeclared as Integer)
+    # should be caught in a future type-checking pass.
 
     instance = parse_and_instantiate_model("RedeclareTypeCompatibility.mo", "M")
     expect = [
@@ -156,6 +156,10 @@ def test_redeclare_component_type_compatibility():
         redeclare_expect("ss2rv.x", "Real", 3.5, True),
     ]
     check_redeclare_expects(instance, expect)
+
+    # Flattening succeeds (no type errors raised yet)
+    flat = tree.flatten_instance(instance)
+    assert len(flat.symbols) == 12
 
 
 def test_redeclare_class_with_symbol_error():

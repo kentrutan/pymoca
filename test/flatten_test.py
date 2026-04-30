@@ -436,11 +436,10 @@ def test_extend_from_self():
     with pytest.raises(tree.ModelicaSemanticError, match="Cannot extend class 'A' with itself"):
         instance = tree.instantiate("A", ast_tree)  # noqa: F841
 
-    # TODO: Update when new flattening is implemented
     class_name = "A"
     comp_ref = ast.ComponentRef.from_string(class_name)
 
-    with pytest.raises(Exception, match="Cannot extend class 'A' with itself"):
+    with pytest.raises(tree.ModelicaSemanticError, match="Cannot extend class 'A' with itself"):
         flat_tree = tree.flatten(ast_tree, comp_ref)  # noqa: F841
 
 

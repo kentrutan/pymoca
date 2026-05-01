@@ -56,6 +56,7 @@ from ._listener import (  # noqa: E402,F401,I100,I202
 )
 from ._flattening import (  # noqa: E402,F401,I100
     flatten_instance,
+    flatten_to_tree,
 )
 from ._instantiation import (  # noqa: E402,F401,I100
     InstanceTree,

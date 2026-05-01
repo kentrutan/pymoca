@@ -37,8 +37,9 @@ def flatten_instance(
         raise TypeError(f"Expected InstanceClass, got {type(instance)}")
 
     flat_class = _create_partial_flat_instance(instance)
-
-    _flatten_instance(instance, flat_class)
+    functions = OrderedDict()
+    _flatten_instance(instance, flat_class, functions=functions)
+    _flatten_discovered_functions(functions, flat_class)
     _check_all_references_valid(flat_class)
     _process_transitions(flat_class)
     if not keep_connectors:
@@ -116,8 +117,8 @@ def _flatten_instance(
     #   unnamed root of the instance tree, e.g. in case of a constant in a package.]"
     # * C. Classes and symbols are instantiated as needed (if not a fully instantiated instance)
     # * D. Classes are ignored unless needed by components
-    # * E. Function calls encountered in the above are processed as needed: (TODO)
-    #   - Fill the call with default arguments (section 12.4.1)
+    # * E. Function calls encountered in the above are processed as needed:
+    #   - Fill the call with default arguments (section 12.4.1) (TODO)
     #   - Look up the function in the instance tree
     #   - Recursively flatten the function call
     #   - Add to the list of functions
@@ -137,7 +138,7 @@ def _flatten_instance(
     #
     # 3 Process transitions in the flattened tree (TODO)
 
-    # 1 Recursively walk the tree, beginning at the class to be flattened
+    # 1.1–1.6 Process local symbols per MLS 5.6.2
     for name, symbol in list(instance.symbols.items()):
 
         assert isinstance(name, str)
@@ -158,7 +159,14 @@ def _flatten_instance(
             flat_symbol.name = flat_name
             flat_class.symbols[flat_name] = flat_symbol
         elif not isinstance(flat_symbol.type, ast.InstanceClass):
-            resolved = _resolve_name(flat_symbol.type, instance, flat_class)
+            resolved = _resolve_name(
+                flat_symbol.type,
+                instance,
+                flat_class,
+                current_instances=current_instances,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+            )
             is_class = isinstance(resolved, ast.InstanceClass)
             flat_symbol.type = resolved if is_class else resolved.parent
 
@@ -185,6 +193,7 @@ def _flatten_instance(
                 current_instances=current_instances,
                 current_extends=current_extends,
                 instantiate_in_place=instantiate_in_place,
+                functions=functions,
             )
         else:
             # 1.6 Recursively "handle" non-simple types
@@ -211,11 +220,19 @@ def _flatten_instance(
                     sym.dimensions = outer_dims + sym.dimensions
 
     # 1.7 Resolve references in equations and algorithms
-    _collect_and_resolve_equations(instance, flat_class, prefix)
+    _collect_and_resolve_equations(instance, flat_class, prefix, functions=functions)
 
     # 1.8 Recursively "handle" unnamed extends instances
     for extends in instance.extends:
-        _flatten_instance(extends, flat_class, prefix=prefix)
+        _flatten_instance(
+            extends,
+            flat_class,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+            prefix=prefix,
+            functions=functions,
+        )
 
     # Steps 1.9, 2, and 3 are done outside the recursion in the caller
 
@@ -274,6 +291,7 @@ def _resolve_modifications(
     current_instances: Optional[Set[ast.InstanceClass]],
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
     instantiate_in_place: bool,
+    functions: Optional[OrderedDict] = None,
 ) -> None:
     """Resolve modifications of a symbol
     :param symbol: The symbol to resolve modifications for
@@ -302,6 +320,7 @@ def _resolve_modifications(
             current_instances=current_instances,
             current_extends=current_extends,
             instantiate_in_place=instantiate_in_place,
+            functions=functions,
         )
 
 
@@ -311,6 +330,7 @@ def _resolve_modification_attribute(
     current_instances: Optional[Set[ast.InstanceClass]],
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
     instantiate_in_place: bool,
+    functions: Optional[OrderedDict] = None,
 ):
     # The spec says the modifications are resolved by creating equations, but we are
     # going to set the symbol attributes now and create equations for them in another
@@ -334,7 +354,16 @@ def _resolve_modification_attribute(
         )
         value = cast(ast.InstanceSymbol, value)
     elif isinstance(value, (ast.Array, ast.Expression)):
-        pass  # fall through to Expression handling below
+        # Discover function calls inside Array elements and Expressions so
+        # that the function flattening pass can include them in the output.
+        # Without this, functions referenced only in modifications are lost.
+        if functions is not None:
+            scope = (
+                arg.scope if isinstance(arg.scope, ast.InstanceClass) else symbol.parent_instance
+            )
+            func_resolver = _FunctionCallResolver(scope, functions)
+            walker = TreeWalker()
+            walker.walk(func_resolver, value)
     if isinstance(value, ast.Expression):
         # Try to evaluate constant expressions (e.g. +1 → 1, -1.0 → -1.0);
         # keep the original Expression if evaluation fails (e.g. references
@@ -506,6 +535,28 @@ class _EquationRefResolver(TreeListener):
             self.cutoff_depth = sys.maxsize
 
 
+class _FunctionCallResolver(TreeListener):
+    """Discover function calls in equations/statements, resolve to fully-scoped names."""
+
+    def __init__(self, instance: ast.InstanceClass, functions: OrderedDict):
+        self.instance = instance
+        self.functions = functions
+        super().__init__()
+
+    def exitExpression(self, tree: ast.Expression):
+        if not isinstance(tree.operator, ast.ComponentRef):
+            return
+        try:
+            found = _find_name(tree.operator, self.instance)
+        except Exception:
+            return
+        if found is None or not isinstance(found, ast.Class):
+            return  # built-in function (sin, cos, etc.) or symbol
+        full_name = found.full_name
+        tree.operator = full_name
+        self.functions[full_name] = found
+
+
 def _flatten_connect_ref(ref: ast.ComponentRef, prefix: str) -> None:
     """Flatten a connect clause ComponentRef by prepending prefix and collapsing children."""
     parts = [ref.name]
@@ -547,10 +598,12 @@ def _collect_and_resolve_equations(
     instance: ast.InstanceClass,
     flat_class: ast.InstanceClass,
     prefix: str,
+    functions: Optional[OrderedDict] = None,
 ) -> None:
     """Deep-copy equations from *instance*, resolve refs, append to *flat_class*."""
     walker = TreeWalker()
     resolver = _EquationRefResolver(flat_class, prefix)
+    func_resolver = _FunctionCallResolver(instance, functions) if functions is not None else None
 
     # Snapshot lists before iteration to avoid mutation issues if the
     # instance's lists are modified during extends processing.
@@ -569,27 +622,72 @@ def _collect_and_resolve_equations(
             _flatten_connect_ref(eq_copy.left, prefix)
             _flatten_connect_ref(eq_copy.right, prefix)
         else:
+            if func_resolver is not None:
+                walker.walk(func_resolver, eq_copy)
             resolver.reset()
             walker.walk(resolver, eq_copy)
         flat_class.equations.append(eq_copy)
 
     for eq in initial_equations:
         eq_copy = copy.deepcopy(eq)
+        if func_resolver is not None:
+            walker.walk(func_resolver, eq_copy)
         resolver.reset()
         walker.walk(resolver, eq_copy)
         flat_class.initial_equations.append(eq_copy)
 
     for stmt in statements:
         stmt_copy = copy.deepcopy(stmt)
+        if func_resolver is not None:
+            walker.walk(func_resolver, stmt_copy)
         resolver.reset()
         walker.walk(resolver, stmt_copy)
         flat_class.statements.append(stmt_copy)
 
     for stmt in initial_statements:
         stmt_copy = copy.deepcopy(stmt)
+        if func_resolver is not None:
+            walker.walk(func_resolver, stmt_copy)
         resolver.reset()
         walker.walk(resolver, stmt_copy)
         flat_class.initial_statements.append(stmt_copy)
+
+
+def _flatten_discovered_functions(
+    functions: OrderedDict,
+    flat_class: ast.InstanceClass,
+) -> None:
+    """Flatten discovered function classes and add to flat_class.functions."""
+    processed = set()
+    while set(functions.keys()) - processed:
+        for full_name in list(functions.keys()):
+            if full_name in processed:
+                continue
+            func_class = functions[full_name]
+
+            # Instantiate if needed
+            if not isinstance(func_class, ast.InstanceClass) or not func_class.fully_instantiated:
+                func_instance = _instantiate_element(
+                    func_class,
+                    func_class.parent,
+                    ast.ClassModification(),
+                    current_instances=None,
+                )
+            else:
+                func_instance = func_class
+
+            # Flatten using new pipeline — discovers nested function calls
+            nested_functions = OrderedDict()
+            flat_func = _create_partial_flat_instance(func_instance)
+            _flatten_instance(func_instance, flat_func, functions=nested_functions)
+
+            # Merge nested discoveries back
+            for nested_name, nested_class in nested_functions.items():
+                if nested_name not in functions:
+                    functions[nested_name] = nested_class
+
+            flat_class.functions[full_name] = flat_func
+            processed.add(full_name)
 
 
 def _check_all_references_valid(flat_class: ast.InstanceClass):

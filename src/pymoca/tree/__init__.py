@@ -23,6 +23,7 @@ from ._base import (  # noqa: F401
 )
 from ._flattening import (  # noqa: F401
     flatten_instance,
+    flatten_to_tree,
 )
 from ._instantiation import (  # noqa: F401
     InstanceTree,

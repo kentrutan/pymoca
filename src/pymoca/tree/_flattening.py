@@ -3,6 +3,7 @@
 Modelica flattening — MLS 5.6.2
 
 Entry: flatten_instance(instance) → _flatten_instance()
+Adapter: flatten_to_tree(root, class_name) → ast.Tree (for backend compatibility)
 """
 
 from __future__ import absolute_import, division, print_function, unicode_literals
@@ -17,6 +18,7 @@ from ._instantiation import (
     InstanceTree,
     _get_lexical_parent_instance,
     _instantiate_class,
+    instantiate,
 )
 from ._name_lookup import _find_name
 from .. import ast
@@ -78,7 +80,7 @@ def _flatten_instance(
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
     instantiate_in_place: bool = True,
     prefix: str = "",
-    functions=None,
+    functions: Optional[OrderedDict] = None,
 ) -> None:
     """Flatten an instance class
 
@@ -850,9 +852,9 @@ def _resolve_name(
     name: Union[str, ast.ComponentRef],
     scope: ast.InstanceClass,
     flat_class: ast.InstanceClass,
-    current_instances: Optional[Set[ast.InstanceClass]] = None,
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
-    instantiate_in_place: bool = False,
+    current_instances: Optional[Set[ast.InstanceClass]],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
 ) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
     """Flatten and resolve a name reference"""
     # * A. "all references by name in conditional declarations, modifications, dimension
@@ -1001,3 +1003,214 @@ def _instantiate_element(
         return instance.symbols[element.name]
     else:
         return instance
+
+
+# ---------------------------------------------------------------------------
+# Adapter: InstanceClass → ast.Class / ast.Tree  (for backend compatibility)
+# ---------------------------------------------------------------------------
+
+_VALUE_ATTRS = (
+    "start",
+    "min",
+    "max",
+    "nominal",
+    "value",
+    "fixed",
+    "unit",
+    "quantity",
+    "displayUnit",
+)
+
+
+def _get_constant_value(isym: ast.InstanceSymbol):
+    """Extract the resolved constant value from an InstanceSymbol, or None if unavailable."""
+    if "constant" not in isym.prefixes:
+        return None
+    # Check if value was already resolved
+    if isym.value is not None and not (
+        isinstance(isym.value, ast.Primary) and isym.value.value is None
+    ):
+        return isym.value
+    # Look in the type class's builtin symbol modification for the value
+    if isinstance(isym.type, ast.InstanceClass) and isym.type.name in InstanceTree.BUILTIN_TYPES:
+        builtin_sym = isym.type.symbols.get(isym.type.name)
+        if builtin_sym is not None:
+            for arg in builtin_sym.modification_environment.arguments:
+                if (
+                    isinstance(arg.value, ast.ElementModification)
+                    and arg.value.component.name == "value"
+                    and arg.value.modifications
+                ):
+                    mod_val = arg.value.modifications[0]
+                    if isinstance(mod_val, ast.Primary):
+                        return mod_val
+    return None
+
+
+def _to_ast_value(val):
+    """Wrap a raw Python value or InstanceSymbol back into an AST node."""
+    if isinstance(val, ast.Primary):
+        return val
+    if isinstance(val, (ast.Expression, ast.Array, ast.ComponentRef)):
+        return val
+    if isinstance(val, ast.InstanceSymbol):
+        # For constants, substitute the actual value (MLS 5.6.2)
+        const_val = _get_constant_value(val)
+        if const_val is not None:
+            return const_val
+        return ast.ComponentRef(name=val.name)
+    if isinstance(val, (int, float, bool, str)) or val is None:
+        return ast.Primary(value=val)
+    return val
+
+
+def _instance_to_ast_symbol(isym: ast.InstanceSymbol) -> ast.Symbol:
+    """Convert an InstanceSymbol to a plain ast.Symbol for TreeWalker compatibility."""
+    sym = ast.Symbol()
+    for attr in (
+        "name",
+        "type",
+        "prefixes",
+        "replaceable",
+        "final",
+        "inner",
+        "outer",
+        "dimensions",
+        "comment",
+        "id",
+        "order",
+        "visibility",
+        "class_modification",
+    ):
+        setattr(sym, attr, getattr(isym, attr))
+    # Wrap raw values back into ast.Primary for backend compatibility
+    for attr in _VALUE_ATTRS:
+        setattr(sym, attr, _to_ast_value(getattr(isym, attr)))
+    # Normalize type to ComponentRef for TreeWalker compatibility
+    if isinstance(sym.type, ast.InstanceClass):
+        sym.type = ast.ComponentRef(name=sym.type.name)
+    return sym
+
+
+def _instance_to_ast_class(flat_instance: ast.InstanceClass) -> ast.Class:
+    """Convert a flat InstanceClass to a plain ast.Class for backend consumption."""
+    flat_class = ast.Class()
+    flat_class.name = flat_instance.name
+    flat_class.type = flat_instance.type
+    flat_class.comment = flat_instance.comment
+    flat_class.annotation = flat_instance.annotation
+
+    # Convert symbols
+    for name, isym in flat_instance.symbols.items():
+        sym = _instance_to_ast_symbol(isym)
+        sym.parent = flat_class
+        flat_class.symbols[name] = sym
+
+    # Equations are plain AST nodes — copy directly
+    flat_class.equations = flat_instance.equations
+    flat_class.initial_equations = flat_instance.initial_equations
+    flat_class.statements = flat_instance.statements
+    flat_class.initial_statements = flat_instance.initial_statements
+
+    # Functions
+    for fname, func in flat_instance.functions.items():
+        if isinstance(func, ast.InstanceClass):
+            flat_class.functions[fname] = _instance_to_ast_class(func)
+        else:
+            flat_class.functions[fname] = func
+
+    return flat_class
+
+
+def _add_connector_symbols(
+    instance: ast.InstanceClass,
+    flat_class: ast.Class,
+    prefix: str,
+) -> None:
+    """Walk the instance tree and add connector-level symbols to *flat_class*.
+
+    ``expand_connectors`` expects a symbol entry for each connector (e.g.
+    ``a.up``) with a ``__connector_type`` attribute containing a flat
+    ``ast.Class`` of the connector's variables.  The new flattening only
+    produces leaf symbols (``a.up.H``, ``a.up.Q``), so we recreate the
+    intermediate entries here.
+    """
+    for name, sym in instance.symbols.items():
+        if not isinstance(sym.type, ast.InstanceClass):
+            continue
+        full_name = prefix + "." + name if prefix else name
+        if sym.type.type == "connector":
+            # Create a stub symbol for this connector
+            stub = ast.Symbol()
+            stub.name = full_name
+            stub.type = ast.ComponentRef(name=sym.type.name)
+            stub.prefixes = list(sym.prefixes)
+            stub.comment = sym.comment
+            # Flatten the connector type to get its variables
+            connector_flat = flatten_instance(sym.type)
+            stub.__connector_type = _instance_to_ast_class(connector_flat)
+            flat_class.symbols[full_name] = stub
+        # Recurse into composite types (models containing connectors)
+        _add_connector_symbols(sym.type, flat_class, full_name)
+
+
+def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
+    """Flatten a class using the new instantiation/flattening pipeline,
+    returning an ast.Tree compatible with legacy backends.
+
+    Plug-compatible with legacy ``flatten(root, class_name)``.
+    """
+    from ._legacy import (
+        add_state_value_equations,
+        add_variable_value_statements,
+        annotate_states,
+        expand_connectors,
+        flatten_component_refs,
+    )
+
+    # 1. Instantiate
+    class_name_str = str(class_name)
+    instance = instantiate(class_name_str, root)
+
+    # 2. Flatten (keep connectors for expand_connectors)
+    flat_instance = flatten_instance(instance, keep_connectors=True)
+
+    # 3. Convert InstanceClass → ast.Class
+    flat_class = _instance_to_ast_class(flat_instance)
+
+    # 4. Add connector-level symbols with __connector_type for expand_connectors.
+    #    The new flattening recurses into connectors producing leaf symbols (e.g.
+    #    a.up.H, a.up.Q) but expand_connectors expects an intermediate symbol
+    #    for each connector (e.g. a.up) with __connector_type set.
+    _add_connector_symbols(instance, flat_class, prefix="")
+
+    # 5. Resolve component refs in symbol attributes (e.g. value = 2 * p1 → 2 * nested.p1)
+    for sym_name, sym in list(flat_class.symbols.items()):
+        # Derive the instance prefix from the flat symbol name
+        if "." in sym_name:
+            prefix = sym_name.rsplit(".", 1)[0] + "."
+        else:
+            prefix = ""
+        flat_sym = flatten_component_refs(flat_class, sym, prefix)
+        flat_class.symbols[sym_name] = flat_sym
+
+    # 6. Post-processing (same order as legacy flatten)
+    expand_connectors(flat_class)
+    add_state_value_equations(flat_class)
+    for func in flat_class.functions.values():
+        add_variable_value_statements(func)
+    annotate_states(flat_class)
+
+    # 6. Build ast.Tree
+    out = ast.Tree()
+    flat_name = class_name_str
+    flat_class.name = flat_name
+    out.classes[flat_name] = flat_class
+
+    # Pull functions to top level (before the model class)
+    functions_and_classes = flat_class.functions
+    flat_class.functions = OrderedDict()
+    functions_and_classes.update(out.classes)
+    out.classes = functions_and_classes
+
+    return out

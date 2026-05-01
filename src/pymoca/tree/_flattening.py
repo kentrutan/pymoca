@@ -125,7 +125,7 @@ def _flatten_instance(
     # 1.1 Insert components into the variables list
     # 1.2 Evaluate the conditional declaration expression and mark the declaration for
     #     deletion (TODO)
-    # 1.3 Resolve dimensions, including enclosing instances (TODO)
+    # 1.3 Resolve dimensions, including enclosing instances
     # 1.4 Resolve modifications of value attributes of simple types and records (TODO: records)
     # 1.5 Resolve modifications of other attributes of simple types
     # 1.6 Recursively "handle" non-simple types
@@ -188,7 +188,27 @@ def _flatten_instance(
             )
         else:
             # 1.6 Recursively "handle" non-simple types
-            _flatten_instance(flat_symbol.type, flat_class, prefix=flat_name)
+            symbols_before_recursive = set(flat_class.symbols.keys())
+            _flatten_instance(
+                flat_symbol.type,
+                flat_class,
+                current_instances=current_instances,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+                prefix=flat_name,
+                functions=functions,
+            )
+
+            # Propagate outer symbol dimensions to inner symbols (MLS 5.6.2 step 1.3)
+            # Always propagate (including scalar [[None]]) to preserve nesting depth
+            # for backend indexing.  Only propagate to symbols added by this recursive
+            # call to avoid double-prepending when extends chains share component names.
+            outer_dims = flat_symbol.dimensions
+            flat_name_prefix = flat_name + "."
+            for sym_name in set(flat_class.symbols.keys()) - symbols_before_recursive:
+                if sym_name.startswith(flat_name_prefix):
+                    sym = flat_class.symbols[sym_name]
+                    sym.dimensions = outer_dims + sym.dimensions
 
     # 1.7 Resolve references in equations and algorithms
     _collect_and_resolve_equations(instance, flat_class, prefix)
@@ -884,4 +904,3 @@ def _instantiate_element(
         return instance.symbols[element.name]
     else:
         return instance
-

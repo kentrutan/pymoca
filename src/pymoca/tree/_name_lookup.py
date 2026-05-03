@@ -778,6 +778,26 @@ def _find_imported(
         if isinstance(import_, ast.ImportClause):
             # TODO: Handle import of multiple classes (now only does `A.B.C` for `A.B.{C,D,E}`)
             import_ = import_.components[0]
+        if scope.full_name == str(import_):
+            raise NameLookupError(f"Import {import_} in scope {scope.full_name} is recursive")
+        # FIXME: Make this and copy below DRY
+        # Detect self-referential imports to prevent infinite recursion during instantiation
+        common_parent, children = _get_common_parent(scope, str(import_))
+        if common_parent is not None:
+            found = _find_composite_name(
+                children,
+                common_parent,
+                current_instances=current_instances,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+                search_imports=search_imports,
+                search_parent=search_parent,
+                search_inherited=search_inherited,
+                check_encapsulated=check_encapsulated,
+            )
+            _check_import_rules(found, scope)
+            return found
+
         found = _find_name(
             import_,
             scope.root,
@@ -797,6 +817,22 @@ def _find_imported(
         for package_ref in scope.imports["*"].components:
             imported_comp_ref = package_ref.concatenate(ast.ComponentRef(name=name))
             # Search within the package
+            # Detect self-referential imports to prevent infinite recursion during instantiation
+            common_parent, children = _get_common_parent(scope, str(imported_comp_ref))
+            if common_parent is not None:
+                found = _find_composite_name(
+                    children,
+                    common_parent,
+                    current_instances=current_instances,
+                    current_extends=current_extends,
+                    instantiate_in_place=instantiate_in_place,
+                    search_imports=search_imports,
+                    search_parent=search_parent,
+                    search_inherited=search_inherited,
+                    check_encapsulated=check_encapsulated,
+                )
+                _check_import_rules(found, scope)
+                return found
             # Avoid infinite recursion with search_imports = False
             c = _find_name(
                 imported_comp_ref,
@@ -818,6 +854,23 @@ def _find_imported(
     return None
 
 
+def _get_common_parent(class_: ast.Class, name: str) -> Tuple[Optional[ast.Class], str]:
+    class_parts = class_.full_name.split(".")
+    name_parts = name.split(".")
+    common_count = 0
+    for a, b in zip(class_parts, name_parts):
+        if a != b:
+            break
+        common_count += 1
+    if common_count == 0:
+        return (None, "")
+    parent = class_
+    for _ in range(len(class_parts) - common_count):
+        parent = parent.parent
+    child_names = name_parts[common_count:]
+    return parent, ".".join(child_names)
+
+
 def _check_import_rules(
     element: Optional[Union[ast.Class, ast.Symbol]],
     scope: ast.Class,
@@ -827,14 +880,24 @@ def _check_import_rules(
         return
     # TODO: Is `not element.parent` a sufficient check for the error message? (fix in rewrite)
     if not element.parent:
-        raise NameLookupError(f"Import {element.name} must be contained in a package")
+        raise NameLookupError(
+            f"Import {element.name} in scope {scope.full_name} must be contained in a package"
+        )
     if element.parent.type != "package":
         if element.parent.name:
-            message = f"{element.parent.name} must be a package in import {element.full_name}"
+            message = (
+                f"{element.parent.name} must be a package in "
+                f"import {element.full_name} in scope {scope.full_name}"
+            )
         else:
-            message = f"{element.full_name} is not in a package so can't be imported"
+            message = (
+                f"{element.full_name} is not in a package "
+                f"so can't be imported in scope {scope.full_name}"
+            )
         raise NameLookupError(message)
     if element.visibility != ast.Visibility.PUBLIC:
-        raise NameLookupError(f"Import {element.name} must not be protected")
+        raise NameLookupError(
+            f"Import {element.name} must not be protected in scope {scope.full_name}"
+        )
     if scope.full_name == element.full_name:
-        raise NameLookupError(f"Import {element.full_name} is recursive")
+        raise NameLookupError(f"Import {element.full_name} is recursive in scope {scope.full_name}")

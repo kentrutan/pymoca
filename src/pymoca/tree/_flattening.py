@@ -31,6 +31,17 @@ def flatten_instance(
     if not isinstance(instance, ast.InstanceClass):
         raise TypeError(f"Expected InstanceClass, got {type(instance)}")
 
+    flat_class = _create_partial_flat_instance(instance)
+
+    _flatten_instance(instance, flat_class)
+    _check_all_references_valid(flat_class)
+    _process_transitions(flat_class)
+    if not keep_connectors:
+        _generate_connect_equations(flat_class)
+    return flat_class
+
+
+def _create_partial_flat_instance(instance: ast.InstanceClass) -> ast.InstanceClass:
     flat_class = ast.InstanceClass(
         name=_flatten_name(instance),
         comment=instance.comment,
@@ -52,9 +63,6 @@ def flatten_instance(
         extends_copy.parent_instance = flat_class
         flat_class.extends.append(extends_copy)
 
-    _flatten_instance(instance, flat_class)
-    _check_all_references_valid(flat_class)
-    _process_transitions(flat_class)
     return flat_class
 
 
@@ -62,14 +70,12 @@ def _flatten_instance(
     instance: ast.InstanceClass,
     flat_class: ast.InstanceClass,
     prefix: str = "",
-    keep_connectors: bool = False,
 ) -> None:
     """Flatten an instance class
 
     :param instance: The instance class to flatten
     :param flat_class: The flattened class
     :param prefix: The prefix for the current instance
-    :param keep_connectors: Whether to keep connectors in the flattened class
     :return: The flattened instance class
 
     The passed instance may be updated by fully instantiating elements as needed.
@@ -152,20 +158,16 @@ def _flatten_instance(
             _resolve_modifications(flat_symbol, flat_class)
         else:
             # 1.6 Recursively "handle" non-simple types
-            _flatten_instance(flat_symbol.type, flat_class, flat_name)
+            _flatten_instance(flat_symbol.type, flat_class, prefix=flat_name)
 
     # 1.7 Resolve references in equations and algorithms
     _resolve_equation_and_algorithm_references(flat_class)
 
     # 1.8 Recursively "handle" unnamed extends instances
     for extends in instance.extends:
-        _flatten_instance(extends, flat_class, prefix)
+        _flatten_instance(extends, flat_class, prefix=prefix)
 
-    # Steps 1.9 and 3 are done outside the recursion in the caller
-
-    # 2. Generate connect equations for all connections in the flattened tree
-    if not keep_connectors:
-        _generate_connect_equations(flat_class)
+    # Steps 1.9, 2, and 3 are done outside the recursion in the caller
 
 
 def _evaluate_conditional_declarations(symbol: ast.InstanceSymbol, parent: ast.Class):

@@ -747,5 +747,28 @@ class ImportedNameLookupTest(unittest.TestCase):
             self.assertIsNotNone(found, f" for {name}")
 
 
+def test_import_package_name_prefix_overlap():
+    """Test import lookup when package names share a character prefix"""
+    txt = """
+    package Outer
+        package ABCPackage
+            model M
+                import Outer.ABC; // Shares same prefix as ABCPackage
+            end M;
+        end ABCPackage;
+        package ABC
+            constant Integer x = 42;
+        end ABC;
+    end Outer;
+    """
+    ast_tree = pymoca.parser.parse(txt)
+    scope = find_name("Outer.ABCPackage.M", ast_tree)
+    assert scope is not None
+    # Resolving ABC via the import must not infinite-loop or crash
+    found = find_name("ABC", scope)
+    assert found is not None
+    assert isinstance(found, pymoca.ast.Class)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,7 +9,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import copy  # TODO
 from collections import OrderedDict
-from typing import List, Optional, Union
+from typing import List, Optional, Set, Union
 
 from . import InstantiationError, ModelicaSemanticError, NameLookupError
 from ._listener import LookupOptions, RecursionGuard
@@ -57,13 +57,13 @@ def instantiate(class_name: str, class_tree: ast.Tree) -> ast.InstanceClass:
     `False`. If so, these cases will need to be fully instantiated
     for flattening by calling this function on the class.
     """
-    class_ = find_name(class_name, class_tree)
+    instance_tree = InstanceTree(class_tree)
+    class_ = find_name(class_name, instance_tree)
     if class_ is None:
         raise NameLookupError(f"{class_name} not found in given tree")
     if isinstance(class_, ast.Symbol):
         raise InstantiationError(f"Found Symbol for {class_name} but need Class to instantiate")
     # Spec v 3.5 section 5.6.1.3 says the instance tree root is parent in the top-level call
-    instance_tree = InstanceTree(class_tree)
     # That section also says the instance should be stored in the parent instance
     # so _instantiate_class does this
     instance = _instantiate_class(class_, ast.ClassModification(), instance_tree)
@@ -73,7 +73,10 @@ def instantiate(class_name: str, class_tree: ast.Tree) -> ast.InstanceClass:
 def _instantiate_class(
     orig_class: Union[ast.Class, ast.InstanceClass],
     modification_environment: ast.ClassModification,
-    parent_instance: Union[InstanceTree, ast.InstanceClass],
+    parent_instance: Union["InstanceTree", ast.InstanceClass],
+    current_instances: Optional[Set[ast.InstanceClass]] = None,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
+    instantiate_in_place: bool = False,
     update_parent_instance: bool = True,
     partially: bool = False,
 ) -> ast.InstanceClass:
@@ -83,6 +86,9 @@ def _instantiate_class(
     :param modification_environment: The modification environment of the class
         instance
     :param parent_instance: The parent class this class is contained in
+    :param current_instances: instances in process of being instantiated (at least partially)
+    :param current_extends: `extends` in process of name lookup (see _find_inherited)
+    :param instantiate_in_place: If True, partially instantiate for name lookup if not already
     :param update_parent_instance: If True, the parent instance will be updated with the instantiated class
     :return: The instantiated class
 
@@ -108,7 +114,13 @@ def _instantiate_class(
     #    (error if not) and only keep one if so (to preserve function argument order)
     # 6. Components are recursively instantiated
 
-    lexical_parent = _get_lexical_parent_instance(orig_class, parent_instance)
+    lexical_parent = _get_lexical_parent_instance(
+        orig_class,
+        parent_instance,
+        current_instances=current_instances,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
 
     # 1.1. Partially instantiate the element itself and 1.2 merge modifiers
     if orig_class.name not in parent_instance.classes or not isinstance(
@@ -134,8 +146,19 @@ def _instantiate_class(
         elif new_class.fully_instantiated or partially and new_class.partially_instantiated:
             return new_class
 
+    if current_instances is None:
+        current_instances = set()
+    current_instances.add(new_class)
+
     # 1.3. Redeclare of element itself is done
-    redeclared = _apply_redeclares(new_class, modification_environment, parent_instance)
+    redeclared = _apply_redeclares(
+        new_class,
+        modification_environment,
+        parent_instance,
+        current_instances=current_instances,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
     if redeclared:
         return new_class
 
@@ -184,13 +207,20 @@ def _instantiate_class(
 
         for extends in from_class.extends:
             extends_class = _instantiate_extends(
-                extends, modification_environment, new_class, partially=True
+                extends,
+                modification_environment,
+                new_class,
+                current_instances=current_instances,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+                partially=True,
             )
             new_class.extends.append(extends_class)
 
         _check_extends_rules(new_class)
 
     new_class.partially_instantiated = True
+    current_instances.remove(new_class)
     if partially:
         return new_class
 
@@ -205,22 +235,49 @@ def _instantiate_class(
 
     # 6. Recursively instantiate symbols (local and inherited)
     for symbol in new_class.symbols.values():
-        _instantiate_symbol(symbol, new_class)
+        _instantiate_symbol(
+            symbol,
+            new_class,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
 
     # Recurse down through all levels of extends and instantiate symbols
-    _instantiate_extends_symbols(new_class.extends)
+    _instantiate_extends_symbols(
+        new_class.extends,
+        current_instances=current_instances,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
 
     new_class.fully_instantiated = True
 
     return new_class
 
 
-def _instantiate_extends_symbols(extends: List[ast.InstanceClass]):
+def _instantiate_extends_symbols(
+    extends: List[ast.InstanceClass],
+    current_instances: Optional[Set[ast.InstanceClass]],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
+):
     for extend_node in extends:
         for symbol in extend_node.symbols.values():
-            _instantiate_symbol(symbol, extend_node)
+            _instantiate_symbol(
+                symbol,
+                extend_node,
+                current_instances=current_instances,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+            )
         if extend_node.extends:
-            _instantiate_extends_symbols(extend_node.extends)
+            _instantiate_extends_symbols(
+                extend_node.extends,
+                current_instances=current_instances,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+            )
 
 
 def _update_class_modification_scopes(
@@ -289,6 +346,9 @@ def _instantiate_extends(
     extends: Union[ast.ExtendsClause, ast.Class, ast.InstanceClass],
     modification_environment: ast.ClassModification,
     parent_instance: ast.InstanceClass,
+    current_instances: Optional[Set[ast.InstanceClass]],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
     partially: bool = False,
 ) -> ast.InstanceClass:
     """Instantiate an extends clause, partially or fully depending on partially flag"""
@@ -296,12 +356,24 @@ def _instantiate_extends(
     assert isinstance(extends, (ast.ExtendsClause, ast.Class))
     if not isinstance(extends, ast.Class):
         extends = _update_class_modification_scopes(extends, parent_instance)
-        extends_class = _find_extends_class(extends.component, parent_instance)
+        extends_class = _find_extends_class(
+            extends.component,
+            parent_instance,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
         class_modification = extends.class_modification
         # Partially instantiate the extends class
         # We are only doing this because we need to pass along the class_modification
         # FIXME: Apply class_modification through _instantiate_class somehow
-        lexical_parent = _get_lexical_parent_instance(extends_class, parent_instance)
+        lexical_parent = _get_lexical_parent_instance(
+            extends_class,
+            parent_instance,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
         extends_class = _instantiate_partially(
             extends_class,
             modification_environment,
@@ -317,6 +389,9 @@ def _instantiate_extends(
         extends_class,
         modification_environment,
         parent_instance,
+        current_instances=current_instances,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
         update_parent_instance=False,
         partially=partially,
     )
@@ -329,21 +404,31 @@ def _instantiate_extends(
 
 def _find_extends_class(
     extends_name: Union[str, ast.ComponentRef],
-    parent_instance: Union[InstanceTree, ast.InstanceClass],
+    scope: Union["InstanceTree", ast.InstanceClass],
+    current_instances: Optional[Set[ast.InstanceClass]],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
 ) -> Union[ast.Class, ast.InstanceClass]:
     """Find the extends class and do checks"""
 
-    extends_class = _find_name(extends_name, parent_instance, search_inherited=False)
+    extends_class = _find_name(
+        extends_name,
+        scope,
+        search_inherited=False,
+        current_instances=current_instances,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
 
     if extends_class is None:
         raise ModelicaSemanticError(
-            f"Extends name {extends_name} not found in scope {parent_instance.full_name}"
+            f"Extends name {extends_name} not found in scope {scope.full_name}"
         )
     if isinstance(extends_class, ast.Symbol):
         raise ModelicaSemanticError(
-            f"Cannot extend a component: {extends_name} in {parent_instance.full_name}"
+            f"Cannot extend a component: {extends_name} in {scope.full_name}"
         )
-    if extends_class.full_name == parent_instance.full_name:
+    if extends_class.full_name == scope.full_name:
         raise ModelicaSemanticError(f"Cannot extend class '{extends_class.full_name}' with itself")
     if _is_transitively_replaceable(extends_class):
         # MLS 7.3: A redeclare without `replaceable` drops the flag. During
@@ -360,8 +445,9 @@ def _find_extends_class(
         # replaceability check is unconditional per MLS 7.1.4.
         has_clearing_redeclare = False
         extends_parent_ref = getattr(extends_class.parent, "ast_ref", extends_class.parent)
-        extends_parent_name = getattr(extends_parent_ref, "full_name", "")
-        scope_name = parent_instance.full_name
+        scope_ref = getattr(scope, "ast_ref", scope)
+        extends_parent_name = getattr(extends_parent_ref, "full_name", None)
+        scope_name = getattr(scope_ref, "full_name", None)
         if isinstance(extends_class, ast.InstanceClass) and extends_parent_name != scope_name:
             for arg in extends_class.modification_environment.arguments:
                 if not arg.redeclare:
@@ -378,7 +464,7 @@ def _find_extends_class(
                     break
         if not has_clearing_redeclare:
             comp = extends_class.name
-            full_name = parent_instance.full_name
+            full_name = extends_class.parent.full_name
             raise ModelicaSemanticError(
                 f"In {full_name} extends {comp}, {comp} and parents cannot be replaceable"
             )
@@ -388,13 +474,27 @@ def _find_extends_class(
 
 def _get_lexical_parent_instance(
     class_: Union[ast.Class, ast.InstanceClass],
-    lookup_scope: Union[ast.Class, ast.InstanceClass, InstanceTree],
-) -> Union[ast.InstanceClass, InstanceTree]:
+    lookup_scope: Union[ast.Class, ast.InstanceClass, "InstanceTree"],
+    current_instances: Optional[Set[ast.InstanceClass]],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
+) -> Union[ast.InstanceClass, "InstanceTree"]:
     """Find the lexical parent instance of the given class"""
 
     if isinstance(class_, ast.InstanceClass):
         return class_.parent
-    found = _find_name(class_.name, lookup_scope)
+    if not isinstance(lookup_scope, ast.InstanceClass):
+        # Scope is an ast.Class, so the class parent is the lexical parent
+        found = class_.parent
+    else:
+        # Lookup class in the instance tree
+        found = _find_name(
+            class_.name,
+            lookup_scope,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=False,
+        )
     if (
         found is not None
         and isinstance(found.parent, ast.InstanceClass)
@@ -428,6 +528,9 @@ def _is_transitively_replaceable(class_: ast.Class) -> bool:
 def _instantiate_symbol(
     symbol: ast.InstanceSymbol,
     parent_instance: ast.InstanceClass,
+    current_instances: Optional[Set[ast.InstanceClass]],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
 ) -> None:
     """Instantiate given symbol"""
 
@@ -439,10 +542,23 @@ def _instantiate_symbol(
         return
 
     modification_environment = symbol.modification_environment
-    _apply_redeclares(symbol, modification_environment, parent_instance)
+    _apply_redeclares(
+        symbol,
+        modification_environment,
+        parent_instance,
+        current_instances=current_instances,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
 
     if not isinstance(symbol.type, ast.InstanceClass):
-        symbol_type = _find_name(symbol.type, parent_instance)
+        symbol_type = _find_name(
+            symbol.type,
+            parent_instance,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+        )
         if symbol_type is None:
             raise NameLookupError(
                 f"Type {symbol.type} of symbol {symbol.name} "
@@ -455,6 +571,9 @@ def _instantiate_symbol(
         symbol_type,
         modification_environment,
         parent_instance,
+        current_instances=current_instances,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
         update_parent_instance=False,
     )
     _copy_symbol_contents(symbol)
@@ -470,8 +589,8 @@ def _instantiate_partially(
         ast.InstanceSymbol,
     ],
     modification_environment: ast.ClassModification,
-    parent_instance: Union[InstanceTree, ast.InstanceClass],
-    parent: Union[InstanceTree, ast.InstanceClass],
+    parent_instance: Union["InstanceTree", ast.InstanceClass],
+    parent: Union["InstanceTree", ast.InstanceClass],
     update_parent_instance: bool = True,
     class_modification: Optional[ast.ClassModification] = None,
 ) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
@@ -506,6 +625,7 @@ def _instantiate_partially(
         instance = ast.InstanceSymbol(
             name=element.name,
             ast_ref=ast_ref,
+            parent_instance=parent_instance,
             parent=parent,
             replaceable=element.replaceable,
             final=element.final,
@@ -610,7 +730,10 @@ def _apply_modifications(
 def _apply_redeclares(
     element: Union[ast.InstanceClass, ast.InstanceSymbol],
     modification_environment: ast.ClassModification,
-    parent_instance: Union[ast.InstanceClass, InstanceTree],
+    parent_instance: Union[ast.InstanceClass, "InstanceTree"],
+    current_instances: Optional[Set[ast.InstanceClass]],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
     partially: bool = False,
 ) -> bool:
     """Apply redeclare if any and remove from environment
@@ -660,7 +783,13 @@ def _apply_redeclares(
     else:  # ast.ComponentClause
         redeclare_name = redeclare.type.name
 
-    redeclare_class = _find_name(redeclare_name, scope_class)
+    redeclare_class = _find_name(
+        redeclare_name,
+        scope_class,
+        current_instances=current_instances,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
+    )
 
     if redeclare_class is None:
         raise NameLookupError(
@@ -682,10 +811,15 @@ def _apply_redeclares(
     modification_environment.arguments = modification_environment.arguments + apply_args
 
     # Instantiate as an extends and add to extends list
+    is_class = isinstance(element, ast.InstanceClass)
+    parent_instance = element if is_class else element.parent_instance
     redeclare_class = _instantiate_extends(
         redeclare_class,
         modification_environment,
         parent_instance,
+        current_instances=current_instances,
+        current_extends=current_extends,
+        instantiate_in_place=instantiate_in_place,
         partially=partially,
     )
     redeclare_class.replaceable = redeclare.replaceable
@@ -698,9 +832,10 @@ def _apply_redeclares(
         # element.type is an ast.ComponentRef
         redeclared = _find_name(
             element.type,
-            scope_class,
-            current_extends=None,
-            instantiate_in_place=False,
+            element.parent_instance,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
         )
         if redeclared is None:
             raise ModelicaSemanticError(
@@ -709,7 +844,10 @@ def _apply_redeclares(
         redeclared = _instantiate_class(
             redeclared,
             modification_environment,
-            parent_instance,
+            element.parent_instance,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
             partially=partially,
         )
         element.type = redeclared

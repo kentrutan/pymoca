@@ -8,19 +8,11 @@ import pytest
 
 # Tests that actually fail at this commit.
 XFAIL_IN_PROGRESS = {
-    "test/name_lookup_test.py::ImportedNameLookupTest::test_unqualified_import_non_package",
     "test/parse_test.py::ParseTest::test_constant_references",
     "test/parse_test.py::ParseTest::test_extends_order",
-    "test/parse_test.py::ParseTest::test_extends_transitively_nonreplaceable_error",
     "test/parse_test.py::ParseTest::test_flattening_modification_scope",
-    "test/parse_test.py::ParseTest::test_msl3_twopin_units",
-    "test/parse_test.py::ParseTest::test_msl_flange_units",
-    "test/parse_test.py::ParseTest::test_msl_opamp_units",
-    "test/parse_test.py::ParseTest::test_redeclaration_scope_alternative",
     "test/parse_test.py::ParseTest::test_redeclare_class_with_symbol_error",
     "test/parse_test.py::ParseTest::test_redeclare_component_complicated",
-    "test/parse_test.py::ParseTest::test_redeclare_component_in_declaration",
-    "test/parse_test.py::ParseTest::test_redeclare_component_in_extends",
     "test/parse_test.py::ParseTest::test_value_modification_ordering",
 }
 

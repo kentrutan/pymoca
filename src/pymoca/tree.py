@@ -1077,8 +1077,8 @@ def _instantiate_class(
         from_class = orig_class
 
     # Maintain lexical instance tree for the new class
-    if new_class.name in lexical_parent.classes:
-        lexical_parent = lexical_parent.classes[new_class.name]
+    if new_class.ast_ref.name in lexical_parent.classes:
+        lexical_parent = lexical_parent.classes[new_class.ast_ref.name]
     else:
         lexical_parent = _instantiate_partially(
             from_class,

@@ -960,7 +960,7 @@ class ParseTest(unittest.TestCase):
 
         # Instantiation should fail without instantiation in composite name lookup
         instance = self.parse_and_instantiate_model("InstantiationInLookup.mo", "MyModel")
-        self.check_redeclare_expects(instance, [self.redeclare_expect("x", "T", 2.0, False)])
+        self.check_redeclare_expects(instance, [self.redeclare_expect("x", "Real", 2.0, False)])
 
     def test_instantiation_lookup_scope(self):
         """Test lookup during instantiation
@@ -1299,7 +1299,9 @@ class ParseTest(unittest.TestCase):
 
         # This is what we expect after the new flattening
         self.assertEqual(flat_tree.symbols["y"].value.name, "m.p")
-        self.assertEqual(flat_tree.symbols["y"].value.parent.name, "")  # Unnamed extends node
+        self.assertEqual(
+            flat_tree.symbols["y"].value.parent_instance.name, ""
+        )  # Unnamed extends node
         self.assertEqual(flat_tree.symbols["z"].value.name, "P0.p")
         # TODO: Uncomment after equation references and constant references are implemented
         # self.assertIn("M2.m.f", flat_tree.symbols)

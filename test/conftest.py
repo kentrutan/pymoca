@@ -10,7 +10,6 @@ import pytest
 XFAIL_IN_PROGRESS = {
     "test/parse_test.py::ParseTest::test_constant_references",
     "test/parse_test.py::ParseTest::test_flattening_modification_scope",
-    "test/parse_test.py::ParseTest::test_redeclare_component_complicated",
 }
 
 

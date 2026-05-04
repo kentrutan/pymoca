@@ -7,6 +7,7 @@ Entry: find_name(name, scope) → _find_name() → _find_simple_name() / _find_r
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import copy
 from typing import Optional, Set, Tuple, Union
 
 from ._base import NameLookupError
@@ -347,12 +348,12 @@ def _find_rest_of_name(
             # and `A` is a scalar or can be evaluated as a scalar from an array
             # and `B` and `C` are classes,
             # it is a non-operator function call.
-            found = _find_composite_name_in_classes(
+            found, _ = _find_composite_name_in_classes(
                 rest_of_name,
                 type_class,
-                instantiate_in_place=instantiate_in_place,
                 current_instances=current_instances,
                 current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
             )
             if isinstance(found, ast.Class):
                 if found.type != "function":
@@ -365,17 +366,43 @@ def _find_rest_of_name(
                         )
 
     elif isinstance(first, ast.Class):
-        found = _flatten_first_and_find_rest(
-            first,
-            rest_of_name,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
-            search_imports=search_imports,
-            search_parent=search_parent,
-            search_inherited=search_inherited,
-            check_encapsulated=check_encapsulated,
-        )
+        if not instantiate_in_place:
+            found = _flatten_first_and_find_rest(
+                first,
+                rest_of_name,
+                current_instances=current_instances,
+                current_extends=current_extends,
+                instantiate_in_place=True,
+                search_imports=search_imports,
+                search_parent=search_parent,
+                search_inherited=search_inherited,
+                check_encapsulated=check_encapsulated,
+            )
+        else:
+            found = _find_name(
+                rest_of_name,
+                first,
+                current_instances=current_instances,
+                current_extends=current_extends,
+                instantiate_in_place=instantiate_in_place,
+                search_imports=search_imports,
+                search_parent=search_parent,
+                search_inherited=search_inherited,
+                check_encapsulated=check_encapsulated,
+            )
+        # Check that found meets non-package lookup requirements in spec section 5.3.2
+        # The found.name test is so we only check going left to right in composite name
+        # and not the other direction as we pop the recursive call stack.
+        if (
+            check_encapsulated
+            and found is not None
+            and found.name == _first_name(rest_of_name)
+            and first.type != "package"
+            and not (isinstance(found, ast.Class) and found.encapsulated)
+        ):
+            raise NameLookupError(
+                f"{first.name} is not a package so {found.name} must be encapsulated"
+            )
 
     else:
         raise NameLookupError(f'Found unexpected node "{first!r}" during name lookup')
@@ -466,7 +493,8 @@ def _find_composite_name_in_classes(
     current_instances: Optional[Set[ast.InstanceClass]],
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
     instantiate_in_place: bool,
-) -> Optional[ast.Class]:
+    return_last_found=False,
+) -> Tuple[Optional[ast.Class], str]:
     """Search for composite name (e.g. A.B.C) in local classes, recursively"""
     if instantiate_in_place:
         scope = _instantiate_class_if_needed_for_lookup(
@@ -480,14 +508,58 @@ def _find_composite_name_in_classes(
     found = None
     if first_name in scope.classes:
         found = scope.classes[first_name]
+    else:
+        next_names = name
     if found and next_names:
-        found = _find_composite_name_in_classes(
+        next_found, next_names = _find_composite_name_in_classes(
             next_names,
             found,
             current_instances=current_instances,
             current_extends=current_extends,
             instantiate_in_place=instantiate_in_place,
         )
+        if next_found:
+            found = next_found
+        elif not return_last_found:
+            found = None
+    return found, next_names
+
+
+def _find_composite_name(
+    name: str,
+    scope: ast.Class,
+    current_instances: Optional[Set[ast.InstanceClass]],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
+    search_imports: bool = True,
+    search_parent: bool = True,
+    search_inherited: bool = True,
+    check_encapsulated: bool = True,
+) -> Optional[Union[ast.Symbol, ast.Class]]:
+    """Composite name lookup using partial instantiation only"""
+    # Recurse through children classes
+    found, next_names = _find_composite_name_in_classes(
+        name,
+        scope,
+        current_instances=current_instances,
+        current_extends=current_extends,
+        instantiate_in_place=True,
+        return_last_found=True,
+    )
+    # Recurse through children symbols, if any
+    if found and next_names:
+        found = _find_composite_name_in_symbols(
+            next_names,
+            found,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=True,
+            search_imports=search_imports,
+            search_parent=search_parent,
+            search_inherited=search_inherited,
+            check_encapsulated=check_encapsulated,
+        )
+
     return found
 
 
@@ -515,10 +587,12 @@ def _flatten_first_and_find_rest(
 
     # Late imports to avoid circular dependency
     from ._instantiation import _get_lexical_parent_instance, _instantiate_class
-    from ._flattening import flatten_instance
+    from ._flattening import _create_partial_flat_instance, _flatten_instance
 
     # Per spec v3.5 section 5.3.2 bullet 4, class is temporarily flattened
-    if not instantiate_in_place:
+    if not isinstance(first, ast.InstanceClass) or not (
+        first.partially_instantiated or first.fully_instantiated
+    ):
         parent_instance = getattr(first, "parent_instance", None)
         if parent_instance is None:
             parent_instance = _get_lexical_parent_instance(
@@ -535,39 +609,45 @@ def _flatten_first_and_find_rest(
             current_instances=current_instances,
             current_extends=current_extends,
             instantiate_in_place=instantiate_in_place,
-            update_parent_instance=False,
+            partially=True,
         )
-        first_flattened = flatten_instance(first_instance)
-        first = first_flattened
-
-    # Classes with embedded references to the same class cause infinite recursion if we do
-    # instantiation or temporary flattening recursively, so it is only done on the first
-    # in a composite name.
-    # The spec is a ambiguous about what to do when looking up the rest.
-    # We will use the instantiate_in_place option look up the rest.
-    found = _find_name(
-        rest_of_name,
-        first,
+    else:
+        first_instance = first
+    flat_class = _create_partial_flat_instance(first_instance)
+    _flatten_instance(
+        first_instance,
+        flat_class,
         current_instances=current_instances,
         current_extends=current_extends,
         instantiate_in_place=True,
-        search_imports=search_imports,
-        search_parent=False,
-        search_inherited=search_inherited,
-        check_encapsulated=check_encapsulated,
     )
+    # Need non-flat name for name lookup
+    flat_class.name = flat_class.name.split(".")[-1]
+    first = flat_class
 
-    # Check that found meets non-package lookup requirements in spec section 5.3.2
-    # The found.name test is so we only check going left to right in composite name
-    # and not the other direction as we pop the recursive call stack.
-    if (
-        check_encapsulated
-        and found is not None
-        and found.name == _first_name(rest_of_name)
-        and first.type != "package"
-        and not (isinstance(found, ast.Class) and found.encapsulated)
-    ):
-        raise NameLookupError(f"{first.name} is not a package so {found.name} must be encapsulated")
+    if rest_of_name in flat_class.symbols:
+        # Flattening allows us to bypass standard name lookup if all symbols
+        # Copy before mutating — flat_class uses shallow copies so the symbol
+        # object may be shared with the original instance tree.
+        found = copy.copy(flat_class.symbols[rest_of_name])
+        # Restore non-flat name of instance (last name if compound name)
+        found.name = found.name.split(".")[-1]
+    else:
+        # Classes with embedded references to the same class cause infinite recursion if we do
+        # instantiation or temporary flattening recursively, so it is only done on the first
+        # in a composite name.
+        # The spec is a ambiguous about what to do when looking up the rest.
+        found = _find_name(
+            rest_of_name,
+            first_instance,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+            search_imports=search_imports,
+            search_parent=False,
+            search_inherited=search_inherited,
+            check_encapsulated=check_encapsulated,
+        )
 
     return found
 

@@ -903,6 +903,16 @@ class ParseTest(unittest.TestCase):
 
         self.parse_and_instantiate_model("NonReplaceableContainsReplaceable.mo", "P.Test")
 
+    def test_extends_transitively_nonreplaceable_error(self):
+        """Test that extends should fail with a replaceable in the hierarchy"""
+
+        # TODO: Specify regex
+        with self.assertRaisesRegex(
+            tree.ModelicaSemanticError,
+            "In P.Outer extends InnerModel, InnerModel and parents cannot be replaceable",
+        ):
+            self.parse_and_instantiate_model("NonReplaceableContainsReplaceable.mo", "P.TestFail")
+
     redeclare_expect = namedtuple("redeclare_expect", ["name", "type", "value", "replaceable"])
 
     def check_redeclare_expects(self, instance, expects):
@@ -1048,6 +1058,41 @@ class ParseTest(unittest.TestCase):
         # Symbols themselves were not declared replaceable
         for name in ("b1", "b2", "b0"):
             self.assertFalse(instance.symbols[name].replaceable)
+
+    def test_redeclare_component_in_extends(self):
+        """Test redeclaration of components in extends clause"""
+
+        instance = self.parse_and_instantiate_model("RedeclareComponentInExtends.mo", "M")
+
+        expect = [
+            self.redeclare_expect("M.d1.x", "Integer", 1, False),
+            self.redeclare_expect("M.d2.x", "Integer", 2, False),
+            self.redeclare_expect("M.d3.x", "Integer", 3.0, True),
+            self.redeclare_expect("M.d4.x", "Integer", 4.0, True),
+            self.redeclare_expect("M.d5.x", "String", "5", True),
+        ]
+        self.check_redeclare_expects(instance, expect)
+
+        # Symbols themselves were not declared replaceable
+        for name in ("d1", "d2", "d3", "d4", "d5"):
+            self.assertFalse(instance.symbols[name].replaceable)
+
+    def test_redeclare_component_in_declaration(self):
+        """Test redeclaration of components in component declaration"""
+        instance = self.parse_and_instantiate_model("RedeclareComponentInDeclaration.mo", "M")
+
+        expect = [
+            self.redeclare_expect("M.ir1.x", "Real", 1.0, False),
+            self.redeclare_expect("M.ir2.x", "Real", 2.0, False),
+            self.redeclare_expect("M.ir3.x", "Real", 3.0, True),
+            self.redeclare_expect("M.ir4.x", "Real", 4.0, True),
+            self.redeclare_expect("M.ir5.x", "Real", 5.0, True),
+        ]
+        self.check_redeclare_expects(instance, expect)
+
+        # Symbols themselves were not declared replaceable
+        for name in ("ir1", "ir2", "ir3", "ir4", "ir5"):
+            self.assertFalse(instance.symbols[name].replaceable, f"{name} is replaceable")
 
     def test_redeclare_component_type_compatibility(self):
         """Test type compatibility for redeclaration of components of builtin types"""

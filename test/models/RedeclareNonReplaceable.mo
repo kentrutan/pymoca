@@ -17,4 +17,5 @@ end D;
 
 model E
   extends D(redeclare model C=F);
+  C c;
 end E;

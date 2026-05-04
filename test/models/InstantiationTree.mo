@@ -20,7 +20,7 @@ package TreeModel
     model Tree
         Wood w;
         TreeParts.Branch b;
-        TreeParts.Leaf l(c=1);
+        TreeParts.Leaf l(c=1), l2;
         extends TreeParts.Trunk(redeclare type Wood = TreeParts.Maple);
     end Tree;
 end TreeModel;

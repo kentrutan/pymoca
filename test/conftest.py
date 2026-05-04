@@ -13,7 +13,6 @@ XFAIL_IN_PROGRESS = {
     "test/parse_test.py::ParseTest::test_constant_references",
     "test/parse_test.py::ParseTest::test_extends_order",
     "test/parse_test.py::ParseTest::test_extends_transitively_nonreplaceable_error",
-    "test/parse_test.py::ParseTest::test_flattening_inheritance_tree",
     "test/parse_test.py::ParseTest::test_flattening_modification_scope",
     "test/parse_test.py::ParseTest::test_msl3_twopin_units",
     "test/parse_test.py::ParseTest::test_msl_flange_units",

@@ -9,11 +9,8 @@ import pytest
 # Tests that actually fail at this commit.
 XFAIL_IN_PROGRESS = {
     "test/parse_test.py::ParseTest::test_constant_references",
-    "test/parse_test.py::ParseTest::test_extends_order",
     "test/parse_test.py::ParseTest::test_flattening_modification_scope",
-    "test/parse_test.py::ParseTest::test_redeclare_class_with_symbol_error",
     "test/parse_test.py::ParseTest::test_redeclare_component_complicated",
-    "test/parse_test.py::ParseTest::test_value_modification_ordering",
 }
 
 

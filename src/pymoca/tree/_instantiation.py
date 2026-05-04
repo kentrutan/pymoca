@@ -123,8 +123,10 @@ def _instantiate_class(
     )
 
     # 1.1. Partially instantiate the element itself and 1.2 merge modifiers
-    if orig_class.name not in parent_instance.classes or not isinstance(
-        orig_class, ast.InstanceClass
+    if (
+        not isinstance(orig_class, ast.InstanceClass)
+        or orig_class.name not in parent_instance.classes
+        or modification_environment.arguments
     ):
         new_class = _instantiate_partially(
             orig_class,
@@ -134,16 +136,9 @@ def _instantiate_class(
             update_parent_instance=update_parent_instance,
         )
     else:
-        # Class already at least partially instantiated
+        # Class already at least partially instantiated and no modifications
         new_class = parent_instance.classes[orig_class.name]
-        # Merge element modifications into environment and apply
-        modification_environment.arguments = (
-            new_class.modification_environment.arguments + modification_environment.arguments
-        )
-        if modification_environment.arguments:
-            new_class = new_class.clone()
-            _apply_modifications(new_class, modification_environment)
-        elif new_class.fully_instantiated or partially and new_class.partially_instantiated:
+        if new_class.fully_instantiated or (partially and new_class.partially_instantiated):
             return new_class
 
     if current_instances is None:
@@ -205,19 +200,15 @@ def _instantiate_class(
                 class_modification=symbol.class_modification,
             )
 
-        for extends in from_class.extends:
-            extends_class = _instantiate_extends(
-                extends,
-                modification_environment,
-                new_class,
-                current_instances=current_instances,
-                current_extends=current_extends,
-                instantiate_in_place=instantiate_in_place,
-                partially=True,
-            )
-            new_class.extends.append(extends_class)
-
-        _check_extends_rules(new_class)
+        new_class.extends = _instantiate_extends_list(
+            from_class.extends,
+            modification_environment,
+            new_class,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+            partially=True,
+        )
 
     new_class.partially_instantiated = True
     current_instances.remove(new_class)
@@ -234,7 +225,12 @@ def _instantiate_class(
     # See `parse_test.test_instantiation_function_input_order`
 
     # 6. Recursively instantiate symbols (local and inherited)
+    # Class modifications like `extends A(B(x=4))` shift x=4 into B's modification_environment
+    # during partial instantiation but are not yet propagated to child symbols.
+    class_mod_env = new_class.modification_environment
     for symbol in new_class.symbols.values():
+        if class_mod_env.arguments:
+            _apply_modifications(symbol, class_mod_env)
         _instantiate_symbol(
             symbol,
             new_class,
@@ -285,35 +281,40 @@ def _update_class_modification_scopes(
     current_scope: ast.InstanceClass,
 ) -> Union[ast.Symbol, ast.ExtendsClause]:
     """Update the scopes of modification arguments to the given scope if not already done"""
+
+    def resolve_scope(old_scope, new_scope):
+        scope = new_scope
+        if new_scope.ast_ref.full_name != old_scope.full_name:
+            # Must be a short class definition which does not create a new scope
+            # So we go up one level to the parent instance of the parent instance
+            scope = scope.parent
+        return scope
+
     scoped_mod_args = []
     for arg in element.class_modification.arguments:
         if isinstance(arg.scope, ast.InstanceClass):
             # Already done
             scoped_mod_args.append(arg)
             continue
-        scope = current_scope
-        if scope.ast_ref.full_name != arg.scope.full_name:
-            # Must be a short class definition which does not create a new scope
-            # So we go up one level to the parent instance of the parent instance
-            scope = scope.parent_instance
+        scope = resolve_scope(arg.scope, current_scope)
         # Make a copy so we don't change original AST or same arg used elsewhere
         new_arg = copy.copy(arg)
         new_arg.scope = scope
         scoped_mod_args.append(new_arg)
-    if scoped_mod_args:
+    if scoped_mod_args or isinstance(element, ast.ExtendsClause):
         element = copy.copy(element)
         element.class_modification = ast.ClassModification(arguments=scoped_mod_args)
-        if isinstance(element, ast.ExtendsClause):
-            element.scope = scope
+    if isinstance(element, ast.ExtendsClause):
+        element.scope = resolve_scope(element.scope, current_scope)
     return element
 
 
-def _check_extends_rules(class_: ast.InstanceClass) -> None:
+def _check_extends_rules(extends_list: List[ast.InstanceClass], class_: ast.InstanceClass) -> None:
     """Check the extends rules over the full extends list"""
 
     # Check we do not extend from any symbols/classes inherited
     extends_names = {}
-    for extends in class_.extends:
+    for extends in extends_list:
         extends_names[extends.ast_ref.name] = extends.ast_ref.full_name
 
     extends_builtin = set()
@@ -326,7 +327,7 @@ def _check_extends_rules(class_: ast.InstanceClass) -> None:
             # loop completes.
             continue
         extends_other.add(extends_name)
-        for other_class in class_.extends:
+        for other_class in extends_list:
             other_names = {
                 *other_class.ast_ref.symbols.keys(),
                 *other_class.ast_ref.classes.keys(),
@@ -342,64 +343,148 @@ def _check_extends_rules(class_: ast.InstanceClass) -> None:
         )
 
 
-def _instantiate_extends(
+def _instantiate_extends_list_partially(
+    extends_list: List[Union[ast.ExtendsClause, ast.Class, ast.InstanceClass]],
+    modification_environment: ast.ClassModification,
+    parent_instance: ast.InstanceClass,
+    current_instances: Optional[Set[ast.InstanceClass]],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
+) -> List[ast.InstanceClass]:
+    """Instantiate extends list of clause, class, or instance"""
+
+    partially_instantiated_extends = []
+
+    for extends in extends_list:
+        assert isinstance(extends, (ast.ExtendsClause, ast.Class))
+        extends_instance = _instantiate_extends_partially(
+            extends,
+            modification_environment,
+            parent_instance,
+            current_instances,
+            current_extends,
+            instantiate_in_place,
+        )
+        partially_instantiated_extends.append(extends_instance)
+
+    _check_extends_rules(partially_instantiated_extends, parent_instance)
+
+    return partially_instantiated_extends
+
+
+def _instantiate_extends_partially(
     extends: Union[ast.ExtendsClause, ast.Class, ast.InstanceClass],
     modification_environment: ast.ClassModification,
     parent_instance: ast.InstanceClass,
     current_instances: Optional[Set[ast.InstanceClass]],
     current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
     instantiate_in_place: bool,
-    partially: bool = False,
 ) -> ast.InstanceClass:
-    """Instantiate an extends clause, partially or fully depending on partially flag"""
+    """Instantiate an extends clause partially"""
 
-    assert isinstance(extends, (ast.ExtendsClause, ast.Class))
-    if not isinstance(extends, ast.Class):
+    class_modification = ast.ClassModification()
+    if isinstance(extends, ast.ExtendsClause):
         extends = _update_class_modification_scopes(extends, parent_instance)
         extends_class = _find_extends_class(
             extends.component,
-            parent_instance,
+            extends.scope,
             current_instances=current_instances,
             current_extends=current_extends,
             instantiate_in_place=instantiate_in_place,
         )
-        class_modification = extends.class_modification
-        # Partially instantiate the extends class
-        # We are only doing this because we need to pass along the class_modification
-        # FIXME: Apply class_modification through _instantiate_class somehow
-        lexical_parent = _get_lexical_parent_instance(
-            extends_class,
-            parent_instance,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
-        )
-        extends_class = _instantiate_partially(
-            extends_class,
-            modification_environment,
-            parent_instance,
-            lexical_parent,
-            update_parent_instance=False,
-            class_modification=class_modification,
+        class_modification.arguments = (
+            extends.class_modification.arguments
+            + parent_instance.modification_environment.arguments
         )
     else:
         extends_class = extends
+        class_modification.arguments = copy.copy(parent_instance.modification_environment.arguments)
 
-    extends_class = _instantiate_class(
+    # When the extends class is an InstanceElement (e.g., from name lookup of A.D),
+    # its modification_environment contains mods from the base class definition
+    # (inner/middle level). These must come BEFORE the extends clause mods (outer)
+    # in class_modification to maintain correct inner-to-outer ordering.
+    # We skip the normal element merge in _instantiate_partially to prevent these
+    # mods from being placed in the shared modification_environment separately,
+    # which would cause them to be re-merged in the wrong order during the full pass.
+    skip_element_merge = False
+    if (
+        isinstance(extends_class, ast.InstanceElement)
+        and extends_class.modification_environment.arguments
+    ):
+        class_modification.arguments = (
+            extends_class.modification_environment.arguments + class_modification.arguments
+        )
+        skip_element_merge = True
+
+    lexical_parent = _get_lexical_parent_instance(
         extends_class,
-        modification_environment,
         parent_instance,
         current_instances=current_instances,
         current_extends=current_extends,
         instantiate_in_place=instantiate_in_place,
+    )
+    extends_class = _instantiate_partially(
+        extends_class,
+        modification_environment,
+        parent_instance,
+        lexical_parent,
         update_parent_instance=False,
-        partially=partially,
+        class_modification=class_modification,
+        skip_element_merge=skip_element_merge,
     )
 
-    # Unnamed node per spec
+    # Unnamed node (per spec)
     extends_class.name = ""
 
     return extends_class
+
+
+def _instantiate_extends_list(
+    extends_list: List[Union[ast.ExtendsClause, ast.Class, ast.InstanceClass]],
+    modification_environment: ast.ClassModification,
+    parent_instance: ast.InstanceClass,
+    current_instances: Optional[Set[ast.InstanceClass]],
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
+    instantiate_in_place: bool,
+    partially: bool = False,
+) -> List[ast.InstanceClass]:
+    """Instantiate extends in given list either partially for name lookup or fully"""
+
+    # Nothing to do, just return instead of wasting time below
+    if not extends_list:
+        return []
+
+    # We make 2 passes on the extends list due to potential name lookup dependencies
+    extends_partially_instantiated = []
+    for extends in extends_list:
+        extends_instance = _instantiate_extends_partially(
+            extends,
+            modification_environment,
+            parent_instance,
+            current_instances,
+            current_extends,
+            instantiate_in_place,
+        )
+        extends_partially_instantiated.append(extends_instance)
+
+    _check_extends_rules(extends_partially_instantiated, parent_instance)
+
+    extends_list_instantiated = []
+    for extends in extends_partially_instantiated:
+        extends_instance = _instantiate_class(
+            extends,
+            modification_environment,
+            parent_instance,
+            current_instances=current_instances,
+            current_extends=current_extends,
+            instantiate_in_place=instantiate_in_place,
+            update_parent_instance=False,
+            partially=partially,
+        )
+        extends_list_instantiated.append(extends_instance)
+
+    return extends_list_instantiated
 
 
 def _find_extends_class(
@@ -593,6 +678,7 @@ def _instantiate_partially(
     parent: Union["InstanceTree", ast.InstanceClass],
     update_parent_instance: bool = True,
     class_modification: Optional[ast.ClassModification] = None,
+    skip_element_merge: bool = False,
 ) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
     """Partially instantiate a class or symbol, apply modifiers, and set visibility"""
 
@@ -600,9 +686,10 @@ def _instantiate_partially(
     if isinstance(element, ast.InstanceElement):
         ast_ref = element.ast_ref
         # Merge element modifications into environment
-        modification_environment.arguments = (
-            element.modification_environment.arguments + modification_environment.arguments
-        )
+        if not skip_element_merge:
+            modification_environment.arguments = (
+                element.modification_environment.arguments + modification_environment.arguments
+            )
     else:
         ast_ref = element
 
@@ -773,7 +860,9 @@ def _apply_redeclares(
     element.modification_environment.arguments = [
         arg for arg in element.modification_environment.arguments if arg not in redeclares
     ]
-    # Last redeclare takes precedence
+    # "Last wins" — the last redeclare in the list is the outermost.
+    # The modification merging flow in _instantiate_extends_partially ensures
+    # that inner mods come before outer mods in the list.
     apply_redeclare = redeclares[-1]
     redeclare = apply_redeclare.value
     scope_class = apply_redeclare.scope
@@ -813,8 +902,9 @@ def _apply_redeclares(
     # Instantiate as an extends and add to extends list
     is_class = isinstance(element, ast.InstanceClass)
     parent_instance = element if is_class else element.parent_instance
-    redeclare_class = _instantiate_extends(
-        redeclare_class,
+    extends_list = [redeclare_class]
+    extends_list_instantiated = _instantiate_extends_list(
+        extends_list,
         modification_environment,
         parent_instance,
         current_instances=current_instances,
@@ -822,6 +912,7 @@ def _apply_redeclares(
         instantiate_in_place=instantiate_in_place,
         partially=partially,
     )
+    redeclare_class = extends_list_instantiated[0]
     redeclare_class.replaceable = redeclare.replaceable
     if isinstance(element, ast.InstanceClass):
         redeclared = element

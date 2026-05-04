@@ -68,12 +68,19 @@ def _create_partial_flat_instance(instance: ast.InstanceClass) -> ast.InstanceCl
 def _flatten_instance(
     instance: ast.InstanceClass,
     flat_class: ast.InstanceClass,
+    current_instances: Optional[Set[ast.InstanceClass]] = None,
+    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
+    instantiate_in_place: bool = True,
     prefix: str = "",
+    functions=None,
 ) -> None:
     """Flatten an instance class
 
     :param instance: The instance class to flatten
     :param flat_class: The flattened class
+    :param current_instances: ...
+    :param current_extends: ...
+    :param instantiate_in_place: ...
     :param prefix: The prefix for the current instance
     :return: The flattened instance class
 

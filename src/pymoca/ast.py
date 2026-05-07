@@ -665,6 +665,7 @@ class Class(Node):
         self.annotation = None  # type: Optional[ClassModification]
         self.parent = None  # type: Optional[Class]
         self.visibility = Visibility.PUBLIC  # type: Visibility
+        self.is_short_class_definition = False  # type: bool
 
         # TODO: Remove hard-wired tree.find_name() when done with prototype
         self.use_find_name(False)

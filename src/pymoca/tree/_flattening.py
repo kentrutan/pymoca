@@ -383,6 +383,9 @@ def _resolve_modification_attribute(
             opts=opts,
         )
         value = cast(ast.InstanceSymbol, value)
+        const_val = _get_constant_value(value)
+        if const_val is not None and isinstance(const_val, ast.Primary):
+            value = const_val.value
     elif isinstance(value, (ast.Array, ast.Expression)):
         # Discover function calls inside Array elements and Expressions so
         # that the function flattening pass can include them in the output.
@@ -482,7 +485,13 @@ class ExpressionEvaluator(TreeListener):
                     guard=self.guard,
                     opts=self.opts,
                 )
-            if not isinstance(operand, (ast.Primary, ast.Symbol)):
+            if isinstance(operand, ast.InstanceSymbol):
+                const_val = _get_constant_value(operand)
+                if const_val is not None and isinstance(const_val, ast.Primary):
+                    operand = const_val
+                # else: fall through with InstanceSymbol; arithmetic TypeError becomes
+                # ModelicaSemanticError in the try/except below, keeping the expression
+            elif not isinstance(operand, ast.Primary):
                 raise NotImplementedError(f"Expression operand type not implemented: {operand!r}")
             operands.append(operand)
 

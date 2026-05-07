@@ -241,17 +241,24 @@ def _assert_no_child_refs(nodes):
                     _assert_no_child_refs(list(val.values()))
 
 
-def test_flattening_modification_scope():
-    """Test for correct scope for references and values of modifications"""
-    instance = parse_and_instantiate_model("ModificationScope.mo", "A")
+def test_flattening_modification_rhs_evaluation():
+    """Test for correct scope and evaluation of right-hand-side values"""
+    instance = parse_and_instantiate_model("ModificationScopeFlatten.mo", "B")
     flat_tree = tree.flatten_instance(instance)
     # Check that the symbol value set by modifications have the right value and scope
     expect = (  # symbol_name, value_type, value, value_parent_name
         ("R", "literal", 3.0, None),  # Literal has no value parent
-        ("a.R", "literal", 4.0, "A"),
-        ("b.R", "symbol", "R", "A"),  # Reparented to flat class
-        ("c.R", "literal", 5.0, "A"),
-        ("d.R", "symbol", "d.R", "A"),  # Self-ref in LoadError: d.R=d.R; reparented to flat class
+        ("a.R", "literal", 4.0, "B"),
+        ("b.R", "symbol", "R", "B"),  # Reparented to flat class
+        ("c.R", "symbol", "R", "B"),
+        ("d.R", "symbol", "d.R", "B"),  # Self-ref in LoadError: d.R=d.R; reparented to flat class
+        ("d.c", "literal", 84.0, "B"),
+        ("e.R", "symbol", "R", "B"),
+        ("f.R", "symbol", "R", "B"),
+        ("g.R", "symbol", "R", "B"),
+        ("h.R", "literal", 42.0, "B"),
+        ("i.R", "symbol", "R", "B"),
+        ("j.R", "literal", 2.0, "B"),
     )
     for symbol_name, value_type, value, value_parent_name in expect:
         symbol_value = flat_tree.symbols[symbol_name].value
@@ -288,15 +295,9 @@ def test_constant_references():
 
     flat_tree = tree.flatten_instance(instance)
 
-    # TODO: Update after constant reference evaluation is implemented
-    # This was the Pymoca v0.10 test:
-    # self.assertEqual(flat_tree.symbols["m.p"].value, 2.0)
-    # self.assertEqual(flat_tree.symbols["M2.m.f"].value, 3.0)
-
-    # This is what we expect after the new flattening
-    assert flat_tree.symbols["y"].value.name == "m.p"
-    assert flat_tree.symbols["y"].value.parent_instance.name == "b"  # Reparented to flat class
-    assert flat_tree.symbols["z"].value.name == "P0.p"
+    # Constant package references are now folded to their literal values
+    assert flat_tree.symbols["y"].value == 2
+    assert flat_tree.symbols["z"].value.name == "P0.p"  # Array constant — not folded (subscript)
     # TODO: Uncomment after equation references and constant references are implemented
     # self.assertIn("M2.m.f", flat_tree.symbols)
     # self.assertEqual(flat_tree.symbols["M2.m.f"].value.name, "m.f")
@@ -674,11 +675,10 @@ def test_expression_evaluator_via_modifications_unary():
 
 
 def test_expression_evaluator_via_modifications_componentref():
-    """_resolve_modifications enters the ComponentRef branch but swallows the error.
+    """Constant expressions referencing other constants are now fully folded.
 
-    When operand 'n' resolves to an InstanceSymbol whose .value is still Primary
-    at modification time (ordering), op_func raises TypeError → ModelicaSemanticError
-    → swallowed. The expression is kept as-is, same as an unevaluable expression.
+    'n' is a constant whose value is resolved via its type's modification_environment
+    even at modification time, so n * 2.0 folds to 6.0.
     """
     flat = _flatten_inline(
         """
@@ -688,8 +688,7 @@ def test_expression_evaluator_via_modifications_componentref():
     end M;""",
         "M",
     )
-    # ComponentRef branch fires but evaluation fails; expression kept
-    assert isinstance(flat.symbols["x"].value, ast.Expression)
+    assert flat.symbols["x"].value == 6.0
 
 
 def test_expression_evaluator_via_modifications_error_kept():

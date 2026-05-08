@@ -74,6 +74,7 @@ class LookupOptions:
     search_parent: bool = True
     search_inherited: bool = True
     check_encapsulated: bool = True
+    evaluate_parameters: bool = False
 
 
 class TreeListener:

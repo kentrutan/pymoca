@@ -15,6 +15,11 @@ Set ``USE_NEW_FLATTENING = True`` to route ``flatten()`` through the new
 instantiation/flattening pipeline instead of the legacy one.
 """
 
+from dataclasses import dataclass, field
+from typing import Set
+
+from .. import ast
+
 
 # TODO Remove this exception when legacy flattening is removed
 class ModificationTargetNotFound(Exception):
@@ -51,6 +56,32 @@ class InstantiationError(ModelicaError):
     """Error instantiating a Modelica element"""
 
     pass
+
+
+@dataclass
+class RecursionGuard:
+    """Cycle detection for instantiation and name lookup.
+
+    Mutable and shared across a single instantiation/lookup operation.
+    """
+
+    current_instances: Set[ast.InstanceClass] = field(default_factory=set)
+    current_extends: Set = field(default_factory=set)
+
+
+@dataclass(frozen=True)
+class LookupOptions:
+    """Per-call options for name resolution.
+
+    Frozen so ``replace()`` is the idiom for variants.
+    """
+
+    instantiate_in_place: bool = True
+    search_imports: bool = True
+    search_parent: bool = True
+    search_inherited: bool = True
+    check_encapsulated: bool = True
+    evaluate_parameters: bool = False
 
 
 from ._listener import (  # noqa: E402,F401,I100,I202

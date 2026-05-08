@@ -6,38 +6,11 @@ TreeListener and TreeWalker for the pymoca.tree package.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
-from dataclasses import dataclass, field
-from typing import Iterable, Set, Union
+from typing import Iterable, Union
 
 from .. import ast
 
 logger = logging.getLogger("pymoca")
-
-
-@dataclass
-class RecursionGuard:
-    """Cycle detection for instantiation and name lookup.
-
-    Mutable and shared across a single instantiation/lookup operation.
-    """
-
-    current_instances: Set[ast.InstanceClass] = field(default_factory=set)
-    current_extends: Set = field(default_factory=set)
-
-
-@dataclass(frozen=True)
-class LookupOptions:
-    """Per-call options for name resolution.
-
-    Frozen so ``replace()`` is the idiom for variants.
-    """
-
-    instantiate_in_place: bool = True
-    search_imports: bool = True
-    search_parent: bool = True
-    search_inherited: bool = True
-    check_encapsulated: bool = True
-    evaluate_parameters: bool = False
 
 
 class TreeListener:

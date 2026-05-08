@@ -29,21 +29,26 @@ from .. import ast
 def flatten_instance(
     instance: ast.InstanceClass,
     keep_connectors: bool = False,
+    evaluate_parameters: bool = False,
 ) -> ast.InstanceClass:
     """Flatten an instance class
 
     :param instance: The instance class to flatten
     :param keep_connectors: Whether to keep connectors in the top-level flattened class
+    :param evaluate_parameters: When True, fold parameter values to ast.Primary literals
     :return: The flattened class
     """
     if not isinstance(instance, ast.InstanceClass):
         raise TypeError(f"Expected InstanceClass, got {type(instance)}")
 
+    opts = LookupOptions(evaluate_parameters=evaluate_parameters)
     flat_class = _create_partial_flat_instance(instance)
     functions = OrderedDict()
-    _flatten_instance(instance, flat_class, functions=functions)
+    _flatten_instance(instance, flat_class, functions=functions, opts=opts)
     _flatten_discovered_functions(functions, flat_class)
     _flatten_value_ref_names(flat_class)
+    if evaluate_parameters:
+        _evaluate_parameter_values(flat_class)
     _generate_value_equations(flat_class)  # MLS 5.6.2 step 1.4
     _check_all_references_valid(flat_class)
     _process_transitions(flat_class)
@@ -483,6 +488,10 @@ class ExpressionEvaluator(TreeListener):
                 const_val = _get_constant_value(operand)
                 if const_val is not None and isinstance(const_val, ast.Primary):
                     operand = const_val
+                elif self.opts.evaluate_parameters and "parameter" in operand.prefixes:
+                    param_val = _get_parameter_value_from_chain(operand)
+                    if param_val is not None:
+                        operand = param_val
                 # else: fall through with InstanceSymbol; arithmetic TypeError becomes
                 # ModelicaSemanticError in the try/except below, keeping the expression
             elif not isinstance(operand, ast.Primary):
@@ -950,6 +959,77 @@ def _flatten_value_ref_names(flat_class: ast.InstanceClass) -> None:
             flat_name = flat_name_by_ref.get(ref_name)
             if flat_name is not None and value.name != flat_name:
                 value.name = flat_name
+
+
+def _get_parameter_value_from_chain(isym: ast.InstanceSymbol) -> Optional[ast.Primary]:
+    """Walk an InstanceSymbol value chain to a literal, for inline parameter folding
+
+    Returns None if literal value not found
+    """
+    val = isym.value
+    seen = {id(isym)}
+    while True:
+        if val is None or (isinstance(val, ast.Primary) and val.value is None):
+            return None
+        if isinstance(val, ast.Primary):
+            return val
+        if isinstance(val, (int, float, bool, str)):
+            return ast.Primary(value=val)
+        if isinstance(val, ast.InstanceSymbol):
+            vid = id(val)
+            if vid in seen:
+                return None
+            seen.add(vid)
+            val = val.value
+            continue
+        return None
+
+
+def _resolve_param_ref(
+    name: str, flat_class: ast.InstanceClass, seen: Set[str]
+) -> Optional[ast.Primary]:
+    """Resolve a flat parameter/constant name to its literal value, following chains
+
+    Returns None when the chain is unresolvable or cyclic
+    """
+    if name in seen:
+        return None
+    seen = seen | {name}
+    flat_sym = flat_class.symbols.get(name)
+    if flat_sym is None:
+        return None
+    val = flat_sym.value
+    if val is None or (isinstance(val, ast.Primary) and val.value is None):
+        return None
+    if isinstance(val, ast.Primary):
+        return val
+    if isinstance(val, (int, float, bool, str)):
+        return ast.Primary(value=val)
+    if isinstance(val, ast.InstanceSymbol):
+        return _resolve_param_ref(val.name, flat_class, seen)
+    return None
+
+
+def _evaluate_parameter_values(flat_class: ast.InstanceClass) -> None:
+    """Fold parameter and constant symbol values to ast.Primary (evaluate_parameters pass)
+
+    Unresolvable or cyclic references remain as InstanceSymbol
+    """
+    _FOLD_PREFIXES = frozenset({"parameter", "constant"})
+    for sym in flat_class.symbols.values():
+        if not (_FOLD_PREFIXES & set(sym.prefixes)):
+            continue
+        val = sym.value
+        if val is None or (isinstance(val, ast.Primary) and val.value is None):
+            continue
+        if isinstance(val, (int, float, bool, str)):
+            sym.value = ast.Primary(value=val)
+        elif isinstance(val, ast.Primary):
+            pass  # already wrapped
+        elif isinstance(val, ast.InstanceSymbol):
+            primary = _resolve_param_ref(val.name, flat_class, set())
+            if primary is not None:
+                sym.value = primary
 
 
 def _generate_value_equations(flat_class: ast.InstanceClass) -> None:

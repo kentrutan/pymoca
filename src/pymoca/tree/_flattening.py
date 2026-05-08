@@ -14,7 +14,14 @@ import sys
 from collections import OrderedDict
 from typing import Optional, Set, Union, cast
 
-from ._base import ModelicaSemanticError, NameLookupError, TreeListener, TreeWalker
+from ._base import (
+    LookupOptions,
+    ModelicaSemanticError,
+    NameLookupError,
+    RecursionGuard,
+    TreeListener,
+    TreeWalker,
+)
 from ._instantiation import (
     InstanceTree,
     _get_lexical_parent_instance,
@@ -76,9 +83,9 @@ def _create_partial_flat_instance(instance: ast.InstanceClass) -> ast.InstanceCl
 def _flatten_instance(
     instance: ast.InstanceClass,
     flat_class: ast.InstanceClass,
-    current_instances: Optional[Set[ast.InstanceClass]] = None,
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
-    instantiate_in_place: bool = True,
+    *,
+    guard: Optional[RecursionGuard] = None,
+    opts: Optional[LookupOptions] = None,
     prefix: str = "",
     functions: Optional[OrderedDict] = None,
 ) -> None:
@@ -86,11 +93,11 @@ def _flatten_instance(
 
     :param instance: The instance class to flatten
     :param flat_class: The flattened class
-    :param current_instances: ...
-    :param current_extends: ...
-    :param instantiate_in_place: ...
+    :param guard: Cycle detection state shared across a single operation
+    :param opts: Name lookup options (instantiate_in_place, search flags, etc.)
     :param prefix: The prefix for the current instance
-    :return: The flattened instance class
+    :param functions: Accumulated function definitions discovered during flattening
+    :return: None
 
     The passed instance may be updated by fully instantiating elements as needed.
     We allow the top-level flattened instance to retain connectors so that we can
@@ -139,6 +146,11 @@ def _flatten_instance(
     #
     # 3 Process transitions in the flattened tree (TODO)
 
+    if guard is None:
+        guard = RecursionGuard()
+    if opts is None:
+        opts = LookupOptions()
+
     # 1.1–1.6 Process local symbols per MLS 5.6.2
     for name, symbol in list(instance.symbols.items()):
 
@@ -164,9 +176,8 @@ def _flatten_instance(
                 flat_symbol.type,
                 instance,
                 flat_class,
-                current_instances=current_instances,
-                current_extends=current_extends,
-                instantiate_in_place=instantiate_in_place,
+                guard=guard,
+                opts=opts,
             )
             is_class = isinstance(resolved, ast.InstanceClass)
             flat_symbol.type = resolved if is_class else resolved.parent
@@ -180,9 +191,8 @@ def _flatten_instance(
             flat_symbol,
             instance,
             flat_class,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
+            guard=guard,
+            opts=opts,
         )
 
         # 1.4 Resolve modifications of value attributes of simple types and records
@@ -191,9 +201,8 @@ def _flatten_instance(
             _resolve_modifications(
                 flat_symbol,
                 flat_class,
-                current_instances=current_instances,
-                current_extends=current_extends,
-                instantiate_in_place=instantiate_in_place,
+                guard=guard,
+                opts=opts,
                 functions=functions,
             )
         else:
@@ -202,9 +211,8 @@ def _flatten_instance(
             _flatten_instance(
                 flat_symbol.type,
                 flat_class,
-                current_instances=current_instances,
-                current_extends=current_extends,
-                instantiate_in_place=instantiate_in_place,
+                guard=guard,
+                opts=opts,
                 prefix=flat_name,
                 functions=functions,
             )
@@ -228,9 +236,8 @@ def _flatten_instance(
         _flatten_instance(
             extends,
             flat_class,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
+            guard=guard,
+            opts=opts,
             prefix=prefix,
             functions=functions,
         )
@@ -247,9 +254,9 @@ def _resolve_dimensions(
     symbol: ast.InstanceSymbol,
     instance: ast.InstanceClass,
     flat_class: ast.InstanceClass,
-    current_instances: Optional[Set[ast.InstanceClass]],
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
-    instantiate_in_place: bool,
+    *,
+    guard: RecursionGuard,
+    opts: LookupOptions,
 ) -> None:
     """Resolve parametric array dimensions to concrete integers.
 
@@ -265,9 +272,8 @@ def _resolve_dimensions(
                     elem,
                     instance,
                     flat_class,
-                    current_instances=current_instances,
-                    current_extends=current_extends,
-                    instantiate_in_place=instantiate_in_place,
+                    guard=guard,
+                    opts=opts,
                 )
                 if isinstance(resolved, ast.InstanceSymbol) and isinstance(
                     resolved.value, (int, float)
@@ -278,9 +284,8 @@ def _resolve_dimensions(
                     elem,
                     instance,
                     flat_class,
-                    current_instances=current_instances,
-                    current_extends=current_extends,
-                    instantiate_in_place=instantiate_in_place,
+                    guard=guard,
+                    opts=opts,
                 )
                 if isinstance(result, (int, float)):
                     dim_list[i] = ast.Primary(value=int(result))
@@ -289,9 +294,9 @@ def _resolve_dimensions(
 def _resolve_modifications(
     symbol: ast.InstanceSymbol,
     flat_class: ast.InstanceClass,
-    current_instances: Optional[Set[ast.InstanceClass]],
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
-    instantiate_in_place: bool,
+    *,
+    guard: RecursionGuard,
+    opts: LookupOptions,
     functions: Optional[OrderedDict] = None,
 ) -> None:
     """Resolve modifications of a symbol
@@ -318,9 +323,8 @@ def _resolve_modifications(
         _resolve_modification_attribute(
             symbol,
             arg,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
+            guard=guard,
+            opts=opts,
             functions=functions,
         )
 
@@ -328,9 +332,9 @@ def _resolve_modifications(
 def _resolve_modification_attribute(
     symbol: ast.InstanceSymbol,
     arg: ast.ClassModificationArgument,
-    current_instances: Optional[Set[ast.InstanceClass]],
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
-    instantiate_in_place: bool,
+    *,
+    guard: RecursionGuard,
+    opts: LookupOptions,
     functions: Optional[OrderedDict] = None,
 ):
     # The spec says the modifications are resolved by creating equations, but we are
@@ -349,9 +353,8 @@ def _resolve_modification_attribute(
             value,
             arg.scope,
             symbol.parent_instance,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
+            guard=guard,
+            opts=opts,
         )
         value = cast(ast.InstanceSymbol, value)
     elif isinstance(value, (ast.Array, ast.Expression)):
@@ -374,9 +377,8 @@ def _resolve_modification_attribute(
                 value,
                 arg.scope,
                 symbol.parent_instance,
-                current_instances=current_instances,
-                current_extends=current_extends,
-                instantiate_in_place=instantiate_in_place,
+                guard=guard,
+                opts=opts,
             )
             if result is not None:
                 value = result
@@ -417,15 +419,13 @@ class ExpressionEvaluator(TreeListener):
         self,
         scope: ast.InstanceClass,
         flat_class: ast.InstanceClass,
-        current_instances: Optional[Set[ast.InstanceClass]],
-        current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
-        instantiate_in_place: bool,
+        guard: RecursionGuard,
+        opts: LookupOptions,
     ):
         self.scope = scope
         self.flat_class = flat_class
-        self.current_instances = current_instances
-        self.current_extends = current_extends
-        self.instantiate_in_place = instantiate_in_place
+        self.guard = guard
+        self.opts = opts
 
         self.result = None
         super().__init__()
@@ -439,9 +439,8 @@ class ExpressionEvaluator(TreeListener):
                     operand,
                     self.scope,
                     self.flat_class,
-                    self.current_instances,
-                    self.current_extends,
-                    self.instantiate_in_place,
+                    guard=self.guard,
+                    opts=self.opts,
                 )
             if not isinstance(operand, (ast.Primary, ast.Symbol)):
                 raise NotImplementedError(f"Expression operand type not implemented: {operand!r}")
@@ -470,18 +469,17 @@ def _resolve_expression(
     expr: ast.Expression,
     scope: ast.InstanceClass,
     flat_class: ast.InstanceClass,
-    current_instances: Optional[Set[ast.InstanceClass]],
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
-    instantiate_in_place: bool,
+    *,
+    guard: RecursionGuard,
+    opts: LookupOptions,
 ) -> Optional[Union[int, float, bool, str]]:
     """Calculate the given expression or return None if not possible"""
     assert isinstance(expr, ast.Expression)
     listener = ExpressionEvaluator(
         scope=scope,
         flat_class=flat_class,
-        current_instances=current_instances,
-        current_extends=current_extends,
-        instantiate_in_place=instantiate_in_place,
+        guard=guard,
+        opts=opts,
     )
     walker = TreeWalker()
     walker.walk(listener, expr)
@@ -555,7 +553,7 @@ class _FunctionCallResolver(TreeListener):
         if not isinstance(tree.operator, ast.ComponentRef):
             return
         try:
-            found = _find_name(tree.operator, self.instance)
+            found = _find_name(tree.operator, self.instance, RecursionGuard(), LookupOptions())
         except Exception:
             return
         if found is None or not isinstance(found, ast.Class):
@@ -682,7 +680,6 @@ def _flatten_discovered_functions(
                     func_class,
                     func_class.parent,
                     ast.ClassModification(),
-                    current_instances=None,
                 )
             else:
                 func_instance = func_class
@@ -862,9 +859,9 @@ def _resolve_name(
     name: Union[str, ast.ComponentRef],
     scope: ast.InstanceClass,
     flat_class: ast.InstanceClass,
-    current_instances: Optional[Set[ast.InstanceClass]],
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
-    instantiate_in_place: bool,
+    *,
+    guard: RecursionGuard,
+    opts: LookupOptions,
 ) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
     """Flatten and resolve a name reference"""
     # * A. "all references by name in conditional declarations, modifications, dimension
@@ -911,17 +908,15 @@ def _resolve_name(
             scope,
             ast.ClassModification(),
             scope.parent_instance,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
+            guard=guard,
+            opts=opts,
         )
 
     found = _find_name(
         name,
         scope,
-        current_instances=current_instances,
-        current_extends=current_extends,
-        instantiate_in_place=instantiate_in_place,
+        guard,
+        LookupOptions(instantiate_in_place=opts.instantiate_in_place),
     )
     if found is None:
         raise NameLookupError(f"Unable to resolve {name} in scope {scope.full_name}")
@@ -936,9 +931,8 @@ def _resolve_name(
             found,
             scope,
             ast.ClassModification(),
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
+            guard=guard,
+            opts=opts,
         )
     else:
         element = found
@@ -970,12 +964,17 @@ def _instantiate_element(
     element: Union[ast.Class, ast.Symbol, ast.InstanceClass, ast.InstanceSymbol],
     scope: ast.InstanceClass,
     modification_environment: ast.ClassModification,
-    current_instances: Optional[Set[ast.InstanceClass]],
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
-    instantiate_in_place: bool = False,
+    *,
+    guard: Optional[RecursionGuard] = None,
+    opts: Optional[LookupOptions] = None,
     update_parent_instance: bool = True,
     target_state: ast.InstantiationState = ast.InstantiationState.FULL,
 ) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
+
+    if guard is None:
+        guard = RecursionGuard()
+    if opts is None:
+        opts = LookupOptions(instantiate_in_place=False)
 
     is_symbol = isinstance(element, ast.Symbol)
 
@@ -994,9 +993,8 @@ def _instantiate_element(
         parent = _get_lexical_parent_instance(
             element_class,
             scope,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
+            guard=guard,
+            opts=opts,
         )
         parent_instance = parent
 
@@ -1005,9 +1003,8 @@ def _instantiate_element(
         class_to_instantiate,
         ast.ClassModification(),
         parent_instance,
-        current_instances=current_instances,
-        current_extends=current_extends,
-        instantiate_in_place=instantiate_in_place,
+        guard=guard,
+        opts=opts,
         update_parent_instance=update_parent_instance,
         target_state=target_state,
     )

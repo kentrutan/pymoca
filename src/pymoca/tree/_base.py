@@ -6,14 +6,15 @@ Shared base classes and utilities for tree processing.
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
-from typing import Iterable, Union
+from dataclasses import dataclass, field
+from typing import Iterable, Set, Union
 
 from .. import ast
 
 logger = logging.getLogger("pymoca")
 
 
-# TODO Flatten function vs. conversion classes
+# TODO Remove this exception when legacy flattening is removed
 class ModificationTargetNotFound(Exception):
     pass
 
@@ -48,6 +49,31 @@ class InstantiationError(ModelicaError):
     """Error instantiating a Modelica element"""
 
     pass
+
+
+@dataclass
+class RecursionGuard:
+    """Cycle detection for instantiation and name lookup.
+
+    Mutable and shared across a single instantiation/lookup operation.
+    """
+
+    current_instances: Set[ast.InstanceClass] = field(default_factory=set)
+    current_extends: Set = field(default_factory=set)
+
+
+@dataclass(frozen=True)
+class LookupOptions:
+    """Per-call options for name resolution.
+
+    Frozen so ``replace()`` is the idiom for variants.
+    """
+
+    instantiate_in_place: bool = True
+    search_imports: bool = True
+    search_parent: bool = True
+    search_inherited: bool = True
+    check_encapsulated: bool = True
 
 
 class TreeListener:

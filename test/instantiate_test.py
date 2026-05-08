@@ -631,7 +631,9 @@ def test_value_modification_ordering():
     instance = parse_and_instantiate_model(
         "NestedExtendsModification.mo", "NestedExtendsModification.ValM"
     )
-    x = _find_name("x", instance, check_encapsulated=False)
+    from pymoca.tree._base import LookupOptions, RecursionGuard
+
+    x = _find_name("x", instance, RecursionGuard(), LookupOptions(check_encapsulated=False))
     assert x is not None, "x not found in ValM instance"
     value_args = get_modifiers_by_name(x, "value")
     assert len(value_args) > 0, "x missing value modification"

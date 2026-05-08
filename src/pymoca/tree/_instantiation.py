@@ -9,9 +9,15 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import copy  # TODO
 from collections import OrderedDict
-from typing import List, Optional, Set, Union
+from typing import List, Optional, Union
 
-from ._base import InstantiationError, ModelicaSemanticError, NameLookupError
+from ._base import (
+    InstantiationError,
+    LookupOptions,
+    ModelicaSemanticError,
+    NameLookupError,
+    RecursionGuard,
+)
 from ._name_lookup import _find_name, find_name
 from .. import ast
 
@@ -73,9 +79,9 @@ def _instantiate_class(
     orig_class: Union[ast.Class, ast.InstanceClass],
     modification_environment: ast.ClassModification,
     parent_instance: Union["InstanceTree", ast.InstanceClass],
-    current_instances: Optional[Set[ast.InstanceClass]] = None,
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]] = None,
-    instantiate_in_place: bool = False,
+    *,
+    guard: Optional[RecursionGuard] = None,
+    opts: Optional[LookupOptions] = None,
     update_parent_instance: bool = True,
     target_state: ast.InstantiationState = ast.InstantiationState.FULL,
 ) -> ast.InstanceClass:
@@ -85,9 +91,8 @@ def _instantiate_class(
     :param modification_environment: The modification environment of the class
         instance
     :param parent_instance: The parent class this class is contained in
-    :param current_instances: instances in process of being instantiated (at least partially)
-    :param current_extends: `extends` in process of name lookup (see _find_inherited)
-    :param instantiate_in_place: If True, partially instantiate for name lookup if not already
+    :param guard: Cycle detection state shared across a single operation
+    :param opts: Name lookup options (instantiate_in_place, search flags, etc.)
     :param update_parent_instance: If True, the parent instance will be updated with the instantiated class
     :return: The instantiated class
 
@@ -113,12 +118,16 @@ def _instantiate_class(
     #    (error if not) and only keep one if so (to preserve function argument order)
     # 6. Components are recursively instantiated
 
+    if guard is None:
+        guard = RecursionGuard()
+    if opts is None:
+        opts = LookupOptions(instantiate_in_place=False)
+
     lexical_parent = _get_lexical_parent_instance(
         orig_class,
         parent_instance,
-        current_instances=current_instances,
-        current_extends=current_extends,
-        instantiate_in_place=instantiate_in_place,
+        guard=guard,
+        opts=opts,
     )
 
     # 1.1. Partially instantiate the element itself and 1.2 merge modifiers
@@ -140,18 +149,15 @@ def _instantiate_class(
         if new_class.instantiation_state >= target_state:
             return new_class
 
-    if current_instances is None:
-        current_instances = set()
-    current_instances.add(new_class)
+    guard.current_instances.add(new_class)
 
     # 1.3. Redeclare of element itself is done
     redeclared = _apply_redeclares(
         new_class,
         modification_environment,
         parent_instance,
-        current_instances=current_instances,
-        current_extends=current_extends,
-        instantiate_in_place=instantiate_in_place,
+        guard=guard,
+        opts=opts,
     )
     if redeclared:
         return new_class
@@ -203,14 +209,13 @@ def _instantiate_class(
             from_class.extends,
             modification_environment,
             new_class,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
+            guard=guard,
+            opts=opts,
             target_state=ast.InstantiationState.PARTIAL,
         )
 
     new_class.instantiation_state = ast.InstantiationState.PARTIAL
-    current_instances.remove(new_class)
+    guard.current_instances.remove(new_class)
 
     # 2.2 Copy local contents into the element itself
     # Equations/statements are always copied (even for partial instantiation used
@@ -238,17 +243,15 @@ def _instantiate_class(
         _instantiate_symbol(
             symbol,
             new_class,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
+            guard=guard,
+            opts=opts,
         )
 
     # Recurse down through all levels of extends and instantiate symbols
     _instantiate_extends_symbols(
         new_class.extends,
-        current_instances=current_instances,
-        current_extends=current_extends,
-        instantiate_in_place=instantiate_in_place,
+        guard=guard,
+        opts=opts,
     )
 
     # Validate modification targets: check that all remaining ElementModification
@@ -263,25 +266,23 @@ def _instantiate_class(
 
 def _instantiate_extends_symbols(
     extends: List[ast.InstanceClass],
-    current_instances: Optional[Set[ast.InstanceClass]],
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
-    instantiate_in_place: bool,
+    *,
+    guard: RecursionGuard,
+    opts: LookupOptions,
 ):
     for extend_node in extends:
         for symbol in extend_node.symbols.values():
             _instantiate_symbol(
                 symbol,
                 extend_node,
-                current_instances=current_instances,
-                current_extends=current_extends,
-                instantiate_in_place=instantiate_in_place,
+                guard=guard,
+                opts=opts,
             )
         if extend_node.extends:
             _instantiate_extends_symbols(
                 extend_node.extends,
-                current_instances=current_instances,
-                current_extends=current_extends,
-                instantiate_in_place=instantiate_in_place,
+                guard=guard,
+                opts=opts,
             )
 
 
@@ -356,9 +357,9 @@ def _instantiate_extends_partially(
     extends: Union[ast.ExtendsClause, ast.Class, ast.InstanceClass],
     modification_environment: ast.ClassModification,
     parent_instance: ast.InstanceClass,
-    current_instances: Optional[Set[ast.InstanceClass]],
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
-    instantiate_in_place: bool,
+    *,
+    guard: RecursionGuard,
+    opts: LookupOptions,
 ) -> ast.InstanceClass:
     """Instantiate an extends clause partially"""
 
@@ -368,9 +369,8 @@ def _instantiate_extends_partially(
         extends_class = _find_extends_class(
             extends.component,
             extends.scope,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
+            guard=guard,
+            opts=opts,
         )
         class_modification.arguments = (
             extends.class_modification.arguments
@@ -400,9 +400,8 @@ def _instantiate_extends_partially(
     lexical_parent = _get_lexical_parent_instance(
         extends_class,
         parent_instance,
-        current_instances=current_instances,
-        current_extends=current_extends,
-        instantiate_in_place=instantiate_in_place,
+        guard=guard,
+        opts=opts,
     )
     extends_class = _instantiate_partially(
         extends_class,
@@ -424,9 +423,9 @@ def _instantiate_extends_list(
     extends_list: List[Union[ast.ExtendsClause, ast.Class, ast.InstanceClass]],
     modification_environment: ast.ClassModification,
     parent_instance: ast.InstanceClass,
-    current_instances: Optional[Set[ast.InstanceClass]],
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
-    instantiate_in_place: bool,
+    *,
+    guard: RecursionGuard,
+    opts: LookupOptions,
     target_state: ast.InstantiationState = ast.InstantiationState.FULL,
 ) -> List[ast.InstanceClass]:
     """Instantiate extends in given list either partially for name lookup or fully"""
@@ -442,9 +441,8 @@ def _instantiate_extends_list(
             extends,
             modification_environment,
             parent_instance,
-            current_instances,
-            current_extends,
-            instantiate_in_place,
+            guard=guard,
+            opts=opts,
         )
         extends_partially_instantiated.append(extends_instance)
 
@@ -456,9 +454,8 @@ def _instantiate_extends_list(
             extends,
             modification_environment,
             parent_instance,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
+            guard=guard,
+            opts=opts,
             update_parent_instance=False,
             target_state=target_state,
         )
@@ -470,19 +467,20 @@ def _instantiate_extends_list(
 def _find_extends_class(
     extends_name: Union[str, ast.ComponentRef],
     scope: Union["InstanceTree", ast.InstanceClass],
-    current_instances: Optional[Set[ast.InstanceClass]],
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
-    instantiate_in_place: bool,
+    *,
+    guard: RecursionGuard,
+    opts: LookupOptions,
 ) -> Union[ast.Class, ast.InstanceClass]:
     """Find the extends class and do checks"""
 
     extends_class = _find_name(
         extends_name,
         scope,
-        search_inherited=False,
-        current_instances=current_instances,
-        current_extends=current_extends,
-        instantiate_in_place=instantiate_in_place,
+        guard,
+        LookupOptions(
+            instantiate_in_place=opts.instantiate_in_place,
+            search_inherited=False,
+        ),
     )
 
     if extends_class is None:
@@ -540,9 +538,9 @@ def _find_extends_class(
 def _get_lexical_parent_instance(
     class_: Union[ast.Class, ast.InstanceClass],
     lookup_scope: Union[ast.Class, ast.InstanceClass, "InstanceTree"],
-    current_instances: Optional[Set[ast.InstanceClass]],
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
-    instantiate_in_place: bool,
+    *,
+    guard: RecursionGuard,
+    opts: LookupOptions,
 ) -> Union[ast.InstanceClass, "InstanceTree"]:
     """Find the lexical parent instance of the given class"""
 
@@ -556,9 +554,8 @@ def _get_lexical_parent_instance(
         found = _find_name(
             class_.name,
             lookup_scope,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=False,
+            guard,
+            LookupOptions(instantiate_in_place=False),
         )
     if (
         found is not None
@@ -631,9 +628,9 @@ def _is_transitively_replaceable(class_: ast.Class) -> bool:
 def _instantiate_symbol(
     symbol: ast.InstanceSymbol,
     parent_instance: ast.InstanceClass,
-    current_instances: Optional[Set[ast.InstanceClass]],
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
-    instantiate_in_place: bool,
+    *,
+    guard: RecursionGuard,
+    opts: LookupOptions,
 ) -> None:
     """Instantiate given symbol"""
 
@@ -649,18 +646,16 @@ def _instantiate_symbol(
         symbol,
         modification_environment,
         parent_instance,
-        current_instances=current_instances,
-        current_extends=current_extends,
-        instantiate_in_place=instantiate_in_place,
+        guard=guard,
+        opts=opts,
     )
 
     if not isinstance(symbol.type, ast.InstanceClass):
         symbol_type = _find_name(
             symbol.type,
             parent_instance,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
+            guard,
+            LookupOptions(instantiate_in_place=opts.instantiate_in_place),
         )
         if symbol_type is None:
             raise NameLookupError(
@@ -674,9 +669,8 @@ def _instantiate_symbol(
         symbol_type,
         modification_environment,
         parent_instance,
-        current_instances=current_instances,
-        current_extends=current_extends,
-        instantiate_in_place=instantiate_in_place,
+        guard=guard,
+        opts=opts,
         update_parent_instance=False,
     )
     _copy_symbol_contents(symbol)
@@ -841,9 +835,9 @@ def _apply_redeclares(
     element: Union[ast.InstanceClass, ast.InstanceSymbol],
     modification_environment: ast.ClassModification,
     parent_instance: Union[ast.InstanceClass, "InstanceTree"],
-    current_instances: Optional[Set[ast.InstanceClass]],
-    current_extends: Optional[Set[Union[ast.ExtendsClause, ast.InstanceClass]]],
-    instantiate_in_place: bool,
+    *,
+    guard: RecursionGuard,
+    opts: LookupOptions,
 ) -> bool:
     """Apply redeclare if any and remove from environment
 
@@ -897,9 +891,8 @@ def _apply_redeclares(
     redeclare_class = _find_name(
         redeclare_name,
         scope_class,
-        current_instances=current_instances,
-        current_extends=current_extends,
-        instantiate_in_place=instantiate_in_place,
+        guard,
+        LookupOptions(instantiate_in_place=opts.instantiate_in_place),
     )
 
     if redeclare_class is None:
@@ -929,9 +922,8 @@ def _apply_redeclares(
         extends_list,
         modification_environment,
         parent_instance,
-        current_instances=current_instances,
-        current_extends=current_extends,
-        instantiate_in_place=instantiate_in_place,
+        guard=guard,
+        opts=opts,
     )
     redeclare_class = extends_list_instantiated[0]
     redeclare_class.replaceable = redeclare.replaceable
@@ -945,9 +937,8 @@ def _apply_redeclares(
         redeclared = _find_name(
             element.type,
             element.parent_instance,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
+            guard,
+            LookupOptions(instantiate_in_place=opts.instantiate_in_place),
         )
         if redeclared is None:
             raise ModelicaSemanticError(
@@ -957,9 +948,8 @@ def _apply_redeclares(
             redeclared,
             modification_environment,
             element.parent_instance,
-            current_instances=current_instances,
-            current_extends=current_extends,
-            instantiate_in_place=instantiate_in_place,
+            guard=guard,
+            opts=opts,
         )
         element.type = redeclared
 

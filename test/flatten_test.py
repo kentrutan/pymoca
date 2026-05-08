@@ -276,6 +276,32 @@ def test_flattening_modification_rhs_evaluation():
             raise AssertionError(f"Unexpected value type in test: {value_type}")
 
 
+def test_flattening_modification_rhs_omc_simulation():
+    """Verify folded parameter values match OMC 1.22.0 simulation results."""
+    instance = parse_and_instantiate_model("ModificationScopeFlatten.mo", "B")
+    flat = tree.flatten_instance(instance, evaluate_parameters=True)
+    expected = {
+        "R": 3.0,
+        "a.R": 4.0,
+        "b.R": 3.0,
+        "c.R": 3.0,
+        "d.c": 84.0,
+        "e.R": 3.0,
+        "f.R": 3.0,
+        "g.R": 3.0,
+        "h.R": 42.0,
+        "i.R": 3.0,
+        "j.R": 2.0,
+    }
+    for name, want in expected.items():
+        v = flat.symbols[name].value
+        assert isinstance(v, ast.Primary), f"{name} not folded: {v!r}"
+        assert v.value == want, f"{name}: {v.value} != {want}"
+    # d.R remains a symbolic self-reference even with evaluate_parameters=True
+    d_R = flat.symbols["d.R"].value
+    assert isinstance(d_R, ast.Symbol) and d_R.name == "d.R"
+
+
 def test_extends_order():
     instance = parse_and_instantiate_model("ExtendsOrder.mo", "P.M")
 

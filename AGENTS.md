@@ -17,8 +17,8 @@ pre-commit run --all-files        # lint (black + flake8)
 ## Code Style
 
 - Python 3.9+, black (100 char), flake8 (bugbear, comprehensions, import-order)
-- Google-style docstrings
-- **Keep comments concise**
+- **Comments concise** — Only comment if you can't determine local context from code within surrounding ~80 lines. One line comments is goal, not hard limit. **Don't reference context outside the function, class, module, etc.**
+- **Docstrings concise** — {} denotes optional: """One line summary{\n\n¶ to clarify}{\n\nReturns: if not None}{\n\nRaises:}""". **Optional parts only if surrounding context is > ~80 lines.**
 - Generated code in `src/pymoca/generated/` and `test/generated/` — do not edit
 
 ## Git Style

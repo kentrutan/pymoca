@@ -14,14 +14,14 @@ import sys
 from collections import OrderedDict
 from typing import Optional, Set, Union, cast
 
-from . import ModelicaSemanticError, NameLookupError
+from . import LookupOptions, ModelicaSemanticError, NameLookupError, RecursionGuard
 from ._instantiation import (
     InstanceTree,
     _get_lexical_parent_instance,
     _instantiate_class,
     instantiate,
 )
-from ._listener import LookupOptions, RecursionGuard, TreeListener, TreeWalker
+from ._listener import TreeListener, TreeWalker
 from ._name_lookup import _find_name
 from .. import ast
 

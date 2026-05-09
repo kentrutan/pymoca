@@ -616,7 +616,7 @@ def test_value_modification_ordering():
     instance = parse_and_instantiate_model(
         "NestedExtendsModification.mo", "NestedExtendsModification.ValM"
     )
-    from pymoca.tree._listener import LookupOptions, RecursionGuard
+    from pymoca.tree import LookupOptions, RecursionGuard
 
     x = _find_name("x", instance, RecursionGuard(), LookupOptions(check_encapsulated=False))
     assert x is not None, "x not found in ValM instance"

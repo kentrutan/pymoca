@@ -149,7 +149,7 @@ def parse_imports_file(pathname):
 def check_redeclare_expects(instance, expects):
     """Check that the redeclare expectations are met in the given instance"""
     for name, type_, value, replaceable in expects:
-        from pymoca.tree._listener import LookupOptions, RecursionGuard
+        from pymoca.tree import LookupOptions, RecursionGuard
 
         x = _find_name(name, instance, RecursionGuard(), LookupOptions(check_encapsulated=False))
         assert x is not None, f"{name} not found in instance"

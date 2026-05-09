@@ -15,8 +15,9 @@ from typing import Union
 
 import numpy as np
 
-from ._base import ModificationTargetNotFound, TreeListener, TreeWalker, logger
+from . import ModificationTargetNotFound
 from ._instantiation import InstanceTree, _instantiate_class  # noqa: F401
+from ._listener import TreeListener, TreeWalker, logger
 from .. import ast
 
 

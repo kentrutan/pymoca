@@ -11,13 +11,8 @@ import copy  # TODO
 from collections import OrderedDict
 from typing import List, Optional, Tuple, Union
 
-from ._base import (
-    InstantiationError,
-    LookupOptions,
-    ModelicaSemanticError,
-    NameLookupError,
-    RecursionGuard,
-)
+from . import InstantiationError, ModelicaSemanticError, NameLookupError
+from ._listener import LookupOptions, RecursionGuard
 from ._name_lookup import _find_name, find_name
 from .. import ast
 

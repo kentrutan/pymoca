@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Shared base classes and utilities for tree processing.
+TreeListener and TreeWalker for the pymoca.tree package.
 """
 
 from __future__ import absolute_import, division, print_function, unicode_literals
@@ -12,43 +12,6 @@ from typing import Iterable, Set, Union
 from .. import ast
 
 logger = logging.getLogger("pymoca")
-
-
-# TODO Remove this exception when legacy flattening is removed
-class ModificationTargetNotFound(Exception):
-    pass
-
-
-class ModelicaError(Exception):
-    """Common base class for all Modelica language errors"""
-
-    def __init__(self, msg):
-        self.msg = msg
-        super().__init__(self)
-
-    def __str__(self) -> str:
-        return str(self.msg)
-
-    def __repr__(self) -> str:
-        return type(self).__name__ + "(" + str(self) + ")"
-
-
-class ModelicaSemanticError(ModelicaError):
-    """Error in meaning of Modelica code"""
-
-    pass
-
-
-class NameLookupError(ModelicaError):
-    """Error looking up a Modelica name"""
-
-    pass
-
-
-class InstantiationError(ModelicaError):
-    """Error instantiating a Modelica element"""
-
-    pass
 
 
 @dataclass

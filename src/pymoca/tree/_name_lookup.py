@@ -11,7 +11,8 @@ import copy
 from dataclasses import replace
 from typing import Optional, Tuple, Union
 
-from ._base import LookupOptions, NameLookupError, RecursionGuard
+from . import NameLookupError
+from ._listener import LookupOptions, RecursionGuard
 from .. import ast
 
 

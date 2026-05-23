@@ -123,7 +123,7 @@ def _path_to_class(path: Path) -> Optional[ast.Class]:
     elif path.is_file():
         if path.suffix != ".mo" or path.stem == "package":
             return None
-        new_class = ast.Class(name=path.stem, type="package")
+        new_class = ast.Class(name=path.stem, type="class")
         new_class.path = path
         return new_class
     else:
@@ -227,7 +227,10 @@ class ASTListener(ModelicaListener):
         self.ast[ctx] = class_node
 
     def enterClass_definition(self, ctx: ModelicaParser.Class_definitionContext):
-        class_node = ast.Class(name=ctx.getText())  # Temporary name to help debugging parsing
+        class_node = ast.Class(
+            name=ctx.getText(),  # Temporary name to help when debugging parsing
+            parent=self.class_node,
+        )
         class_node.encapsulated = ctx.ENCAPSULATED() is not None
         class_node.partial = ctx.class_prefixes().PARTIAL() is not None
         class_node.type = ctx.class_prefixes().class_type().getText()

@@ -661,13 +661,18 @@ class LazyParseDict(dict):
         except Exception as exc:
             raise LazyParseDictKeyError(f"Error parsing {class_.path}") from exc
 
-        # Update class_ classes with parsed __key classes
-        class_.parsed = True
         parsed_class = file.classes[__key]
-        class_.update_classes(parsed_class.classes)
+        super().__setitem__(class_.name, parsed_class)
+        parsed_class.parent = class_.parent
+        parsed_class.path = class_.path
+        # FIXME: Remove assert after testing
+        assert (
+            len(set(class_.classes.keys()) & set(parsed_class.classes.keys())) == 0
+        ), "Class names clash when updating parsed class"
+        # Merge directory package classes with classes from parsed file
+        parsed_class.update_classes(class_.classes)
 
-        # Include any additional classes that may have been parsed
-        return class_
+        return parsed_class
 
     def __repr__(self):
         return "{}{}".format(type(self).__name__, super().__repr__())

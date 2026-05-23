@@ -324,12 +324,6 @@ def main(argv: List[str]) -> int:
     if errors:
         return errors
 
-    # FIXME: Delete commented out code
-    # # Scan and cache MODELICAPATH directories and files
-    # modelicapath_list = []  # type: List[pymoca.parser.ModelicaPathNode]
-    # for path in modelica_path:
-    #     modelicapath_list.append(pymoca.parser.ModelicaPathNode(path))
-
     tic = time.perf_counter()
     error_files = []  # type: List[Path]
     modelica_files = []  # type: List[Path]
@@ -337,12 +331,10 @@ def main(argv: List[str]) -> int:
 
         import pymoca.parser  # pylint: disable=imports
 
-        # FIXME: Delete commented out code
-        # library_ast = pymoca.parser.Root(name="ModelicaTree", modelicapath=modelicapath_list)
         library_ast = pymoca.parser.modelicapath_to_tree(dirs=modelica_path)
 
         modelica_files, error_files = parse_all(args.PATHNAME, library_ast)
-        if not modelica_files:
+        if not modelica_files and not modelica_path:
             errors += 1
             log.error("No Modelica files in given PATHNAMEs")
         elif error_files:
@@ -354,7 +346,8 @@ def main(argv: List[str]) -> int:
                 elif args.model:
                     # FIXME: Use new flattening API
                     try:
-                        _ = flatten_class(library_ast, model)
+                        flat_class = flatten_class(library_ast, model)  # noqa: F841
+                        pass
                     # tree.flatten_class can throw Exception in several places
                     except Exception:  # pylint: disable=broad-except
                         if log.level is logging.DEBUG:

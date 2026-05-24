@@ -165,7 +165,7 @@ type_specifier_element :
     ;
 
 type_specifier :
-    type_specifier_element ('.' type_specifier_element)*
+    '.'? type_specifier_element ('.' type_specifier_element)*
     ;
 
 // B.2.4.4 ------------------------------------------------
@@ -458,7 +458,7 @@ component_reference_element :
     ;
 
 component_reference :
-    component_reference_element ('.' component_reference_element)*
+    '.'? component_reference_element ('.' component_reference_element)*
     ;
 
 // B.2.7.7 ------------------------------------------------
@@ -468,7 +468,7 @@ function_call_args :
 
 // B.2.7.8 ------------------------------------------------
 function_arguments :
-    function_argument (',' function_argument | 'for' for_indices)*
+    function_argument (',' function_argument | 'for' for_indices)* (',' named_arguments)?
     | named_arguments
     ;
 

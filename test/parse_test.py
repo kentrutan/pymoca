@@ -575,6 +575,18 @@ def test_modelicapath_path_to_class_ignores_other(tmp_path):
     assert parser._path_to_class(dangling) is None
 
 
+def test_parse_unimplemented_class_spec_enum():
+    """Parser raises NotImplementedError for enum short-class specifiers.
+
+    type X = enumeration(...) has no exitClass_spec_enum handler, so the
+    class_node.name is never updated from the debug placeholder set in
+    enterClass_definition. exitClass_definition detects this and raises
+    NotImplementedError so the language gap is surfaced clearly.
+    """
+    with pytest.raises(NotImplementedError, match="enumeration"):
+        parser.parse("type Resolution = enumeration(a, b, c);")
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

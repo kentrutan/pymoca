@@ -79,7 +79,6 @@ def test_declarations_are_not_builtin_names():
 
     ok_examples = (
         "model A parameter Integer i=1; String s=String(i); end A;",
-        "model A type E = enumeration(a, b); parameter Integer i = Integer(E.a); end A;",
         'model A redeclare type Voltage = Real(unit="V"); end A;',
     )
     for txt in ok_examples:

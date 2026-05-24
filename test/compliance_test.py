@@ -107,7 +107,7 @@ def discover_compliance_files(subdirectory):
 
 # Known failures: model_name -> xfail reason
 #
-# Global name lookup: leading-dot syntax is now in grammar but some still fail
+# Global name lookup: leading-dot syntax is now in grammar but these still fail
 _GLOBAL_MODELS = [
     "ModelicaCompliance.Scoping.NameLookup.Global." + n
     for n in [
@@ -201,11 +201,11 @@ _SHOULD_FAIL_UNDETECTED = {
     "ModelicaCompliance.Scoping.Visibility.AccessInheritedProtectedClassInvalid": (
         "shouldPass=false: pymoca does not enforce protected class access restrictions"
     ),
-    "ModelicaCompliance.Scoping.Visibility.AccessProtectedClassComp": (
-        "shouldPass=false: pymoca does not enforce protected class access via component restrictions"
-    ),
     "ModelicaCompliance.Scoping.Visibility.AccessInheritedProtectedCompInvalid": (
         "shouldPass=false: pymoca does not enforce protected inherited component dot-access restrictions"
+    ),
+    "ModelicaCompliance.Scoping.Visibility.AccessProtectedClassComp": (
+        "shouldPass=false: pymoca does not enforce protected class access via component restrictions"
     ),
     "ModelicaCompliance.Scoping.Visibility.AccessProtectedComp": (
         "shouldPass=false: pymoca does not enforce protected component access restrictions"

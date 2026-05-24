@@ -93,7 +93,11 @@ def parse_all(paths: List[Path], ast: pymoca.ast.Tree = None) -> Tuple[List[Path
     # Parse all .mo files
     error_files = []
     for path in files:
-        file_ast = parse_file(path)
+        try:
+            file_ast = parse_file(path)
+        except NotImplementedError as exc:
+            log.debug("Skipping %s: %s", path, exc)
+            continue
         if file_ast:
             ast.extend(file_ast)
         else:

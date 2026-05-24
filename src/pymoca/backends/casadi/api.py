@@ -113,10 +113,15 @@ def _compile_model(model_folder: str, model_name: str, compiler_options: Dict[st
                 logger.info("Parsing {}".format(item))
 
                 with open(os.path.join(root, item), "r", encoding="utf-8") as f:
+                    try:
+                        parsed = parser.parse(f.read())
+                    except NotImplementedError as exc:
+                        logger.warning("Skipping %s: %s", item, exc)
+                        continue
                     if tree is None:
-                        tree = parser.parse(f.read())
+                        tree = parsed
                     else:
-                        tree.extend(parser.parse(f.read()))
+                        tree.extend(parsed)
 
     # Compile
     logger.info("Generating CasADi model")

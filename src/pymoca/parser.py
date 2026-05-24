@@ -335,6 +335,11 @@ class ASTListener(ModelicaListener):
 
     def exitClass_definition(self, ctx: ModelicaParser.Class_definitionContext):
         class_node = self.class_nodes.pop()
+        if class_node.name == ctx.getText():
+            raise NotImplementedError(
+                f"Unsupported class specifier at line {ctx.start.line}: "
+                f"{ctx.class_specifier().getText()[:60]}"
+            )
         self._prevent_builtin_name(class_node.name, ctx)
         self.class_node.classes[class_node.name] = class_node
 

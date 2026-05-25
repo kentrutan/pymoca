@@ -542,10 +542,21 @@ class ASTListener(ModelicaListener):
     def exitStatement_component_reference(
         self, ctx: ModelicaParser.Statement_component_referenceContext
     ):
-        self.ast[ctx] = ast.AssignmentStatement(
-            left=[self.ast[ctx.component_reference()]],
-            right=self.ast[ctx.expression()],
-        )
+        comp_ref = self.ast[ctx.component_reference()]
+        if ctx.expression() is not None:
+            self.ast[ctx] = ast.AssignmentStatement(
+                left=[comp_ref],
+                right=self.ast[ctx.expression()],
+            )
+        else:
+            # Standalone function call: f(args)
+            self.ast[ctx] = ast.AssignmentStatement(
+                left=[],
+                right=ast.Expression(
+                    operator=comp_ref,
+                    operands=self._function_call_operands(ctx.function_call_args()),
+                ),
+            )
 
     def exitStatement_component_function(
         self, ctx: ModelicaParser.Statement_component_functionContext
@@ -554,10 +565,7 @@ class ASTListener(ModelicaListener):
 
         right = ast.Expression(
             operator=all_comp_refs[-1],
-            operands=[
-                self.ast[x.expression()]
-                for x in ctx.function_call_args().function_arguments().function_argument()
-            ],
+            operands=self._function_call_operands(ctx.function_call_args()),
         )
 
         self.ast[ctx] = ast.AssignmentStatement(left=all_comp_refs[:-1], right=right)
@@ -568,8 +576,17 @@ class ASTListener(ModelicaListener):
     def exitStatement_for(self, ctx: ModelicaParser.Statement_forContext):
         self.ast[ctx] = self.ast[ctx.for_statement()]
 
-    def exitStatement_when(self, ctx: ModelicaParser.Equation_whenContext):
-        self.ast[ctx] = self.ast[ctx.when_equation()]
+    def exitStatement_while(self, ctx: ModelicaParser.Statement_whileContext):
+        self.ast[ctx] = self.ast[ctx.while_statement()]
+
+    def exitStatement_break(self, ctx: ModelicaParser.Statement_breakContext):
+        self.ast[ctx] = ast.Primary(value="break")
+
+    def exitStatement_return(self, ctx: ModelicaParser.Statement_returnContext):
+        self.ast[ctx] = ast.Primary(value="return")
+
+    def exitStatement_when(self, ctx: ModelicaParser.Statement_whenContext):
+        self.ast[ctx] = self.ast[ctx.when_statement()]
 
     def exitIf_statement(self, ctx: ModelicaParser.If_statementContext):
         blocks = [self.ast[b] for b in ctx.blocks]
@@ -588,6 +605,12 @@ class ASTListener(ModelicaListener):
     def exitFor_statement(self, ctx: ModelicaParser.For_statementContext):
         self.ast[ctx] = ast.ForStatement(
             indices=self.ast[ctx.for_indices()],
+            statements=self.ast[ctx.statement_block()],
+        )
+
+    def exitWhile_statement(self, ctx: ModelicaParser.While_statementContext):
+        self.ast[ctx] = ast.WhileStatement(
+            condition=self.ast[ctx.condition],
             statements=self.ast[ctx.statement_block()],
         )
 
@@ -700,29 +723,39 @@ class ASTListener(ModelicaListener):
     def exitPrimary_true(self, ctx: ModelicaParser.Primary_trueContext):
         self.ast[ctx] = ast.Primary(value=True)
 
+    def _function_call_operands(self, func_call_args_ctx):
+        """Safely extract expression operands from a function_call_args context."""
+        func_args = func_call_args_ctx.function_arguments()
+        if func_args is None:
+            return []
+        return [self.ast[x.expression()] for x in func_args.function_argument()]
+
     def exitPrimary_function(self, ctx: ModelicaParser.Primary_functionContext):
         # TODO: Could possible be cleaner if we let the expression in the ast bubble up.
         #       E.g. self.ast[x] below, instead of self.ast[x.expression].
         self.ast[ctx] = ast.Expression(
             operator=self.ast[ctx.component_reference()],
-            operands=[
-                self.ast[x.expression()]
-                for x in ctx.function_call_args().function_arguments().function_argument()
-            ],
+            operands=self._function_call_operands(ctx.function_call_args()),
         )
 
     def exitPrimary_derivative(self, ctx: ModelicaParser.Primary_derivativeContext):
         self.ast[ctx] = ast.Expression(
             operator="der",
-            operands=[
-                self.ast[x.expression()]
-                for x in ctx.function_call_args().function_arguments().function_argument()
-            ],
+            operands=self._function_call_operands(ctx.function_call_args()),
         )
         # TODO 'state' is not a standard prefix;  disable this for now as it does not work
         # when differentiating states defined in superclasses.
         # if 'state' not in self.class_node.symbols[comp_name].prefixes:
         #    self.class_node.symbols[comp_name].prefixes += ['state']
+
+    def exitPrimary_initial(self, ctx: ModelicaParser.Primary_initialContext):
+        self.ast[ctx] = ast.Expression(
+            operator="initial",
+            operands=self._function_call_operands(ctx.function_call_args()),
+        )
+
+    def exitPrimary_end(self, ctx: ModelicaParser.Primary_endContext):
+        self.ast[ctx] = ast.ComponentRef(name="end", indices=[[None]], child=[])
 
     def exitType_specifier_element(self, ctx: ModelicaParser.Type_specifier_elementContext):
         self.ast[ctx] = ast.ComponentRef(name=ctx.IDENT().getText(), indices=[[None]], child=[])
@@ -761,6 +794,15 @@ class ASTListener(ModelicaListener):
         if len(self.ast[ctx]) == 1:
             self.ast[ctx] = self.ast[ctx][0]
 
+    def exitPrimary_expression_list(
+        self, ctx: ModelicaParser.Primary_expression_listContext
+    ):
+        rows = [
+            ast.Array(values=[self.ast[x] for x in expr_list.expression()])
+            for expr_list in ctx.expression_list()
+        ]
+        self.ast[ctx] = rows[0] if len(rows) == 1 else ast.Array(values=rows)
+
     def exitPrimary_function_arguments(self, ctx: ModelicaParser.Primary_function_argumentsContext):
         # TODO: This does not support for generators yet.
         #       Only expressions are supported, e.g. {1.0, 2.0, 3.0}.
@@ -770,10 +812,7 @@ class ASTListener(ModelicaListener):
     def exitEquation_function(self, ctx: ModelicaParser.Equation_functionContext):
         self.ast[ctx] = ast.Function(
             name=ctx.name().getText(),
-            arguments=[
-                self.ast[x.expression()]
-                for x in ctx.function_call_args().function_arguments().function_argument()
-            ],
+            arguments=self._function_call_operands(ctx.function_call_args()),
         )
 
     def exitEquation_when(self, ctx: ModelicaParser.Equation_whenContext):

@@ -400,6 +400,19 @@ class ForStatement(Node):
         )
 
 
+class WhileStatement(Node):
+    def __init__(self, **kwargs):
+        self.condition = None  # type: Optional[Union[Expression, Primary, ComponentRef]]
+        self.statements = []  # type: List[Union[AssignmentStatement, IfStatement, ForStatement]]
+        self.comment = ""  # type: str
+        super().__init__(**kwargs)
+
+    def __repr__(self):
+        return "{}(condition={!r}, statements={!r})".format(
+            type(self).__name__, self.condition, self.statements
+        )
+
+
 class Function(Node):
     def __init__(self, **kwargs):
         self.name = ""  # type: str

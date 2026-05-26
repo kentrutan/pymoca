@@ -473,6 +473,17 @@ def test_redeclare_component_preserves_original_modifier():
     assert flat.symbols["a.y"].value == 2.0
 
 
+def test_redeclare_inherited_modifier_preserved():
+    """Modifier on replaceable symbol survives redeclare when the modified parameter
+    lives only via extends in the redeclare target class (not as a direct symbol).
+    """
+    instance = parse_and_instantiate_model("RedeclareInheritsMods.mo", "P.User")
+    flat = tree.flatten_instance(instance)
+
+    assert "src.offset" in flat.symbols
+    assert flat.symbols["src.offset"].value == 1.0
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

@@ -907,7 +907,7 @@ def _apply_redeclares(
     if isinstance(redeclare, ast.ShortClassDefinition):
         redeclare_name = redeclare.component
     else:  # ast.ComponentClause
-        redeclare_name = redeclare.type.name
+        redeclare_name = redeclare.type
 
     redeclare_class = _find_name(
         redeclare_name,

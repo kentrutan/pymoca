@@ -404,6 +404,19 @@ def test_custom_units():
     assert flat_tree.symbols["dummy_parameter"].value == 10.0
 
 
+def test_modification_sub_attr_and_value():
+    """Combined k(unit="V/A")=1 form sets both the sub-attribute and the value."""
+    instance = parse_and_instantiate_model("ModificationSubAttrAndValue.mo", "M")
+    flat_tree = tree.flatten_instance(instance)
+    assert flat_tree.symbols["k"].unit == "V/A"
+    assert flat_tree.symbols["k"].value == 1.0
+
+    instance2 = parse_and_instantiate_model("ModificationSubAttrAndValue.mo", "Outer")
+    flat_tree2 = tree.flatten_instance(instance2)
+    assert flat_tree2.symbols["m.k"].unit == "m/s"
+    assert flat_tree2.symbols["m.k"].value == 2.0
+
+
 def test_flatten_to_tree_bouncing_ball():
     """flatten_to_tree returns ast.Tree with ast.Class/Symbol, not Instance types."""
     ast_tree = parse_model_files("BouncingBall.mo")

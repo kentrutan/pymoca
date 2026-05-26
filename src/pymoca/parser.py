@@ -244,6 +244,15 @@ def _dir_to_tree(dir_: Path, parent: ast.Class) -> None:
                 _dir_to_tree(path, dir_class)
             elif child_class := _path_to_class(path.resolve()):
                 dir_class.add_class(child_class)
+    else:
+        # dir_ is a MODELICAPATH root (no package.mo) — add its children directly to parent.
+        # Top-level bare .mo files (e.g. Complex.mo in MSL-4.0.x/) and subdirectories that
+        # are packages are all loaded as siblings under the parent tree.
+        for path in sorted(dir_.iterdir()):
+            if path.is_dir():
+                _dir_to_tree(path, parent)
+            elif child_class := _path_to_class(path.resolve()):
+                parent.add_class(child_class)
 
 
 def dir_to_tree(dir_: Path) -> ast.Tree:

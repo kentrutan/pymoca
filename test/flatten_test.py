@@ -976,7 +976,6 @@ def test_composite_lookup_via_extends():
     assert "tau_copy" in flat.symbols
 
 
-
 def test_inherited_connector_stub_via_extends():
     """Connectors inherited via extends get connector stubs so connect() resolves (MLS 9.1.3)."""
     ast_tree = parse_model_files("InheritedConnectorConnect.mo")
@@ -984,6 +983,22 @@ def test_inherited_connector_stub_via_extends():
     symbols = flat.classes["P.System"].symbols
     assert "m.flange_a.s" in symbols
     assert "m.flange_b.s" in symbols
+
+
+def test_multiple_extends_array_dim():
+    """Array dimension from a second unnamed extends resolves in the correct scope.
+
+    When a class has multiple extends clauses, each is an unnamed instance (name='').
+    The dimension parameter of the second extends must not be confused with the
+    first extends instance due to the shared empty key in parent_instance.classes.
+    """
+    instance = parse_and_instantiate_model("MultipleExtendsArrayDim.mo", "P.Both")
+    flat = tree.flatten_instance(instance)
+
+    assert "arr" in flat.symbols
+    (dim,) = flat.symbols["arr"].dimensions[0]
+    assert isinstance(dim, ast.Primary) and dim.value == 2
+
 
 if __name__ == "__main__":
     import pytest as _pytest

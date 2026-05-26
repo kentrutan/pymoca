@@ -835,12 +835,14 @@ def _apply_modifications(
                         if isinstance(sub_arg, ast.ClassModification):
                             mod.arguments += sub_arg.arguments
                         else:
-                            # Value modification - apply to symbol
-                            # Don't stomp on original that may be used elsewhere
-                            sub_arg = copy.copy(arg)
-                            sub_arg.value = copy.copy(arg.value)
-                            sub_arg.value.component = ast.ComponentRef(name="value")
-                            mod.arguments.append(sub_arg)
+                            # Value modification
+                            # Only include the value itself in modifications, not any
+                            # ClassModification siblings from the combined k(attr=v)=val form.
+                            new_arg = copy.copy(arg)
+                            new_arg.value = copy.copy(arg.value)
+                            new_arg.value.component = ast.ComponentRef(name="value")
+                            new_arg.value.modifications = [sub_arg]
+                            mod.arguments.append(new_arg)
         elif isinstance(arg.value, (ast.ShortClassDefinition, ast.ComponentClause)):
             # Redeclares are handled separately
             mod.arguments.append(arg)

@@ -2,6 +2,7 @@
 """
 Modelica AST definitions
 """
+
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import copy
@@ -666,7 +667,7 @@ class Class(Node):
         self.replaceable = False  # type: bool
         self.type = ""  # type: str
         self.comment = ""  # type: str
-        self.classes = OrderedDict()  # type: OrderedDict[str, Class]
+        self.classes = OrderedDict()  # type: dict[str, Class]
         self.symbols = OrderedDict()  # type: OrderedDict[str, Symbol]
         self.functions = OrderedDict()  # type: OrderedDict[str, Class]
         self.initial_equations = []  # type: List[Union[Equation, ForEquation]]
@@ -861,6 +862,15 @@ class Class(Node):
                 self.classes[class_name]._extend(other.classes[class_name])
             else:
                 self.classes[class_name] = other.classes[class_name]
+
+    def _update_parent_refs(self) -> None:
+        for c in self.classes.values():
+            c.parent = self
+            c._update_parent_refs()
+
+    def update_classes(self, other: dict[str, "Class"]) -> None:
+        for class_ in other.values():
+            self.add_class(class_)
 
     @property
     def root(self):
@@ -1152,6 +1162,14 @@ class Tree(Class):
         ),
     }
 
+    # Predefined enumeration types per MLS 4.8.4; maps name → tuple of literal names
+    BUILTIN_ENUM_TYPES = {
+        "StateSelect": ("never", "avoid", "default", "prefer", "always"),
+    }
+
+    # Predefined opaque types (no attributes/literals); MLS 16.2 Clock
+    BUILTIN_OPAQUE_TYPES = frozenset({"Clock"})
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.type = "package"
@@ -1165,18 +1183,28 @@ class Tree(Class):
             new_symbol.parent = type_class
             type_class.symbols[name] = new_symbol
             self.classes[name] = type_class
+        for name, literals in self.BUILTIN_ENUM_TYPES.items():
+            type_class = Class(name=name, type="type", parent=self)
+            for literal in literals:
+                enum_sym = Symbol(
+                    name=literal,
+                    type=ComponentRef(name=name),
+                    prefixes=["constant"],
+                    class_modification=ClassModification(),
+                )
+                enum_sym.parent = type_class
+                type_class.symbols[literal] = enum_sym
+            self.classes[name] = type_class
+        for name in self.BUILTIN_OPAQUE_TYPES:
+            type_class = Class(name=name, type="type", parent=self)
+            self.classes[name] = type_class
 
     def extend(self, other: "Tree") -> None:
         self._extend(other)
         self.update_parent_refs()
 
-    def _update_parent_refs(self, parent: Class) -> None:
-        for c in parent.classes.values():
-            c.parent = parent
-            self._update_parent_refs(c)
-
     def update_parent_refs(self) -> None:
-        self._update_parent_refs(self)
+        self._update_parent_refs()
 
     def __repr__(self):
         return "{}(classes={!r})".format(type(self).__name__, self.classes)

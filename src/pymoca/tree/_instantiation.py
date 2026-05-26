@@ -656,6 +656,14 @@ def _instantiate_symbol(
     if symbol.name in InstanceTree.BUILTIN_TYPES:
         symbol.instantiation_state = ast.InstantiationState.FULL
         return
+    # Enum constants whose type is the enum class they live in would cause
+    # infinite recursion; skip type instantiation, leaving type as ComponentRef.
+    # Use BUILTIN_ENUM_TYPES until Class.enumeration and is_enumeration are defined.
+    if "constant" in symbol.prefixes and (
+        parent_instance.name in ast.Tree.BUILTIN_ENUM_TYPES
+    ):
+        symbol.instantiation_state = ast.InstantiationState.FULL
+        return
 
     modification_environment = symbol.modification_environment
     _apply_redeclares(

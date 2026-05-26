@@ -587,6 +587,32 @@ def test_parse_unimplemented_class_spec_enum():
         parser.parse("type Resolution = enumeration(a, b, c);")
 
 
+def test_modelicapath_root_without_package_mo(tmp_path):
+    """A MODELICAPATH entry without package.mo has its children loaded directly.
+
+    MSL-4.0.x/ has no package.mo but contains Modelica/, ModelicaServices/, Complex.mo.
+    Passing the parent directory should expose all three as top-level classes.
+    """
+    # Build a minimal MODELICAPATH root: no package.mo, two sub-packages, one bare .mo
+    root = tmp_path / "msl_root"
+    root.mkdir()
+
+    pkg_a = root / "PkgA"
+    pkg_a.mkdir()
+    (pkg_a / "package.mo").write_text("package PkgA\nend PkgA;")
+
+    pkg_b = root / "PkgB"
+    pkg_b.mkdir()
+    (pkg_b / "package.mo").write_text("package PkgB\nend PkgB;")
+
+    (root / "Standalone.mo").write_text("model Standalone\nend Standalone;")
+
+    stub_tree = parser.modelicapath_to_tree(dirs=[str(root)])
+    assert "PkgA" in stub_tree.classes
+    assert "PkgB" in stub_tree.classes
+    assert "Standalone" in stub_tree.classes
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

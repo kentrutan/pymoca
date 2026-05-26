@@ -484,6 +484,19 @@ def test_redeclare_inherited_modifier_preserved():
     assert flat.symbols["src.offset"].value == 1.0
 
 
+def test_redeclare_qualified_type_name():
+    """Redeclare with a qualified (dotted) type name resolves the full path.
+
+    When the redeclare type is a composite name like Inner.Concrete, lookup
+    must traverse the full ComponentRef, not just the first segment.
+    """
+    instance = parse_and_instantiate_model("RedeclareQualifiedType.mo", "P.User")
+    flat = tree.flatten_instance(instance)
+
+    assert "src.offset" in flat.symbols
+    assert flat.symbols["src.offset"].value == 1.0
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

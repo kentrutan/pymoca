@@ -1182,6 +1182,7 @@ def _resolve_name(
             scope.parent_instance,
             guard=guard,
             opts=opts,
+            update_parent_instance=False,
         )
 
     found = _find_name(

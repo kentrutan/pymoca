@@ -945,6 +945,37 @@ def test_builtin_alias_final_inner_outer_propagated():
     assert flat.symbols["z"].outer is True
 
 
+def test_constant_in_modification_scope():
+    """Constant used as modification value in its declaring class resolves across extends.
+
+    PartialFriction declares 'constant Integer Backward = -1' and uses it in
+    'mode(final min = Backward)'.  BearingFriction extends PartialFriction.
+    Flattening GearType1 (which has a BearingFriction component) must resolve
+    Backward from the PartialFriction extends scope.
+    """
+    ast_tree = parse_model_files("ConstantInModificationScope.mo")
+    instance = tree.instantiate("GearType1", ast_tree)
+    flat = tree.flatten_instance(instance)
+    assert "bearingFriction.Backward" in flat.symbols
+    assert flat.symbols["bearingFriction.Backward"].value == -1
+    # mode.min must resolve to the Backward symbol (not stay as a raw ComponentRef)
+    assert flat.symbols["bearingFriction.mode"].min is not None
+
+
+def test_composite_lookup_via_extends():
+    """Composite reference (component.attr) resolves attr through extends-of-extends.
+
+    clutch.tau: 'tau' is not directly in Clutch — it lives in PartialCompliant,
+    which is extended by PartialCompliantWithRelativeStates, which Clutch extends.
+    The lookup must traverse the full extends chain to find tau.
+    """
+    ast_tree = parse_model_files("CompositeLookupViaExtends.mo")
+    instance = tree.instantiate("CompositeLookupViaExtends", ast_tree)
+    flat = tree.flatten_instance(instance)
+    assert "clutch.tau" in flat.symbols
+    assert "tau_copy" in flat.symbols
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

@@ -510,9 +510,13 @@ def _find_inherited(
         guard.current_extends.add(extends)
 
         if isinstance(extends, ast.InstanceClass):
-            found = _find_name(name, extends, guard, opts)
+            found = _find_name(
+                name, extends, guard, replace(opts, search_imports=False, search_parent=False)
+            )
             guard.current_extends.discard(extends)
-            return found
+            if found is not None:
+                return found
+            continue
 
         extends_scope = _find_name(extends.component, scope, guard, opts)
         if extends_scope is not None:

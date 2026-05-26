@@ -1173,6 +1173,9 @@ class Tree(Class):
         "StateSelect": ("never", "avoid", "default", "prefer", "always"),
     }
 
+    # Predefined opaque types (no attributes/literals); MLS 16.2 Clock
+    BUILTIN_OPAQUE_TYPES = frozenset({"Clock"})
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.type = "package"
@@ -1197,6 +1200,9 @@ class Tree(Class):
                 )
                 enum_sym.parent = type_class
                 type_class.symbols[literal] = enum_sym
+            self.classes[name] = type_class
+        for name in self.BUILTIN_OPAQUE_TYPES:
+            type_class = Class(name=name, type="type", parent=self)
             self.classes[name] = type_class
 
     def extend(self, other: "Tree") -> None:

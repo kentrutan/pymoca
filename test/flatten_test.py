@@ -991,6 +991,21 @@ def test_multiple_extends_array_dim():
     assert isinstance(dim, ast.Primary) and dim.value == 2
 
 
+def test_clock_builtin_type():
+    """Clock is a predefined opaque type (MLS 16.2) and must be resolvable as a base type.
+
+    connector ClockInput = input Clock triggers 'extends Clock' during instantiation.
+    Before the fix, this raised ModelicaSemanticError('Extends name Clock not found').
+    """
+    ast_tree = ast.Tree()
+    assert "Clock" in ast_tree.classes
+    assert ast_tree.classes["Clock"].type == "type"
+
+    instance = parse_and_instantiate_model("ClockBuiltin.mo", "ClockBuiltin.UsesClock")
+    flat = tree.flatten_instance(instance)
+    assert flat is not None
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

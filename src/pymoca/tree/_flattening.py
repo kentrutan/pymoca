@@ -1454,10 +1454,10 @@ def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
     Plug-compatible with legacy ``flatten(root, class_name)``.
     """
     from ._legacy import (
+        ComponentRefFlattener,
         add_variable_value_statements,
         annotate_states,
         expand_connectors,
-        flatten_component_refs,
     )
 
     # 1. Instantiate
@@ -1476,15 +1476,13 @@ def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
     #    for each connector (e.g. a.up) with __connector_type set.
     _add_connector_symbols(instance, flat_class, prefix="")
 
-    # 5. Resolve component refs in symbol attributes (e.g. value = 2 * p1 → 2 * nested.p1)
-    for sym_name, sym in list(flat_class.symbols.items()):
-        # Derive the instance prefix from the flat symbol name
-        if "." in sym_name:
-            prefix = sym_name.rsplit(".", 1)[0] + "."
-        else:
-            prefix = ""
-        flat_sym = flatten_component_refs(flat_class, sym, prefix)
-        flat_class.symbols[sym_name] = flat_sym
+    # 5. Resolve component refs in symbol attributes (e.g. value = 2 * p1 → 2 * nested.p1).
+    # Walk each symbol in-place — flat_class owns fresh Symbol objects from
+    # _instance_to_ast_class, so mutation is safe and deepcopy is unnecessary.
+    w = TreeWalker()
+    for sym_name, sym in flat_class.symbols.items():
+        prefix = sym_name.rsplit(".", 1)[0] + "." if "." in sym_name else ""
+        w.walk(ComponentRefFlattener(flat_class, prefix), sym)
 
     # 6. Post-processing (same order as legacy flatten)
     expand_connectors(flat_class)

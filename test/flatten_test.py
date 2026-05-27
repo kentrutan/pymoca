@@ -1111,6 +1111,20 @@ def test_time_in_modification():
     assert "x" in flat.symbols
 
 
+def test_encapsulated_fully_qualified_type():
+    """Inside an encapsulated class, a fully-qualified name whose first component is a
+    root-level package must still resolve (MLS §13.2.3).
+
+    Before the fix, step 7c in _find_simple_name blocked 'package' classes at the root
+    scope, so Modelica.Units.SI.Position failed with 'Type ... not found'.
+    """
+    instance = parse_and_instantiate_model(
+        "EncapsulatedFullyQualifiedType.mo", "P.EncapsulatedModel"
+    )
+    flat = tree.flatten_instance(instance)
+    assert "x" in flat.symbols
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

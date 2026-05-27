@@ -2,7 +2,8 @@
 """
 Modelica flattening — MLS 5.6.2
 
-Entry: flatten_instance(instance) → _flatten_instance()
+Entry: flatten_model(root, class_name) → ast.InstanceClass (new pipeline, steps 1+2)
+       flatten_instance(instance) → _flatten_instance()
 Adapter: flatten_to_tree(root, class_name) → ast.Tree (for backend compatibility)
 """
 
@@ -1453,6 +1454,22 @@ def _add_connector_symbols(
     # Recurse into extends instances (connectors inherited from base classes)
     for extends in instance.extends:
         _add_connector_symbols(extends, flat_class, prefix)
+
+
+def flatten_model(
+    root: ast.Tree,
+    class_name: Union[str, ast.ComponentRef],
+    *,
+    keep_connectors: bool = False,
+    evaluate_parameters: bool = False,
+) -> ast.InstanceClass:
+    """Instantiate and flatten class_name, returning the flat InstanceClass."""
+    instance = instantiate(str(class_name), root)
+    return flatten_instance(
+        instance,
+        keep_connectors=keep_connectors,
+        evaluate_parameters=evaluate_parameters,
+    )
 
 
 def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:

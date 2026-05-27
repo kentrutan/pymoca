@@ -1018,6 +1018,24 @@ def test_multiple_extends_array_dim():
     assert isinstance(dim, ast.Primary) and dim.value == 2
 
 
+def test_redeclare_inherits_modification():
+    """Redeclared replaceable whose subtype extends the original must accept
+    the original modifier (e.g. 'final m=m').
+
+    Bug: when _instantiate_class's early-return path synced instantiation_state
+    onto a stub InstanceClass (no symbols, no extends), that stub was later used
+    as 'from_class' for a new instantiation with modifications.  Because the stub
+    had empty symbols, _check_modification_targets raised 'Trying to modify symbol
+    m' even though m is a valid direct symbol of PartialPort.
+    """
+    instance = parse_and_instantiate_model("RedeclareInheritsModification.mo", "P.Example")
+    flat = tree.flatten_instance(instance)
+
+    assert "mac.port.m" in flat.symbols
+    assert "mac.port.v" in flat.symbols
+    assert "mac.port.flag" in flat.symbols
+
+
 def test_clock_builtin_type():
     """Clock is a predefined opaque type (MLS 16.2) and must be resolvable as a base type.
 

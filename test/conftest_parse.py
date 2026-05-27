@@ -133,9 +133,16 @@ def parse_and_instantiate_model(filename, class_name):
     return parse_and_instantiate(os.path.join(MODEL_DIR, filename), class_name)
 
 
-def parse_and_flatten_model(filename, class_name):
-    instance = parse_and_instantiate(os.path.join(MODEL_DIR, filename), class_name)
-    return tree.flatten_instance(instance)
+def parse_and_flatten_model(filename, class_name, *, evaluate_parameters=False):
+    full_path = os.path.join(MODEL_DIR, filename)
+    ast_tree = parser.parse_file(full_path)
+    assert ast_tree is not None, f"Failed to parse {full_path}"
+    pickled_before = pickle.dumps(ast_tree)
+    flat = tree.flatten_model(ast_tree, class_name, evaluate_parameters=evaluate_parameters)
+    assert flat is not None, f"Failed to flatten {full_path}"
+    pickled_after = pickle.dumps(ast_tree)
+    assert pickled_before == pickled_after, "AST was modified during instantiation/flattening"
+    return flat
 
 
 def parse_imports_file(pathname):

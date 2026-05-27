@@ -10,6 +10,7 @@ Adapter: flatten_to_tree(root, class_name) → ast.Tree (for backend compatibili
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import copy
+import math
 import operator
 import sys
 from collections import OrderedDict
@@ -305,13 +306,16 @@ def _resolve_dimensions(
                 ):
                     dim_list[i] = ast.Primary(value=int(resolved.value))
             elif isinstance(elem, ast.Expression):
-                result = _resolve_expression(
-                    elem,
-                    instance,
-                    flat_class,
-                    guard=guard,
-                    opts=opts,
-                )
+                try:
+                    result = _resolve_expression(
+                        elem,
+                        instance,
+                        flat_class,
+                        guard=guard,
+                        opts=opts,
+                    )
+                except (NotImplementedError, ModelicaSemanticError, NameLookupError):
+                    result = None
                 if isinstance(result, (int, float)):
                     dim_list[i] = ast.Primary(value=int(result))
 
@@ -448,11 +452,19 @@ class ExpressionEvaluator(TreeListener):
 
     TODO: Ensure expression evaluation is according to Modelica spec"""
 
-    # Unary and binary operator callables for Modelica → Python dispatch
+    # Unary and binary operator callables for Modelica → Python dispatch.
+    # Includes built-in mathematical functions that can appear as Expression operators
+    # in dimension expressions (e.g. n = div(shift, resolution)).
     unary_operator = {
         "+": operator.pos,
         "-": operator.neg,
         "not": operator.not_,
+        # Modelica built-in scalar functions (MLS §3.7.1)
+        "abs": abs,
+        "integer": math.floor,  # integer(x) = floor(x) cast to Integer (MLS §3.7.1)
+        "floor": math.floor,
+        "ceil": math.ceil,
+        "sqrt": math.sqrt,
     }
     binary_operator = {
         "+": operator.add,
@@ -468,6 +480,12 @@ class ExpressionEvaluator(TreeListener):
         ">=": operator.ge,
         "==": operator.eq,
         "<>": operator.ne,
+        # Modelica built-in integer/real functions (MLS §3.7.1)
+        "div": lambda x, y: int(math.trunc(x / y)),  # truncated integer division
+        "mod": lambda x, y: x - math.floor(x / y) * y,  # MLS mod (floor-based)
+        "rem": lambda x, y: x - int(math.trunc(x / y)) * y,  # MLS rem (truncation-based)
+        "max": max,
+        "min": min,
     }
 
     def __init__(

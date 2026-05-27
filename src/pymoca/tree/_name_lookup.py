@@ -218,11 +218,19 @@ def _find_simple_name(
         current_scope = current_scope.parent
 
     # Step 7c: If not found and we stopped at an encapsulated class,
-    # then search predefined types, functions, and operators in global scope
+    # then search predefined types, functions, operators, and packages in global scope.
+    # Encapsulated classes may not import names from enclosing classes, but they may still
+    # use globally-rooted (fully-qualified) composite names such as Modelica.Units.SI.Position
+    # whose first component is a root-level package (MLS §13.2.3).
     # TODO: Add predefined functions and operators to global scope before this
     if found is None and current_scope.encapsulated:
         found = _find_local(name, scope.root)
-        if not isinstance(found, ast.Class) or found.type not in ("type", "function", "operator"):
+        if not isinstance(found, ast.Class) or found.type not in (
+            "type",
+            "function",
+            "operator",
+            "package",
+        ):
             found = None
 
     # Step 7d: If name matches a variable (a.k.a. component, symbol) in an enclosing class,

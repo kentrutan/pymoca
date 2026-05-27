@@ -107,11 +107,10 @@ def discover_compliance_files(subdirectory):
 
 # Known failures: model_name -> xfail reason
 #
-# Global name lookup: leading-dot syntax is now in grammar but these still fail
+# Global name lookup: leading-dot syntax is now in grammar but some still fail
 _GLOBAL_MODELS = [
     "ModelicaCompliance.Scoping.NameLookup.Global." + n
     for n in [
-        "EncapsulatedGlobalLookup",
         "GlobalPartialClass",
     ]
 ]

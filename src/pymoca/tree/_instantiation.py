@@ -168,9 +168,25 @@ def _instantiate_class(
         return new_class
 
     # 2.1 Partially instantiate local classes, symbols, and extends
+    # Use the parsed ast_ref as the symbol/extends source when orig_class is an
+    # InstanceClass that hasn't been fully built yet (state < FULL), *or* when
+    # it is a state-synced stub: _instantiate_class's early-return path (line ~154)
+    # propagates instantiation_state onto the orig_class that was passed in, but
+    # only syncs the state scalar — it does NOT copy over symbols or extends.  A stub
+    # with state=FULL but empty symbols/extends would cause from_class.symbols to be
+    # empty, so no symbols would reach new_class and _check_modification_targets
+    # would wrongly reject modifications that target inherited symbols (e.g. "m" in
+    # PartialThermalPortInductionMachines).  Fall back to ast_ref in this case.
+    _orig_is_stub = (
+        isinstance(orig_class, ast.InstanceClass)
+        and orig_class.instantiation_state >= ast.InstantiationState.FULL
+        and not orig_class.symbols
+        and not orig_class.extends
+    )
     if (
         isinstance(orig_class, ast.InstanceClass)
         and orig_class.instantiation_state < ast.InstantiationState.FULL
+        or _orig_is_stub
         or orig_class.name in InstanceTree.BUILTIN_TYPES
     ):
         from_class = new_class.ast_ref

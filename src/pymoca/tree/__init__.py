@@ -16,7 +16,7 @@ instantiation/flattening pipeline instead of the legacy one.
 """
 
 from dataclasses import dataclass, field
-from typing import Set
+from typing import Optional, Set
 
 from .. import ast
 
@@ -67,6 +67,16 @@ class RecursionGuard:
 
     current_instances: Set[ast.InstanceClass] = field(default_factory=set)
     current_extends: Set = field(default_factory=set)
+    # Memoization cache for _find_inherited results.
+    # Key: (name_str, id(scope)) — stable within a single flatten() call because
+    # extends lists are populated at PARTIAL instantiation and don't grow after that.
+    # Both "found" and "not found" (None) results are cached.
+    _find_inherited_cache: dict = field(default_factory=dict)
+    # Cache for type-class instantiation in _instantiate_symbol where modification_environment
+    # is empty.  Key: id(symbol_type) — stable because AST classes are kept alive for the
+    # entire flatten() call.  Value: the fully-instantiated type InstanceClass.
+    # Cache hits are shallow-cloned so each symbol gets its own parent_instance slot.
+    _symbol_type_cache: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -82,6 +92,10 @@ class LookupOptions:
     search_inherited: bool = True
     check_encapsulated: bool = True
     evaluate_parameters: bool = False
+    # Mutable set shared by reference across a single inherited-scope traversal to prevent
+    # exponential re-visits of the same scope in diamond inheritance hierarchies.
+    # Keyed by (name, id(scope)).  Not included in equality/hash.
+    _searched_extends: Optional[set] = field(default=None, compare=False, hash=False, repr=False)
 
 
 from ._listener import (  # noqa: E402,F401,I100,I202

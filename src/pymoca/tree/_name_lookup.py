@@ -273,7 +273,14 @@ def _find_rest_of_name(
                         )
 
     elif isinstance(first, ast.Class):
-        if not opts.instantiate_in_place:
+        # Don't call _flatten_first_and_find_rest when first is a package that is currently
+        # being instantiated — doing so would cause infinite recursion through extends-class
+        # name lookup that re-enters this same scope (MLS 5.3.2 bullet 4).
+        _currently_instantiating = first.type == "package" and (
+            first in guard.current_instances
+            or any(inst.ast_ref is first for inst in guard.current_instances)
+        )
+        if not opts.instantiate_in_place and not _currently_instantiating:
             found = _flatten_first_and_find_rest(
                 first, rest_of_name, guard, replace(opts, instantiate_in_place=True)
             )
@@ -495,6 +502,9 @@ def _find_iteration_variable(name: str, scope: ast.Class) -> Optional[ast.Symbol
     return None
 
 
+_SENTINEL = object()
+
+
 def _find_inherited(
     name: str,
     scope: ast.Class,
@@ -502,6 +512,34 @@ def _find_inherited(
     opts: LookupOptions,
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Find simple name in inherited classes"""
+    # Fast path: nothing to inherit from (UNINSTANTIATED InstanceClass has empty extends)
+    if not scope.extends:
+        return None
+
+    # Cross-call memoization: the extends chain is populated at PARTIAL instantiation
+    # and doesn't grow after that, so (name, id(scope)) results are stable.
+    # ast.Class scopes are immutable AST nodes and are also safe to cache.
+    # This prevents O(N_lookups × N_extends_depth) work when the same scope appears
+    # in the enclosing chain of many different symbol-type lookups.
+    cacheable = (
+        not isinstance(scope, ast.InstanceClass)
+        or scope.instantiation_state >= ast.InstantiationState.PARTIAL
+    )
+    if cacheable:
+        cache_key = (name, id(scope))
+        cached = guard._find_inherited_cache.get(cache_key, _SENTINEL)
+        if cached is not _SENTINEL:
+            return cached
+
+    # Initialize the per-lookup deduplication set on the first call in a chain.
+    # Keyed by (name, id(extends_scope)) so the same class is never searched twice for the
+    # same name via different diamond-inheritance paths, reducing O(N^D) to O(N*D).
+    # The set is a mutable reference so all recursive calls in the same chain share it.
+    if opts._searched_extends is None:
+        opts = replace(opts, _searched_extends=set())
+    searched = opts._searched_extends
+
+    result = None
     for extends in scope.extends:
         # Avoid infinite recursion by keeping track of where we have been with current_extends
         # A common case is when multiple classes in the same hierarchy extend the same class
@@ -511,19 +549,38 @@ def _find_inherited(
         guard.current_extends.add(extends)
 
         if isinstance(extends, ast.InstanceClass):
+            key = (name, id(extends))
+            if key in searched:
+                guard.current_extends.discard(extends)
+                continue
+            searched.add(key)
             found = _find_name(
                 name, extends, guard, replace(opts, search_imports=False, search_parent=False)
             )
             guard.current_extends.discard(extends)
             if found is not None:
-                return found
+                result = found
+                break
             continue
 
-        extends_scope = _find_name(extends.component, scope, guard, opts)
+        # Resolve the extends class name using lexical (non-inherited) lookup only.
+        # Inherited lookup is not needed for base class name resolution and would cause
+        # exponential recursion through nested extends chains.
+        extends_scope = _find_name(
+            extends.component,
+            scope,
+            guard,
+            replace(opts, search_inherited=False, _searched_extends=None),
+        )
         if extends_scope is not None:
             if isinstance(extends_scope, ast.Symbol):
                 guard.current_extends.discard(extends)
                 continue
+            key = (name, id(extends_scope))
+            if key in searched:
+                guard.current_extends.discard(extends)
+                continue
+            searched.add(key)
             found = _find_name(
                 name,
                 extends_scope,
@@ -532,10 +589,14 @@ def _find_inherited(
             )
             guard.current_extends.discard(extends)
             if found is not None:
-                return found
+                result = found
+                break
         else:
             guard.current_extends.discard(extends)
-    return None
+
+    if cacheable:
+        guard._find_inherited_cache[cache_key] = result
+    return result
 
 
 def _find_imported(

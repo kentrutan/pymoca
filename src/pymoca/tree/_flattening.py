@@ -1174,7 +1174,10 @@ def _resolve_name(
                 f"Unable to find instance for scope {scope.full_name} from {flat_class.full_name}"
             )
 
-    # Step C: Fully instantiate the scope class if needed
+    # Step C: Fully instantiate the scope class if needed.
+    # Unnamed extends (name='') must NOT be cached to avoid collision when a class
+    # has multiple unnamed extends — two different extends would share the same key.
+    # Named scopes are cached (update_parent_instance=True) for performance.
     if scope.instantiation_state < ast.InstantiationState.FULL:
         scope = _instantiate_class(
             scope,
@@ -1182,7 +1185,7 @@ def _resolve_name(
             scope.parent_instance,
             guard=guard,
             opts=opts,
-            update_parent_instance=False,
+            update_parent_instance=bool(scope.name),
         )
 
     found = _find_name(

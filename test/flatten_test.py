@@ -3,8 +3,11 @@
 Tests for tree.flatten_instance() / tree.flatten().
 """
 
+import pickle
+
 from conftest_parse import (
     _flush,
+    parse_and_flatten_model,
     parse_and_instantiate_model,
     parse_model_files,
 )
@@ -17,48 +20,27 @@ import pytest
 
 
 def test_aircraft():
-    ast_tree = parse_model_files("Aircraft.mo")
-    print("AST TREE\n", ast_tree)
-    instance = tree.instantiate("Aircraft", ast_tree)
-    flat_tree = tree.flatten_instance(instance)
-    print("AST TREE FLAT\n", flat_tree)
+    parse_and_flatten_model("Aircraft.mo", "Aircraft")
     _flush()
 
 
 def test_bouncing_ball():
-    ast_tree = parse_model_files("BouncingBall.mo")
-    print("AST TREE\n", ast_tree)
-    instance = tree.instantiate("BouncingBall", ast_tree)
-    flat_tree = tree.flatten_instance(instance)
-    print(flat_tree)
-    print("AST TREE FLAT\n", flat_tree)
+    parse_and_flatten_model("BouncingBall.mo", "BouncingBall")
     _flush()
 
 
 def test_estimator():
-    ast_tree = parse_model_files("./Estimator.mo")
-    print("AST TREE\n", ast_tree)
-    instance = tree.instantiate("Estimator", ast_tree)
-    flat_tree = tree.flatten_instance(instance)
-    print("AST TREE FLAT\n", flat_tree)
+    parse_and_flatten_model("Estimator.mo", "Estimator")
     _flush()
 
 
 def test_spring():
-    ast_tree = parse_model_files("Spring.mo")
-    print("AST TREE\n", ast_tree)
-    instance = tree.instantiate("Spring", ast_tree)
-    flat_tree = tree.flatten_instance(instance)
-    print("AST TREE FLAT\n", flat_tree)
+    parse_and_flatten_model("Spring.mo", "Spring")
     _flush()
 
 
 def test_duplicate_state():
-    ast_tree = parse_model_files("DuplicateState.mo")
-    print("AST TREE\n", ast_tree)
-    instance = tree.instantiate("DuplicateState", ast_tree)
-    flat_tree = tree.flatten_instance(instance)
-    print("AST TREE FLAT\n", flat_tree)
+    parse_and_flatten_model("DuplicateState.mo", "DuplicateState")
     _flush()
 
 
@@ -99,8 +81,7 @@ def test_function_pull():
 
 def test_flattening_inheritance_tree():
     """Test flattening multi-level class hierarchy with modifications but no equations"""
-    instance = parse_and_instantiate_model("InstantiationTree.mo", "TreeModel.Tree")
-    flat_tree = tree.flatten_instance(instance)
+    flat_tree = parse_and_flatten_model("InstantiationTree.mo", "TreeModel.Tree")
 
     # Non-value attribute modifications stay on the symbol
     expect_attrs = (
@@ -132,8 +113,7 @@ def test_flattening_inheritance_tree():
 
 def test_flattening_spring_system():
     """Test flattening of a simple class hierarchy with equations"""
-    instance = parse_and_instantiate_model("SpringSystemExample.mo", "Example.SpringSystem")
-    flat_tree = tree.flatten_instance(instance)
+    flat_tree = parse_and_flatten_model("SpringSystemExample.mo", "Example.SpringSystem")
     for name in ("spring.x", "spring.f", "damper.v", "damper.f", "damper.c"):
         assert name in flat_tree.symbols, f"Name not flattened: {name}"
 
@@ -143,8 +123,7 @@ def test_flattening_spring_system():
 
 def test_equation_ref_resolution_bouncing_ball():
     """Verify equation ComponentRefs are resolved to flat names"""
-    instance = parse_and_instantiate_model("BouncingBall.mo", "BouncingBall")
-    flat_tree = tree.flatten_instance(instance)
+    flat_tree = parse_and_flatten_model("BouncingBall.mo", "BouncingBall")
 
     # BouncingBall has: der(height) = velocity; der(velocity) = -g;
     assert len(flat_tree.equations) >= 2
@@ -166,8 +145,7 @@ def test_equation_ref_resolution_bouncing_ball():
 
 def test_equation_ref_resolution_spring_system():
     """Verify cross-component equation refs are resolved with prefixes"""
-    instance = parse_and_instantiate_model("SpringSystemExample.mo", "Example.SpringSystem")
-    flat_tree = tree.flatten_instance(instance)
+    flat_tree = parse_and_flatten_model("SpringSystemExample.mo", "Example.SpringSystem")
 
     ref_names = set()
     _collect_component_ref_names(flat_tree.equations, ref_names)
@@ -191,8 +169,7 @@ def test_equation_ref_resolution_spring_system():
 
 def test_equation_ref_resolution_nested_component():
     """Verify equations from nested components get correct prefix"""
-    instance = parse_and_instantiate_model("SpringSystemExample.mo", "Example.SpringSystem")
-    flat_tree = tree.flatten_instance(instance)
+    flat_tree = parse_and_flatten_model("SpringSystemExample.mo", "Example.SpringSystem")
 
     # Spring's equation is f = -k*x. After flattening under prefix "spring",
     # this should become spring.f = -spring.k * spring.x
@@ -243,8 +220,7 @@ def _assert_no_child_refs(nodes):
 
 def test_flattening_modification_rhs_evaluation():
     """Test for correct scope and evaluation of right-hand-side values"""
-    instance = parse_and_instantiate_model("ModificationScopeFlatten.mo", "B")
-    flat_tree = tree.flatten_instance(instance)
+    flat_tree = parse_and_flatten_model("ModificationScopeFlatten.mo", "B")
     # Check that the symbol value set by modifications have the right value and scope
     expect = (  # symbol_name, value_type, value, value_parent_name
         ("R", "literal", 3.0, None),  # Literal has no value parent
@@ -278,8 +254,7 @@ def test_flattening_modification_rhs_evaluation():
 
 def test_flattening_modification_rhs_omc_simulation():
     """Verify folded parameter values match OMC 1.22.0 simulation results."""
-    instance = parse_and_instantiate_model("ModificationScopeFlatten.mo", "B")
-    flat = tree.flatten_instance(instance, evaluate_parameters=True)
+    flat = parse_and_flatten_model("ModificationScopeFlatten.mo", "B", evaluate_parameters=True)
     expected = {
         "R": 3.0,
         "a.R": 4.0,
@@ -303,9 +278,7 @@ def test_flattening_modification_rhs_omc_simulation():
 
 
 def test_extends_order():
-    instance = parse_and_instantiate_model("ExtendsOrder.mo", "P.M")
-
-    flat_tree = tree.flatten_instance(instance)
+    flat_tree = parse_and_flatten_model("ExtendsOrder.mo", "P.M")
 
     assert flat_tree.symbols["at.m"].value == 0.0
 
@@ -371,9 +344,7 @@ def test_extends_modification_expression():
     evaluated scalar (2 * -2.0 = -4.0) or an ast.Expression whose inner
     ComponentRef names "e.H_b" relative to MainModelExpr.
     """
-    instance = parse_and_instantiate_model("ExtendsModification.mo", "MainModelExpr")
-
-    flat_tree = tree.flatten_instance(instance)
+    flat_tree = parse_and_flatten_model("ExtendsModification.mo", "MainModelExpr")
 
     min_val = flat_tree.symbols["e.HQ.H"].min
     if isinstance(min_val, (int, float)):
@@ -406,13 +377,11 @@ def test_custom_units():
 
 def test_modification_sub_attr_and_value():
     """Combined k(unit="V/A")=1 form sets both the sub-attribute and the value."""
-    instance = parse_and_instantiate_model("ModificationSubAttrAndValue.mo", "M")
-    flat_tree = tree.flatten_instance(instance)
+    flat_tree = parse_and_flatten_model("ModificationSubAttrAndValue.mo", "M")
     assert flat_tree.symbols["k"].unit == "V/A"
     assert flat_tree.symbols["k"].value == 1.0
 
-    instance2 = parse_and_instantiate_model("ModificationSubAttrAndValue.mo", "Outer")
-    flat_tree2 = tree.flatten_instance(instance2)
+    flat_tree2 = parse_and_flatten_model("ModificationSubAttrAndValue.mo", "Outer")
     assert flat_tree2.symbols["m.k"].unit == "m/s"
     assert flat_tree2.symbols["m.k"].value == 2.0
 
@@ -541,8 +510,7 @@ def test_extend_from_self():
 
 def test_connect_equations_hq():
     """Test connect equation generation with flow/non-flow connectors."""
-    instance = parse_and_instantiate_model("ConnectorHQ.mo", "System")
-    flat = tree.flatten_instance(instance)
+    flat = parse_and_flatten_model("ConnectorHQ.mo", "System")
 
     # All connector sub-variables present
     for name in (
@@ -602,8 +570,7 @@ def test_connect_equations_hq():
 
 def test_connect_equations_simple_circuit():
     """Test connect equation generation with nested connectors via extends."""
-    instance = parse_and_instantiate_model("SimpleCircuit.mo", "SimpleCircuit")
-    flat = tree.flatten_instance(instance)
+    flat = parse_and_flatten_model("SimpleCircuit.mo", "SimpleCircuit")
 
     # Connector sub-variables present (Pin has v and flow i)
     for comp in ("R1", "C", "R2", "L", "AC"):
@@ -625,8 +592,7 @@ def test_connect_equations_simple_circuit():
 
 def test_connect_equations_channel():
     """Test connect in a simple two-connector model."""
-    instance = parse_and_instantiate_model("ConnectorHQ.mo", "Channel")
-    flat = tree.flatten_instance(instance)
+    flat = parse_and_flatten_model("ConnectorHQ.mo", "Channel")
 
     # Symbols
     assert "up.H" in flat.symbols
@@ -649,8 +615,7 @@ def test_connect_equations_param_index():
     Modelica allows connect(a[n], b) where n is a parameter.  The connector-equation
     generator must handle ComponentRef indices, not just Primary (literal) ones.
     """
-    instance = parse_and_instantiate_model("ArrayConnectParam.mo", "ArrayConnectParam")
-    flat = tree.flatten_instance(instance)
+    flat = parse_and_flatten_model("ArrayConnectParam.mo", "ArrayConnectParam")
     # Connector sub-variables exist
     assert "a.v" in flat.symbols
     assert "a.i" in flat.symbols
@@ -703,8 +668,12 @@ def _is_flow_sum_equation(eq, var_names):
 def _flatten_inline(txt, model_name):
     """Parse inline Modelica, instantiate, and flatten. Returns the flat InstanceClass."""
     ast_tree = parser.parse(txt)
+    pickled_before = pickle.dumps(ast_tree)
     instance = tree.instantiate(model_name, ast_tree)
-    return tree.flatten_instance(instance)
+    flat = tree.flatten_instance(instance)
+    pickled_after = pickle.dumps(ast_tree)
+    assert pickled_before == pickled_after, "AST was modified during instantiation/flattening"
+    return flat
 
 
 def test_expression_evaluator_via_modifications_binary():
@@ -971,9 +940,7 @@ def test_constant_in_modification_scope():
     Flattening GearType1 (which has a BearingFriction component) must resolve
     Backward from the PartialFriction extends scope.
     """
-    ast_tree = parse_model_files("ConstantInModificationScope.mo")
-    instance = tree.instantiate("GearType1", ast_tree)
-    flat = tree.flatten_instance(instance)
+    flat = parse_and_flatten_model("ConstantInModificationScope.mo", "GearType1")
     assert "bearingFriction.Backward" in flat.symbols
     assert flat.symbols["bearingFriction.Backward"].value == -1
     # mode.min must resolve to the Backward symbol (not stay as a raw ComponentRef)
@@ -987,9 +954,7 @@ def test_composite_lookup_via_extends():
     which is extended by PartialCompliantWithRelativeStates, which Clutch extends.
     The lookup must traverse the full extends chain to find tau.
     """
-    ast_tree = parse_model_files("CompositeLookupViaExtends.mo")
-    instance = tree.instantiate("CompositeLookupViaExtends", ast_tree)
-    flat = tree.flatten_instance(instance)
+    flat = parse_and_flatten_model("CompositeLookupViaExtends.mo", "CompositeLookupViaExtends")
     assert "clutch.tau" in flat.symbols
     assert "tau_copy" in flat.symbols
 
@@ -1010,8 +975,7 @@ def test_multiple_extends_array_dim():
     The dimension parameter of the second extends must not be confused with the
     first extends instance due to the shared empty key in parent_instance.classes.
     """
-    instance = parse_and_instantiate_model("MultipleExtendsArrayDim.mo", "P.Both")
-    flat = tree.flatten_instance(instance)
+    flat = parse_and_flatten_model("MultipleExtendsArrayDim.mo", "P.Both")
 
     assert "arr" in flat.symbols
     (dim,) = flat.symbols["arr"].dimensions[0]
@@ -1028,8 +992,7 @@ def test_redeclare_inherits_modification():
     had empty symbols, _check_modification_targets raised 'Trying to modify symbol
     m' even though m is a valid direct symbol of PartialPort.
     """
-    instance = parse_and_instantiate_model("RedeclareInheritsModification.mo", "P.Example")
-    flat = tree.flatten_instance(instance)
+    flat = parse_and_flatten_model("RedeclareInheritsModification.mo", "P.Example")
 
     assert "mac.port.m" in flat.symbols
     assert "mac.port.v" in flat.symbols
@@ -1046,9 +1009,7 @@ def test_clock_builtin_type():
     assert "Clock" in ast_tree.classes
     assert ast_tree.classes["Clock"].type == "type"
 
-    instance = parse_and_instantiate_model("ClockBuiltin.mo", "ClockBuiltin.UsesClock")
-    flat = tree.flatten_instance(instance)
-    assert flat is not None
+    assert parse_and_flatten_model("ClockBuiltin.mo", "ClockBuiltin.UsesClock") is not None
 
 
 if __name__ == "__main__":

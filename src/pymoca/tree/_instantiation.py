@@ -147,6 +147,11 @@ def _instantiate_class(
         # Class already at least partially instantiated and no modifications
         new_class = parent_instance.classes[orig_class.name]
         if new_class.instantiation_state >= target_state:
+            # Sync state onto orig_class so _instantiate_class_if_needed_for_lookup
+            # won't re-trigger for stale InstanceClass objects that share the same
+            # parent_instance but were not updated in-place (e.g. lexical-parent stubs).
+            if orig_class is not new_class:
+                orig_class.instantiation_state = new_class.instantiation_state
             return new_class
 
     guard.current_instances.add(new_class)
@@ -653,6 +658,9 @@ def _instantiate_symbol(
     assert isinstance(symbol, ast.InstanceSymbol)
     assert isinstance(parent_instance, ast.InstanceClass)
 
+    if symbol.instantiation_state >= ast.InstantiationState.FULL:
+        return
+
     if symbol.name in InstanceTree.BUILTIN_TYPES:
         symbol.instantiation_state = ast.InstantiationState.FULL
         return
@@ -689,6 +697,24 @@ def _instantiate_symbol(
     else:
         symbol_type = symbol.type
 
+    # Cache type instantiation for unmodified types: the same logical type class
+    # (e.g., Temperature) is fully instantiated once per flatten() operation and
+    # shallow-cloned for each subsequent symbol so each symbol gets its own
+    # parent_instance slot without repeating the full instantiation work.
+    # Key by the object itself (not id()) so the dict holds a strong reference and
+    # prevents CPython from reusing the address for a different object mid-instantiation.
+    type_cache_key = None
+    if not modification_environment.arguments:
+        type_cache_key = symbol_type
+        cached_type = guard._symbol_type_cache.get(type_cache_key)
+        if cached_type is not None:
+            cloned = copy.copy(cached_type)
+            symbol.type = cloned
+            _copy_symbol_contents(symbol)
+            symbol.type.parent_instance = symbol
+            symbol.instantiation_state = ast.InstantiationState.FULL
+            return
+
     symbol.type = _instantiate_class(
         symbol_type,
         modification_environment,
@@ -705,6 +731,9 @@ def _instantiate_symbol(
     symbol.type.parent_instance = symbol
 
     symbol.instantiation_state = ast.InstantiationState.FULL
+
+    if type_cache_key is not None:
+        guard._symbol_type_cache[type_cache_key] = symbol.type
 
 
 def _instantiate_partially(
@@ -921,7 +950,10 @@ def _apply_redeclares(
         redeclare_name,
         scope_class,
         guard,
-        LookupOptions(instantiate_in_place=opts.instantiate_in_place),
+        # Type class lookup: instantiate_in_place=False avoids triggering cascading
+        # partial instantiation of the entire package hierarchy.  The ast_ref fallback
+        # in _find_name covers uninstantiated InstanceClass scopes.
+        LookupOptions(instantiate_in_place=False),
     )
 
     if redeclare_class is None:
@@ -1002,7 +1034,7 @@ def _apply_redeclares(
             element.type,
             element.parent_instance,
             guard,
-            LookupOptions(instantiate_in_place=opts.instantiate_in_place),
+            LookupOptions(instantiate_in_place=False),
         )
         if resolved is None:
             raise ModelicaSemanticError(

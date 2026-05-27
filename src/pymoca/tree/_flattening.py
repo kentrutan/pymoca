@@ -1487,11 +1487,21 @@ def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
     _add_connector_symbols(instance, flat_class, prefix="")
 
     # 5. Resolve component refs in symbol attributes (e.g. value = 2 * p1 → 2 * nested.p1).
-    # Walk each symbol in-place — flat_class owns fresh Symbol objects from
-    # _instance_to_ast_class, so mutation is safe and deepcopy is unnecessary.
+    # Symbols are fresh objects from _instance_to_ast_class, but their value attributes
+    # (start, min, max, value, …) come from _to_ast_value which returns ComponentRef /
+    # Expression / Array objects BY REFERENCE from the parsed AST.  ComponentRefFlattener
+    # mutates those objects in-place, which would corrupt the shared parsed AST and break
+    # subsequent flattenings of other models.  Deepcopy only the non-trivial attrs before
+    # walking; Primary / scalar values are immutable and safe to share.
     w = TreeWalker()
     for sym_name, sym in flat_class.symbols.items():
         prefix = sym_name.rsplit(".", 1)[0] + "." if "." in sym_name else ""
+        for attr in _VALUE_ATTRS:
+            val = getattr(sym, attr, None)
+            if not isinstance(val, (ast.Primary, type(None), int, float, bool, str)):
+                setattr(sym, attr, copy.deepcopy(val))
+        if sym.dimensions:
+            sym.dimensions = copy.deepcopy(sym.dimensions)
         w.walk(ComponentRefFlattener(flat_class, prefix), sym)
 
     # 6. Post-processing (same order as legacy flatten)

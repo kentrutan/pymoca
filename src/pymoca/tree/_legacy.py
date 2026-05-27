@@ -843,7 +843,7 @@ def expand_connectors(node: ast.Class) -> None:
                         left_key = (
                             left_name,
                             tuple(
-                                i.value
+                                i.value if isinstance(i, ast.Primary) else str(i)
                                 for index_array in left.indices
                                 for i in index_array
                                 if i is not None
@@ -853,7 +853,7 @@ def expand_connectors(node: ast.Class) -> None:
                         right_key = (
                             right_name,
                             tuple(
-                                i.value
+                                i.value if isinstance(i, ast.Primary) else str(i)
                                 for index_array in right.indices
                                 for i in index_array
                                 if i is not None

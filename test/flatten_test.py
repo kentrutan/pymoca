@@ -1125,6 +1125,20 @@ def test_encapsulated_fully_qualified_type():
     assert "x" in flat.symbols
 
 
+def test_div_builtin_in_dimension():
+    """div() built-in used in a parameter dimension expression must evaluate correctly.
+
+    Before the fix, div was absent from ExpressionEvaluator.binary_operator, so
+    'n = div(shift, resolution)' stayed as an unevaluated Expression.  The downstream
+    dimension 'buf[n+1]' then tried Python arithmetic on the Expression value and raised
+    ModelicaSemanticError('Unable to evaluate expression: ...')
+    """
+    instance = parse_and_instantiate_model("DivInDimension.mo", "P.Example")
+    flat = tree.flatten_instance(instance)
+    # buf is a 2-element array: div(2,2)+1 = 2; flattened as b.buf[1] and b.buf[2]
+    assert "b.buf[1]" in flat.symbols or "b.buf" in flat.symbols
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

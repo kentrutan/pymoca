@@ -643,6 +643,24 @@ def test_connect_equations_channel():
     assert has_flow_eq, "Expected flow sum-to-zero for up.Q + down.Q"
 
 
+def test_connect_equations_param_index():
+    """Test that connect with a parameter (non-literal) array index does not crash.
+
+    Modelica allows connect(a[n], b) where n is a parameter.  The connector-equation
+    generator must handle ComponentRef indices, not just Primary (literal) ones.
+    """
+    instance = parse_and_instantiate_model("ArrayConnectParam.mo", "ArrayConnectParam")
+    flat = tree.flatten_instance(instance)
+    # Connector sub-variables exist
+    assert "a.v" in flat.symbols
+    assert "a.i" in flat.symbols
+    assert "b.v" in flat.symbols
+    assert "b.i" in flat.symbols
+    # No unexpanded ConnectClauses remain
+    for eq in flat.equations:
+        assert not isinstance(eq, ast.ConnectClause), f"Unexpanded ConnectClause: {eq!r}"
+
+
 def _equation_strings(equations):
     """Extract (left_name, '=', right_name) tuples from simple equality equations."""
     result = set()

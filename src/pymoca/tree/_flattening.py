@@ -863,7 +863,7 @@ def _generate_connect_equations(flat_class: ast.InstanceClass):
                 left_key = (
                     l_name,
                     tuple(
-                        i.value
+                        i.value if isinstance(i, ast.Primary) else str(i)
                         for index_array in left.indices
                         for i in index_array
                         if i is not None
@@ -873,7 +873,7 @@ def _generate_connect_equations(flat_class: ast.InstanceClass):
                 right_key = (
                     r_name,
                     tuple(
-                        i.value
+                        i.value if isinstance(i, ast.Primary) else str(i)
                         for index_array in right.indices
                         for i in index_array
                         if i is not None

@@ -164,6 +164,11 @@ def _flatten_instance(
         else:
             flat_name = name
         flat_symbol = copy.copy(symbol)
+        # dimensions inner lists are shared with the parsed AST via
+        # _copy_symbol_contents; _resolve_dimensions mutates dim_list[i] in-place,
+        # so make fresh inner lists to avoid corrupting the shared parsed AST.
+        if flat_symbol.dimensions:
+            flat_symbol.dimensions = [list(dl) for dl in flat_symbol.dimensions]
         # Strip input/output prefixes from nested symbols — these are
         # connector-local causality markers (MLS 9.1.1) and should not
         # propagate to the parent model's flattened namespace.
@@ -1480,13 +1485,7 @@ def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
     # 3. Convert InstanceClass → ast.Class
     flat_class = _instance_to_ast_class(flat_instance)
 
-    # 4. Add connector-level symbols with __connector_type for expand_connectors.
-    #    The new flattening recurses into connectors producing leaf symbols (e.g.
-    #    a.up.H, a.up.Q) but expand_connectors expects an intermediate symbol
-    #    for each connector (e.g. a.up) with __connector_type set.
-    _add_connector_symbols(instance, flat_class, prefix="")
-
-    # 5. Resolve component refs in symbol attributes (e.g. value = 2 * p1 → 2 * nested.p1).
+    # 4. Resolve component refs in symbol attributes (e.g. value = 2 * p1 → 2 * nested.p1).
     # Symbols are fresh objects from _instance_to_ast_class, but their value attributes
     # (start, min, max, value, …) come from _to_ast_value which returns ComponentRef /
     # Expression / Array objects BY REFERENCE from the parsed AST.  ComponentRefFlattener
@@ -1503,6 +1502,14 @@ def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
         if sym.dimensions:
             sym.dimensions = copy.deepcopy(sym.dimensions)
         w.walk(ComponentRefFlattener(flat_class, prefix), sym)
+
+    # 5. Add connector-level symbols with __connector_type for expand_connectors.
+    #    Done after the ComponentRef walk so the walker does not descend into
+    #    __connector_type and mutate unprotected ComponentRef objects inside it.
+    #    The new flattening recurses into connectors producing leaf symbols (e.g.
+    #    a.up.H, a.up.Q) but expand_connectors expects an intermediate symbol
+    #    for each connector (e.g. a.up) with __connector_type set.
+    _add_connector_symbols(instance, flat_class, prefix="")
 
     # 6. Post-processing (same order as legacy flatten)
     expand_connectors(flat_class)

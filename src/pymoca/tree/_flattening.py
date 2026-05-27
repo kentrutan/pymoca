@@ -164,6 +164,11 @@ def _flatten_instance(
         else:
             flat_name = name
         flat_symbol = copy.copy(symbol)
+        # dimensions inner lists are shared with the parsed AST via
+        # _copy_symbol_contents; _resolve_dimensions mutates dim_list[i] in-place,
+        # so make fresh inner lists to avoid corrupting the shared parsed AST.
+        if flat_symbol.dimensions:
+            flat_symbol.dimensions = [list(dl) for dl in flat_symbol.dimensions]
         # Strip input/output prefixes from nested symbols — these are
         # connector-local causality markers (MLS 9.1.1) and should not
         # propagate to the parent model's flattened namespace.
@@ -1474,18 +1479,40 @@ def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
     flat_class = _instance_to_ast_class(flat_instance)
 
     # 4. Add connector-level symbols with __connector_type for expand_connectors.
-    #    The new flattening recurses into connectors producing leaf symbols (e.g.
-    #    a.up.H, a.up.Q) but expand_connectors expects an intermediate symbol
-    #    for each connector (e.g. a.up) with __connector_type set.
+    #    Must happen before the ComponentRef walk so connector names (e.g. plug_p)
+    #    are present in flat_class.symbols and equation refs like plug_p.pin get
+    #    resolved.  The new flattening recurses into connectors producing leaf
+    #    symbols (e.g. a.up.H, a.up.Q) but expand_connectors expects an
+    #    intermediate symbol for each connector (e.g. a.up) with __connector_type.
     _add_connector_symbols(instance, flat_class, prefix="")
 
     # 5. Resolve component refs in symbol attributes (e.g. value = 2 * p1 → 2 * nested.p1).
-    # Walk each symbol in-place — flat_class owns fresh Symbol objects from
-    # _instance_to_ast_class, so mutation is safe and deepcopy is unnecessary.
+    # Symbols are fresh objects from _instance_to_ast_class, but their value attributes
+    # (start, min, max, value, …) come from _to_ast_value which returns ComponentRef /
+    # Expression / Array objects BY REFERENCE from the parsed AST.  ComponentRefFlattener
+    # mutates those objects in-place, which would corrupt the shared parsed AST and break
+    # subsequent flattenings of other models.  Deepcopy only the non-trivial attrs before
+    # walking; Primary / scalar values are immutable and safe to share.
+    # __connector_type on connector stubs must be hidden from the walker: it holds
+    # an ast.Class whose ComponentRefs are shared with the parsed AST and must not
+    # be mutated.  Strip and restore around the walk.
+    connector_types = {}
+    for sym_name, sym in flat_class.symbols.items():
+        ct = sym.__dict__.pop("__connector_type", None)
+        if ct is not None:
+            connector_types[sym_name] = ct
     w = TreeWalker()
     for sym_name, sym in flat_class.symbols.items():
         prefix = sym_name.rsplit(".", 1)[0] + "." if "." in sym_name else ""
+        for attr in _VALUE_ATTRS:
+            val = getattr(sym, attr, None)
+            if not isinstance(val, (ast.Primary, type(None), int, float, bool, str)):
+                setattr(sym, attr, copy.deepcopy(val))
+        if sym.dimensions:
+            sym.dimensions = copy.deepcopy(sym.dimensions)
         w.walk(ComponentRefFlattener(flat_class, prefix), sym)
+    for sym_name, ct in connector_types.items():
+        flat_class.symbols[sym_name].__connector_type = ct
 
     # 6. Post-processing (same order as legacy flatten)
     expand_connectors(flat_class)

@@ -968,6 +968,20 @@ def test_inherited_connector_stub_via_extends():
     assert "m.flange_b.s" in symbols
 
 
+def test_expandable_connector_stub():
+    """Expandable connectors get connector stubs so whole-bus connect() resolves (MLS 9.1.3).
+
+    Without a stub for the expandable-connector-typed symbol, expand_connectors
+    raised KeyError looking up the bus name in node.symbols.
+    """
+    ast_tree = parse_model_files("ExpandableConnectorBus.mo")
+    flat = tree.flatten(ast_tree, ast.ComponentRef.from_string("P.System"))
+    ref_names = set()
+    _collect_component_ref_names(flat.classes["P.System"].equations, ref_names)
+    assert "s.bus.speed" in ref_names
+    assert "bus.speed" in ref_names
+
+
 def test_multiple_extends_array_dim():
     """Array dimension from a second unnamed extends resolves in the correct scope.
 

@@ -1446,7 +1446,7 @@ def _add_connector_symbols(
         if not isinstance(sym.type, ast.InstanceClass):
             continue
         full_name = prefix + "." + name if prefix else name
-        if sym.type.type == "connector":
+        if sym.type.type in ("connector", "expandableconnector"):
             # Create a stub symbol for this connector
             stub = ast.Symbol()
             stub.name = full_name

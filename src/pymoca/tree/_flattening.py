@@ -249,10 +249,9 @@ def _flatten_instance(
                 inner_sym.inner = flat_symbol.inner
                 inner_sym.outer = flat_symbol.outer
 
-    # 1.7 Resolve references in equations and algorithms
-    _collect_and_resolve_equations(instance, flat_class, prefix, functions=functions)
-
-    # 1.8 Recursively "handle" unnamed extends instances
+    # 1.8 Recursively "handle" unnamed extends instances.
+    # Extends must be processed before equations (step 1.7) so that inherited symbols
+    # are present when equations of the current class are resolved.
     for extends in instance.extends:
         _flatten_instance(
             extends,
@@ -262,6 +261,9 @@ def _flatten_instance(
             prefix=prefix,
             functions=functions,
         )
+
+    # 1.7 Resolve references in equations and algorithms
+    _collect_and_resolve_equations(instance, flat_class, prefix, functions=functions)
 
     # Steps 1.9, 2, and 3 are done outside the recursion in the caller
 

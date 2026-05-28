@@ -1012,6 +1012,15 @@ def test_clock_builtin_type():
     assert parse_and_flatten_model("ClockBuiltin.mo", "ClockBuiltin.UsesClock") is not None
 
 
+
+def test_inherited_equation_refs_resolved():
+    """Equations referencing inherited (via extends) symbols flatten before resolution (MLS 5.6.2)."""
+    flat = parse_and_flatten_model("InheritedEquationConnector.mo", "P.B")
+    ref_names = set()
+    _collect_component_ref_names(flat.equations, ref_names)
+    assert "flange_a.phi" in ref_names
+    _assert_no_child_refs(flat.equations)
+
 if __name__ == "__main__":
     import pytest as _pytest
 

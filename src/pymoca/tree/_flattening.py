@@ -426,6 +426,7 @@ def _resolve_modification_attribute(
                 symbol.parent_instance,
                 guard=guard,
                 opts=opts,
+                name_flat_class=flat_class,
             )
             if result is not None:
                 value = result
@@ -496,11 +497,13 @@ class ExpressionEvaluator(TreeListener):
         flat_class: ast.InstanceClass,
         guard: RecursionGuard,
         opts: LookupOptions,
+        name_flat_class: Optional[ast.InstanceClass] = None,
     ):
         self.scope = scope
         self.flat_class = flat_class
         self.guard = guard
         self.opts = opts
+        self.name_flat_class = name_flat_class
 
         self.result = None
         super().__init__()
@@ -516,6 +519,7 @@ class ExpressionEvaluator(TreeListener):
                     self.flat_class,
                     guard=self.guard,
                     opts=self.opts,
+                    name_flat_class=self.name_flat_class,
                 )
             if isinstance(operand, ast.InstanceSymbol):
                 const_val = _get_constant_value(operand)
@@ -603,6 +607,7 @@ def _resolve_expression(
     *,
     guard: RecursionGuard,
     opts: LookupOptions,
+    name_flat_class: Optional[ast.InstanceClass] = None,
 ) -> Optional[Union[int, float, bool, str]]:
     """Calculate the given expression or return None if not possible"""
     assert isinstance(expr, ast.Expression)
@@ -611,6 +616,7 @@ def _resolve_expression(
         flat_class=flat_class,
         guard=guard,
         opts=opts,
+        name_flat_class=name_flat_class,
     )
     walker = TreeWalker()
     walker.walk(listener, expr)

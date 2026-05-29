@@ -6,6 +6,7 @@ Pymoca: Modelica-to-CAS translator (Python). Parses `.mo` → AST → flattens c
 
 ```bash
 pip install -e ".[all]"           # dev install
+python antlr/antlr_build.py       # regenerate parser after editing Modelica.g4
 pytest test -n $(python3 -c "import os; print(max(1, os.cpu_count() * 3 // 4))")                   # all tests (parallel)
 pytest test/parse_test.py -k X -n $(python3 -c "import os; print(max(1, os.cpu_count() * 3 // 4))") # single file (parallel)
 pytest test/parse_test.py -k X    # single test (serial, for debugging)

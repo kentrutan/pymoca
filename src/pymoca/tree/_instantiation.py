@@ -682,7 +682,7 @@ def _instantiate_symbol(
         return
     # Enum constants whose type is the enum class they live in would cause
     # infinite recursion; skip type instantiation, leaving type as ComponentRef.
-    if "constant" in symbol.prefixes and parent_instance.name in ast.Tree.BUILTIN_ENUM_TYPES:
+    if "constant" in symbol.prefixes and ast.is_enumeration(parent_instance):
         symbol.instantiation_state = ast.InstantiationState.FULL
         return
 
@@ -788,6 +788,7 @@ def _instantiate_partially(
             encapsulated=element.encapsulated,
             partial=element.partial,
             final=element.final,
+            enumeration=element.enumeration,
         )
         if update_parent_instance:
             parent_instance.classes[element.name] = instance

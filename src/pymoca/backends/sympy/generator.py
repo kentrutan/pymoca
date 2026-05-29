@@ -187,19 +187,15 @@ class {{tree.name}}(OdeModel):
             name = "self.t"
         self.src[tree] = name
 
+    def exitEnumerationLiteral(self, tree: ast.EnumerationLiteral):
+        self.src[tree] = tree.name
+
     def exitSymbol(self, tree: ast.Symbol):
         # prevent name clash with builtins
         name = tree.name.replace(".", "__")
         while name in BUILTINS:
             name = name + "_"
         self.src[tree] = name
-
-    def exitEnumerationLiteral(self, tree: ast.EnumerationLiteral):
-        # Enumeration literals are constant members of an enum type class, not
-        # ODE model variables.  Register a source entry (name) so that
-        # exitClass does not KeyError when it visits an enum type, but skip
-        # them from all variable/constant lists via the exitClass filter below.
-        self.src[tree] = tree.name
 
     def exitEquation(self, tree: ast.Equation):
         self.src[tree] = "{left:s} - ({right:s})".format(

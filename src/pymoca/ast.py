@@ -9,6 +9,7 @@ import copy
 import json
 import math
 import sys
+from typing import Any
 from collections import OrderedDict
 from enum import Enum, IntEnum
 from pathlib import Path
@@ -487,6 +488,29 @@ class Symbol(Node):
         return "{}(name={!r}, type={!r})".format(type(self).__name__, self.name, self.type)
 
 
+class EnumerationLiteral(Symbol):
+    """An enumeration literal declared inside ``type E = enumeration(...)``.
+
+    Subclasses :class:`Symbol` so that ``E.two`` resolves through the ordinary
+    name-lookup path (which requires a ``constant`` Symbol).  Carries a 1-based
+    *ordinal* value matching the declaration order (MLS 4.8.5).
+    """
+
+    def __init__(self, **kwargs):
+        self.ordinal = None  # type: Optional[int]  # 1-based position in the enum
+        super().__init__(**kwargs)
+        self.prefixes = ["constant"]
+
+    def __repr__(self):
+        return "{}(name={!r}, ordinal={!r})".format(type(self).__name__, self.name, self.ordinal)
+
+
+def is_enumeration(obj: Any) -> bool:
+    """Return True if *obj* is a Modelica enumeration type class (or instance)."""
+    return getattr(obj, "enumeration", False)
+
+
+
 class ComponentClause(Node):
     def __init__(self, **kwargs):
         self.prefixes = []  # type: List[str]
@@ -690,6 +714,7 @@ class Class(Node):
         self.parent = None  # type: Optional[Class]
         self.visibility = Visibility.PUBLIC  # type: Visibility
         self.is_short_class_definition = False  # type: bool
+        self.enumeration = False  # type: bool  # True iff this is an enumeration type
 
         # TODO: Remove hard-wired tree.find_name() when done with prototype
         self.use_find_name(False)
@@ -1195,11 +1220,12 @@ class Tree(Class):
             self.classes[name] = type_class
         for name, literals in self.BUILTIN_ENUM_TYPES.items():
             type_class = Class(name=name, type="type", parent=self)
-            for literal in literals:
-                enum_sym = Symbol(
+            type_class.enumeration = True
+            for ordinal, literal in enumerate(literals, start=1):
+                enum_sym = EnumerationLiteral(
                     name=literal,
                     type=ComponentRef(name=name),
-                    prefixes=["constant"],
+                    ordinal=ordinal,
                     class_modification=ClassModification(),
                 )
                 enum_sym.parent = type_class

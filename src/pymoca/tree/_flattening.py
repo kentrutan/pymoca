@@ -179,6 +179,13 @@ def _flatten_instance(
         if symbol.type.name in InstanceTree.BUILTIN_TYPES:
             flat_symbol.name = flat_name
             flat_class.symbols[flat_name] = flat_symbol
+        elif isinstance(flat_symbol.type, ast.InstanceClass) and ast.is_enumeration(
+            flat_symbol.type
+        ):
+            # Enumeration-typed symbols are simple leaf types (MLS 4.8.5), treated
+            # symmetrically with builtin types: place directly in the flat namespace.
+            flat_symbol.name = flat_name
+            flat_class.symbols[flat_name] = flat_symbol
         elif not isinstance(flat_symbol.type, ast.InstanceClass):
             # scope==instance (declaring class) already differs from flat_class (root); no
             # derived-vs-base asymmetry here, so name_flat_class is not needed.
@@ -191,6 +198,11 @@ def _flatten_instance(
             )
             is_class = isinstance(resolved, ast.InstanceClass)
             flat_symbol.type = resolved if is_class else resolved.parent
+            # If the resolved type is an enumeration, add the symbol here now that
+            # the type is known (covers the ComponentRef → InstanceClass resolution path).
+            if ast.is_enumeration(flat_symbol.type) and flat_name not in flat_class.symbols:
+                flat_symbol.name = flat_name
+                flat_class.symbols[flat_name] = flat_symbol
 
         # 1.2 Evaluate the conditional declaration expression and mark the declaration for
         #     deletion (TODO)
@@ -207,7 +219,11 @@ def _flatten_instance(
 
         # 1.4 Resolve modifications of value attributes of simple types and records
         # 1.5 Resolve modifications of other attributes of simple types
-        if flat_symbol.type.name in InstanceTree.BUILTIN_TYPES or "record" in flat_symbol.prefixes:
+        if (
+            flat_symbol.type.name in InstanceTree.BUILTIN_TYPES
+            or ast.is_enumeration(flat_symbol.type)
+            or "record" in flat_symbol.prefixes
+        ):
             _resolve_modifications(
                 flat_symbol,
                 flat_class,
@@ -340,6 +356,9 @@ def _resolve_modifications(
     # TODO: Instantiation should move type class modifications down to the builtin
     if isinstance(symbol.type, ast.ComponentRef):
         # type class, modifications at this level
+        modification_environment = symbol.modification_environment
+    elif ast.is_enumeration(symbol.type):
+        # Enum types have no value-attribute modifications to inherit from the type class
         modification_environment = symbol.modification_environment
     else:
         modification_environment = symbol.type.symbols[symbol.type.name].modification_environment

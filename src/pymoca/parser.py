@@ -791,12 +791,41 @@ class ASTListener(ModelicaListener):
     def exitPrimary_true(self, ctx: ModelicaParser.Primary_trueContext):
         self.ast[ctx] = ast.Primary(value=True)
 
+    def _function_argument_ast(self, arg_ctx):
+        """Convert one function_argument context to an AST node (MLS §B.2.7.11).
+
+        Handles both plain ``expression`` arguments and ``function name(...)``
+        partial-application arguments.  Argument names within a partial
+        application are not retained, matching the handling of ordinary
+        named arguments.
+        """
+        if isinstance(arg_ctx, ModelicaParser.Argument_functionContext):
+            named = arg_ctx.named_arguments()
+            # TODO: argument names (e.g. `A=`, `w=`) are dropped here; only
+            #       the bound value expressions are kept.  Retaining names
+            #       requires named-argument support in the AST (see also
+            #       _function_call_operands, which likewise ignores top-level
+            #       `named_arguments`).
+            operands = (
+                [
+                    self._function_argument_ast(na.function_argument())
+                    for na in named.named_argument()
+                ]
+                if named is not None
+                else []
+            )
+            return ast.Expression(
+                operator=ast.ComponentRef.from_string(arg_ctx.name().getText()),
+                operands=operands,
+            )
+        return self.ast[arg_ctx.expression()]
+
     def _function_call_operands(self, func_call_args_ctx):
         """Safely extract expression operands from a function_call_args context."""
         func_args = func_call_args_ctx.function_arguments()
         if func_args is None:
             return []
-        return [self.ast[x.expression()] for x in func_args.function_argument()]
+        return [self._function_argument_ast(x) for x in func_args.function_argument()]
 
     def exitPrimary_function(self, ctx: ModelicaParser.Primary_functionContext):
         # TODO: Could possible be cleaner if we let the expression in the ast bubble up.

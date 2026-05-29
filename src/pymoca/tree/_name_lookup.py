@@ -615,7 +615,6 @@ def _find_imported(
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Find simple name in imports per MLS v3.5 section 13.2.1"""
     # TODO: Rewrite this to work with parser rewrite of import_clause handler.
-    # TODO: Can we do a scope.imports[name] = found Class or Symbol to speed up future calls?
 
     def _lookup_via_import(
         import_ref: ast.ComponentRef, search_imports: bool = True
@@ -651,8 +650,9 @@ def _find_imported(
             if stop_search:
                 return found
             if found is not None:
-                # Store result for next lookup
-                scope.imports[name] = imported_comp_ref
+                # Cache only on InstanceClass; raw ast.Class is shared across flatten calls.
+                if isinstance(scope, ast.InstanceClass):
+                    scope.imports[name] = imported_comp_ref
                 return found
     return None
 

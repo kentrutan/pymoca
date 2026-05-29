@@ -1014,6 +1014,17 @@ def test_encapsulated_fully_qualified_type():
     assert "x" in flat.symbols
 
 
+def test_encapsulated_import_enclosing_package():
+    """Encapsulated function that imports its enclosing package to type its inputs resolves.
+
+    Before the fix, _get_common_parent returned (pkg, "") when the import target was an
+    ancestor of the scope; _find_composite_name("", pkg) returned None, so the import
+    silently failed and the input type raised NameLookupError.
+    """
+    flat = parse_and_flatten_model("EncapsulatedImportEnclosingPackage.mo", "UseOrientation")
+    assert "R.T[1,1]" in flat.symbols or any(k.startswith("R") for k in flat.symbols)
+
+
 def test_div_builtin_in_dimension():
     """div() built-in used in a parameter dimension expression must evaluate correctly.
 

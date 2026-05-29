@@ -623,6 +623,10 @@ def _find_imported(
         # Detect self-referential imports to prevent infinite recursion during instantiation
         common_parent, children = _get_common_parent(scope, str(import_ref))
         if common_parent is not None:
+            if not children:
+                # Import target IS common_parent (e.g. importing an enclosing package).
+                # _find_composite_name("", ...) returns None, so return the package directly.
+                return common_parent, True
             found = _find_composite_name(children, common_parent, guard, opts)
             _check_import_rules(found, scope)
             return found, True

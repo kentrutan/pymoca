@@ -817,6 +817,49 @@ def test_modelicapath_root_without_package_mo(tmp_path):
     assert "Standalone" in stub_tree.classes
 
 
+def test_parse_omitted_output_assignment():
+    """(a, , c) := f(x) — omitted middle output parses; slot becomes None (MLS §B.2.6.5)."""
+    txt = """
+function F
+  input Real x;
+  output Real a;
+  output Real b;
+  output Real c;
+algorithm
+  (a, , c) := g(x);
+end F;
+"""
+    tree_ = parser.parse(txt)
+    f = tree_.classes["F"]
+    stmt = f.statements[0]
+    assert isinstance(stmt, ast.AssignmentStatement)
+    assert len(stmt.left) == 3
+    assert stmt.left[0].name == "a"
+    assert stmt.left[1] is None
+    assert stmt.left[2].name == "c"
+
+
+def test_parse_full_output_assignment():
+    """(a, b, c) := f(x) — all outputs present; no slot is None (regression guard)."""
+    txt = """
+function F
+  input Real x;
+  output Real a;
+  output Real b;
+  output Real c;
+algorithm
+  (a, b, c) := g(x);
+end F;
+"""
+    tree_ = parser.parse(txt)
+    f = tree_.classes["F"]
+    stmt = f.statements[0]
+    assert isinstance(stmt, ast.AssignmentStatement)
+    assert len(stmt.left) == 3
+    assert all(ref is not None for ref in stmt.left)
+    assert [ref.name for ref in stmt.left] == ["a", "b", "c"]
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

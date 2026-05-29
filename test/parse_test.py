@@ -360,6 +360,58 @@ def test_inner_outer_final_parsed_on_symbol():
     assert m.symbols["n"].inner is False
 
 
+def test_parse_class_extends_basic():
+    """The `class extends` form (long_class_specifier extends) parses correctly.
+
+    ``redeclare model extends BaseProperties "cmt" ... end BaseProperties;``
+    should produce a Class named "BaseProperties" with:
+      - the comment from the string_comment,
+      - one ExtendsClause whose component name is "BaseProperties",
+      - body members (symbols, equations) wired up normally.
+    """
+    tree_ = parser.parse(
+        "package P\n"
+        "  extends Base;\n"
+        '  redeclare model extends BaseProperties "cmt"\n'
+        "    Real x;\n"
+        "  equation\n"
+        "    x = 1;\n"
+        "  end BaseProperties;\n"
+        "end P;\n"
+    )
+    bp = tree_.classes["P"].classes["BaseProperties"]
+    assert bp.name == "BaseProperties"
+    assert bp.comment == "cmt"
+    assert len(bp.extends) == 1
+    assert bp.extends[0].component.name == "BaseProperties"
+    assert "x" in bp.symbols
+    assert len(bp.equations) == 1
+
+
+def test_parse_class_extends_with_modification():
+    """The `class extends` form with class_modification parses correctly.
+
+    ``model extends BaseProperties(T0 = 300) ... end BaseProperties;`` is the
+    pattern used in Modelica/Media/Water/package.mo; the class_modification must
+    be attached to the ExtendsClause.
+    """
+    tree_ = parser.parse(
+        "package P\n"
+        "  extends Base;\n"
+        '  redeclare model extends BaseProperties(p_default = 1e5) ""\n'
+        "    Real T;\n"
+        "  end BaseProperties;\n"
+        "end P;\n"
+    )
+    bp = tree_.classes["P"].classes["BaseProperties"]
+    assert bp.name == "BaseProperties"
+    assert len(bp.extends) == 1
+    ext = bp.extends[0]
+    assert ext.component.name == "BaseProperties"
+    # class_modification must carry the p_default argument
+    assert len(ext.class_modification.arguments) == 1
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

@@ -1026,7 +1026,6 @@ def test_clock_builtin_type():
     assert parse_and_flatten_model("ClockBuiltin.mo", "ClockBuiltin.UsesClock") is not None
 
 
-
 def test_inherited_equation_refs_resolved():
     """Equations referencing inherited (via extends) symbols flatten before resolution (MLS 5.6.2)."""
     flat = parse_and_flatten_model("InheritedEquationConnector.mo", "P.B")
@@ -1034,6 +1033,18 @@ def test_inherited_equation_refs_resolved():
     _collect_component_ref_names(flat.equations, ref_names)
     assert "flange_a.phi" in ref_names
     _assert_no_child_refs(flat.equations)
+
+
+def test_encapsulated_import_enclosing_package():
+    """Encapsulated function that imports its enclosing package to type its inputs resolves.
+
+    Before the fix, _get_common_parent returned (pkg, "") when the import target was an
+    ancestor of the scope; _find_composite_name("", pkg) returned None, so the import
+    silently failed and the input type raised NameLookupError.
+    """
+    flat = parse_and_flatten_model("EncapsulatedImportEnclosingPackage.mo", "UseOrientation")
+    assert "R.T[1,1]" in flat.symbols or any(k.startswith("R") for k in flat.symbols)
+
 
 if __name__ == "__main__":
     import pytest as _pytest

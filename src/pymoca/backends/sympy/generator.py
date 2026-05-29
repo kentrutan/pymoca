@@ -62,7 +62,8 @@ from sympy import sin, cos, tan
                     if prefix == "state":
                         states += [s]
                     elif prefix == "constant":
-                        constants += [s]
+                        if not isinstance(s, ast.EnumerationLiteral):
+                            constants += [s]
                     elif prefix == "parameter":
                         parameters += [s]
                     elif prefix == "input":
@@ -192,6 +193,13 @@ class {{tree.name}}(OdeModel):
         while name in BUILTINS:
             name = name + "_"
         self.src[tree] = name
+
+    def exitEnumerationLiteral(self, tree: ast.EnumerationLiteral):
+        # Enumeration literals are constant members of an enum type class, not
+        # ODE model variables.  Register a source entry (name) so that
+        # exitClass does not KeyError when it visits an enum type, but skip
+        # them from all variable/constant lists via the exitClass filter below.
+        self.src[tree] = tree.name
 
     def exitEquation(self, tree: ast.Equation):
         self.src[tree] = "{left:s} - ({right:s})".format(

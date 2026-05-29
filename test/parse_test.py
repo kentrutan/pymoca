@@ -412,6 +412,53 @@ def test_parse_class_extends_with_modification():
     assert len(ext.class_modification.arguments) == 1
 
 
+def _sym_value_expr(sym):
+    """Extract the initialiser expression from a symbol's class_modification.
+
+    Symbols store their ``= <expr>`` value in
+    ``class_modification.arguments[0].value.modifications[0]`` at parse time;
+    the ``sym.value`` field is only populated during instantiation.
+    """
+    return sym.class_modification.arguments[0].value.modifications[0]
+
+
+def test_function_partial_application():
+    """Parse a `function f(...)` partial-application argument (MLS §B.2.7.11)."""
+    # `function f()` with no bound arguments
+    mf = parser.parse(
+        "model A\n  parameter Real s = g(function f(), 0, 1);\nend A;\n",
+        bypass_cache=True,
+    )
+    value = _sym_value_expr(mf.classes["A"].symbols["s"])
+    # outer call g(...): operands are [partial-application, 0, 1]
+    assert isinstance(value, ast.Expression)
+    partial = value.operands[0]
+    assert isinstance(partial, ast.Expression)
+    assert isinstance(partial.operator, ast.ComponentRef)
+    assert partial.operator.to_tuple() == ("f",)
+    assert partial.operands == []
+
+    # `function f(a=p, b=q)` — names are dropped, bound value expressions kept
+    mf2 = parser.parse(
+        "model B\n"
+        "  parameter Real p = 1;\n"
+        "  parameter Real q = 2;\n"
+        "  parameter Real s = g(function f(a=p, b=q), 0, 1);\n"
+        "end B;\n",
+        bypass_cache=True,
+    )
+    value2 = _sym_value_expr(mf2.classes["B"].symbols["s"])
+    partial2 = value2.operands[0]
+    assert isinstance(partial2, ast.Expression)
+    assert isinstance(partial2.operator, ast.ComponentRef)
+    assert partial2.operator.to_tuple() == ("f",)
+    assert len(partial2.operands) == 2  # a=p, b=q → [p, q]
+    assert isinstance(partial2.operands[0], ast.ComponentRef)
+    assert partial2.operands[0].name == "p"
+    assert isinstance(partial2.operands[1], ast.ComponentRef)
+    assert partial2.operands[1].name == "q"
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

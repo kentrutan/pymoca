@@ -575,16 +575,52 @@ def test_modelicapath_path_to_class_ignores_other(tmp_path):
     assert parser._path_to_class(dangling) is None
 
 
-def test_parse_unimplemented_class_spec_enum():
-    """Parser raises NotImplementedError for enum short-class specifiers.
+def test_parse_enum_basic():
+    """Parsing a simple enumeration type builds the correct AST.
 
-    type X = enumeration(...) has no exitClass_spec_enum handler, so the
-    class_node.name is never updated from the debug placeholder set in
-    enterClass_definition. exitClass_definition detects this and raises
-    NotImplementedError so the language gap is surfaced clearly.
+    ``type E = enumeration(one, two, three)`` should produce a ``type`` Class
+    with ``enumeration=True`` and three :class:`ast.EnumerationLiteral` symbols
+    bearing 1-based ordinals in declaration order.
     """
-    with pytest.raises(NotImplementedError, match="enumeration"):
-        parser.parse("type Resolution = enumeration(a, b, c);")
+    tree_ = parser.parse("type E = enumeration(one, two, three);")
+    enum_class = tree_.classes["E"]
+    assert enum_class.type == "type"
+    assert enum_class.enumeration is True
+    assert list(enum_class.symbols.keys()) == ["one", "two", "three"]
+    for ordinal, (name, sym) in enumerate(enum_class.symbols.items(), start=1):
+        assert isinstance(sym, ast.EnumerationLiteral), f"{name!r} should be EnumerationLiteral"
+        assert sym.ordinal == ordinal
+        assert sym.prefixes == ["constant"]
+        assert sym.type.name == "E"
+
+
+def test_parse_enum_literal_comments():
+    """Enumeration literal comments are captured."""
+    tree_ = parser.parse('type R = enumeration(y "y (year)", d "d (day)");')
+    assert tree_.classes["R"].symbols["y"].comment == "y (year)"
+    assert tree_.classes["R"].symbols["d"].comment == "d (day)"
+
+
+def test_parse_enum_unspecified():
+    """``enumeration(:)`` (placeholder for redeclaration) parses with no literals."""
+    tree_ = parser.parse("type E = enumeration(:);")
+    enum_class = tree_.classes["E"]
+    assert enum_class.enumeration is True
+    assert len(enum_class.symbols) == 0
+
+
+def test_parse_enum_resolution_mo():
+    """The MSL-4.0.x Resolution.mo file parses without error."""
+    import pathlib
+
+    res_mo = (
+        pathlib.Path(__file__).parent / "libraries/MSL-4.0.x/Modelica/Clocked/Types/Resolution.mo"
+    )
+    tree_ = parser.parse(res_mo.read_text())
+    # within Modelica.Clocked.Types nests the class under Modelica.*
+    enum_class = tree_.classes["Modelica"].classes["Clocked"].classes["Types"].classes["Resolution"]
+    assert enum_class.enumeration is True
+    assert list(enum_class.symbols.keys()) == ["y", "d", "h", "m", "s", "ms", "us", "ns"]
 
 
 def test_modelicapath_root_without_package_mo(tmp_path):

@@ -147,6 +147,7 @@ class LazyParseClass(ast.Class):
             "imports",
             "annotation",
             "functions",
+            "enumeration",  # True for enumeration types; governs instantiation/flattening
         }
     )
 
@@ -374,6 +375,24 @@ class ASTListener(ModelicaListener):
     def enterClass_spec_base(self, ctx: ModelicaParser.Class_spec_baseContext):
         self.in_extends = True
         self.in_class_spec_base = True
+
+    def exitClass_spec_enum(self, ctx: ModelicaParser.Class_spec_enumContext):
+        class_node = self.class_node
+        class_node.name = ctx.IDENT().getText()
+        class_node.comment = self.ast[ctx.comment()]
+        class_node.enumeration = True
+        if ctx.enum_list() is not None:
+            for ordinal, lit in enumerate(ctx.enum_list().enumeration_literal(), start=1):
+                lit_name = lit.IDENT().getText()
+                enum_sym = ast.EnumerationLiteral(
+                    name=lit_name,
+                    type=ast.ComponentRef(name=class_node.name),
+                    ordinal=ordinal,
+                    class_modification=ast.ClassModification(),
+                )
+                enum_sym.comment = self.ast[lit.comment()]
+                enum_sym.parent = class_node
+                class_node.symbols[lit_name] = enum_sym
 
     def exitClass_spec_base(self, ctx: ModelicaParser.Class_spec_baseContext):
         class_node = self.class_node

@@ -594,14 +594,26 @@ class ASTListener(ModelicaListener):
     def exitStatement_component_function(
         self, ctx: ModelicaParser.Statement_component_functionContext
     ):
-        all_comp_refs = [self.ast[x] for x in ctx.component_reference()]
+        # Build the left-hand side from output_expression_list, which permits omitted
+        # outputs (MLS §B.2.6.5).  Each comma terminates a slot; omitted slots become
+        # None so discard positions are preserved for backends.
+        oel = ctx.output_expression_list()
+        left = []
+        current = None
+        for child in oel.getChildren():
+            if isinstance(child, ModelicaParser.ExpressionContext):
+                current = self.ast[child]
+            else:  # TerminalNode ',' — close the current slot
+                left.append(current)
+                current = None
+        left.append(current)
 
         right = ast.Expression(
-            operator=all_comp_refs[-1],
+            operator=self.ast[ctx.component_reference()],
             operands=self._function_call_operands(ctx.function_call_args()),
         )
 
-        self.ast[ctx] = ast.AssignmentStatement(left=all_comp_refs[:-1], right=right)
+        self.ast[ctx] = ast.AssignmentStatement(left=left, right=right)
 
     def exitStatement_if(self, ctx: ModelicaParser.Statement_ifContext):
         self.ast[ctx] = self.ast[ctx.if_statement()]

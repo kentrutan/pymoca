@@ -62,7 +62,8 @@ from sympy import sin, cos, tan
                     if prefix == "state":
                         states += [s]
                     elif prefix == "constant":
-                        constants += [s]
+                        if not isinstance(s, ast.EnumerationLiteral):
+                            constants += [s]
                     elif prefix == "parameter":
                         parameters += [s]
                     elif prefix == "input":
@@ -185,6 +186,9 @@ class {{tree.name}}(OdeModel):
         if name == "time":
             name = "self.t"
         self.src[tree] = name
+
+    def exitEnumerationLiteral(self, tree: ast.EnumerationLiteral):
+        self.src[tree] = tree.name
 
     def exitSymbol(self, tree: ast.Symbol):
         # prevent name clash with builtins

@@ -1070,6 +1070,45 @@ def test_inherited_type_in_enclosing_scope():
     assert "s.d" in flat.symbols
 
 
+def test_user_defined_enum_flatten():
+    """User-defined enumeration types parse and flatten like builtin StateSelect.
+
+    ``type E = enumeration(one, two, three)`` should produce an enum type whose
+    typed variables (``E e``) are treated as simple types in flattening — i.e. the
+    literal symbols are *not* flattened into the model as child variables.
+    """
+    src = """
+    model M
+      type E = enumeration(one, two, three);
+      E e(start = E.one);
+    end M;
+    """
+    ast_tree = parser.parse(src)
+    # Enum class parses correctly
+    enum_cls = ast_tree.classes["M"].classes["E"]
+    assert enum_cls.enumeration is True
+    assert list(enum_cls.symbols.keys()) == ["one", "two", "three"]
+    assert isinstance(enum_cls.symbols["two"], ast.EnumerationLiteral)
+    assert enum_cls.symbols["two"].ordinal == 2
+
+    # Flattening succeeds and treats 'e' as a simple type (no spurious child symbols)
+    flat = tree.flatten_model(ast_tree, "M")
+    assert "e" in flat.symbols
+    # Enum literals must not leak into the flat model as child symbols
+    assert not any(name.startswith("e.") for name in flat.symbols)
+
+
+def test_builtin_enum_literals_are_enumeration_literals():
+    """Builtin enum types (StateSelect) use EnumerationLiteral with ordinals."""
+    ast_tree = ast.Tree()
+    ss = ast_tree.classes["StateSelect"]
+    assert ast.is_enumeration(ss)
+    assert list(ss.symbols.keys()) == ["never", "avoid", "default", "prefer", "always"]
+    for expected_ordinal, (name, sym) in enumerate(ss.symbols.items(), start=1):
+        assert isinstance(sym, ast.EnumerationLiteral), f"{name!r} should be EnumerationLiteral"
+        assert sym.ordinal == expected_ordinal
+
+
 def test_replaceable_record_modification():
     """Modifications targeting symbols that only exist in the concrete redeclaration
     of a replaceable record must not raise a false 'symbol does not exist' error.

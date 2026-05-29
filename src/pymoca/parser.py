@@ -394,6 +394,29 @@ class ASTListener(ModelicaListener):
                 enum_sym.parent = class_node
                 class_node.symbols[lit_name] = enum_sym
 
+    def exitClass_spec_extends(self, ctx: ModelicaParser.Class_spec_extendsContext):
+        class_node = self.class_node
+        # IDENT()[0] is the name after `extends`; IDENT()[1] repeats it after `end`.
+        # There is no component_reference() on this production.
+        class_node.name = ctx.IDENT()[0].getText()
+        class_node.comment = self.ast[ctx.string_comment()]
+
+        if ctx.class_modification() is not None:
+            class_modification = self.ast[ctx.class_modification()]
+        else:
+            class_modification = ast.ClassModification()
+        extends_clause = ast.ExtendsClause(
+            component=ast.ComponentRef(name=class_node.name),
+            class_modification=class_modification,
+            # `class extends X` resolves X in the enclosing class (its inherited
+            # members), not in this class itself — scope is the parent.
+            scope=self.class_nodes[-2],
+        )
+        class_node.extends.append(extends_clause)
+        # No self.in_extends flag: unlike class_spec_base (which has no body),
+        # this form has a real composition whose declarations must be added to
+        # the class symbols normally through enterDeclaration.
+
     def exitClass_spec_base(self, ctx: ModelicaParser.Class_spec_baseContext):
         class_node = self.class_node
         class_node.name = ctx.IDENT().getText()

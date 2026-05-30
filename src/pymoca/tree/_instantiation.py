@@ -404,6 +404,7 @@ def _instantiate_extends_partially(
             extends.scope,
             guard=guard,
             opts=opts,
+            class_extends=extends.is_class_extends,
         )
         class_modification.arguments = (
             extends.class_modification.arguments
@@ -501,24 +502,95 @@ def _instantiate_extends_list(
     return extends_list_instantiated
 
 
+def _ast_class_lookup(dotted_name: str, scope: ast.Class) -> Optional[ast.Class]:
+    """Resolve a dotted class name by walking up the pure-AST class hierarchy.
+
+    Used only for `class extends X` base-class resolution, where the instance tree
+    may not yet be populated for the relevant parent classes.
+    """
+    parts = dotted_name.split(".")
+    current = scope
+    while current is not None:
+        if isinstance(current, ast.InstanceClass):
+            current = getattr(current, "ast_ref", None)
+            if current is None:
+                break
+        classes = getattr(current, "classes", {})
+        if parts[0] in classes:
+            result = classes[parts[0]]
+            ok = True
+            for p in parts[1:]:
+                sub = getattr(result, "classes", {})
+                if p not in sub:
+                    ok = False
+                    break
+                result = sub[p]
+            if ok and isinstance(result, ast.Class):
+                return result
+        current = getattr(current, "parent", None)
+    return None
+
+
+def _find_class_extends_target(
+    name: str,
+    scope: ast.Class,
+    visited: Optional[set] = None,
+) -> Optional[ast.Class]:
+    """Find `name` in scope's inherited AST chain for `class extends X` lookup.
+
+    For `class extends X`, `name` must resolve to the inherited version (from scope's
+    base classes), not scope's own redeclaration.  Searches scope.extends at the
+    pure-AST level to find the original definition before any redeclarations.
+    """
+    if visited is None:
+        visited = set()
+    if id(scope) in visited:
+        return None
+    visited.add(id(scope))
+
+    for extends in getattr(scope, "extends", []):
+        if not isinstance(extends, ast.ExtendsClause):
+            continue
+        base = _ast_class_lookup(str(extends.component), scope)
+        if base is None:
+            continue
+        if name in getattr(base, "classes", {}):
+            return base.classes[name]
+        found = _find_class_extends_target(name, base, visited)
+        if found is not None:
+            return found
+    return None
+
+
 def _find_extends_class(
     extends_name: Union[str, ast.ComponentRef],
     scope: Union["InstanceTree", ast.InstanceClass],
     *,
     guard: RecursionGuard,
     opts: LookupOptions,
+    class_extends: bool = False,
 ) -> Union[ast.Class, ast.InstanceClass]:
     """Find the extends class and do checks"""
 
-    extends_class = _find_name(
-        extends_name,
-        scope,
-        guard,
-        LookupOptions(
-            instantiate_in_place=opts.instantiate_in_place,
-            search_inherited=False,
-        ),
-    )
+    if class_extends:
+        # `class extends X` (MLS §7.3.1): X must resolve to the inherited version,
+        # not the local redeclaration.  Use a pure-AST search on the enclosing class
+        # to find the pre-redeclaration definition, avoiding the instance tree which
+        # may have uninstantiated stubs or the wrong scope at this point.
+        ast_scope = (
+            getattr(scope, "ast_ref", scope) if isinstance(scope, ast.InstanceClass) else scope
+        )
+        extends_class = _find_class_extends_target(str(extends_name), ast_scope)
+    else:
+        extends_class = _find_name(
+            extends_name,
+            scope,
+            guard,
+            LookupOptions(
+                instantiate_in_place=opts.instantiate_in_place,
+                search_inherited=False,
+            ),
+        )
 
     if extends_class is None:
         raise ModelicaSemanticError(
@@ -530,7 +602,7 @@ def _find_extends_class(
         )
     if extends_class.full_name == scope.full_name:
         raise ModelicaSemanticError(f"Cannot extend class '{extends_class.full_name}' with itself")
-    if _is_transitively_replaceable(extends_class):
+    if not class_extends and _is_transitively_replaceable(extends_class):
         # MLS 7.3: A redeclare without `replaceable` drops the flag. During
         # partial instantiation the redeclare hasn't been applied yet, so the
         # InstanceClass still carries the original replaceable=True.

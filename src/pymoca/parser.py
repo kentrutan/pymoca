@@ -411,6 +411,7 @@ class ASTListener(ModelicaListener):
             # `class extends X` resolves X in the enclosing class (its inherited
             # members), not in this class itself — scope is the parent.
             scope=self.class_nodes[-2],
+            is_class_extends=True,
         )
         class_node.extends.append(extends_clause)
         # No self.in_extends flag: unlike class_spec_base (which has no body),

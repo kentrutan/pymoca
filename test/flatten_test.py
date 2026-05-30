@@ -1053,6 +1053,12 @@ def test_class_extends_redeclare_record():
     assert "s.d" in flat.symbols
     assert "s.T" in flat.symbols
 
+
+def test_inherited_type_in_enclosing_scope():
+    """Resolve a record field type inherited via extends into an enclosing package (MLS 5.3)."""
+    flat = parse_and_flatten_model("InheritedTypeEnclosingScope.mo", "P.M")
+    assert "s.d" in flat.symbols
+
 if __name__ == "__main__":
     import pytest as _pytest
 

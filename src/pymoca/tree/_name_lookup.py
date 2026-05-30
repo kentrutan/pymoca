@@ -520,8 +520,14 @@ def _find_inherited(
     opts: LookupOptions,
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Find simple name in inherited classes"""
-    # Fast path: nothing to inherit from (UNINSTANTIATED InstanceClass has empty extends)
-    if not scope.extends:
+    # Normally .extends is populated at PARTIAL instantiation. But an enclosing
+    # InstanceClass reached as a parent scope can be FULL-but-empty-extends while its
+    # ast_ref still carries the original extends clauses. Fall back to those so
+    # transitively-inherited nested types remain visible during name lookup.
+    extends_list = scope.extends
+    if not extends_list and isinstance(scope, ast.InstanceClass) and scope.ast_ref is not None:
+        extends_list = scope.ast_ref.extends
+    if not extends_list:
         return None
 
     # Cross-call memoization: the extends chain is populated at PARTIAL instantiation
@@ -548,7 +554,7 @@ def _find_inherited(
     searched = opts._searched_extends
 
     result = None
-    for extends in scope.extends:
+    for extends in extends_list:
         # Avoid infinite recursion by keeping track of where we have been with current_extends
         # A common case is when multiple classes in the same hierarchy extend the same class
         # such as Icons in the Modelica Standard Library
@@ -571,14 +577,17 @@ def _find_inherited(
                 break
             continue
 
-        # Resolve the extends class name using lexical (non-inherited) lookup only.
-        # Inherited lookup is not needed for base class name resolution and would cause
-        # exponential recursion through nested extends chains.
+        # Resolve the extends class name using lexical lookup only. Inherited lookup
+        # is not needed for base class name resolution and would cause exponential
+        # recursion through nested extends chains. search_parent=True is forced because
+        # base class names always resolve lexically up to enclosing packages — callers
+        # may pass search_parent=False for the target-name search itself, but that
+        # restriction must not bleed into base-class-name resolution.
         extends_scope = _find_name(
             extends.component,
             scope,
             guard,
-            replace(opts, search_inherited=False, _searched_extends=None),
+            replace(opts, search_inherited=False, search_parent=True, _searched_extends=None),
         )
         if extends_scope is not None:
             if isinstance(extends_scope, ast.Symbol):

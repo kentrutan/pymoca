@@ -97,7 +97,19 @@ def _find_name(
 
     if (
         not found
-        and not guard.current_extends
+        and (
+            not guard.current_extends
+            # Also fall back to the class tree for uninstantiated InstanceClasses even
+            # when inside an extends traversal. An InstanceClass at state=0 has empty
+            # .classes, so without this fallback types defined directly inside an
+            # uninstantiated package (e.g. FixedPhase inside Types_ic) are invisible.
+            # Falling back to ast_ref is safe: ast.Class is not an InstanceClass, so
+            # this recursive call cannot re-trigger the fallback.
+            or (
+                isinstance(scope, ast.InstanceClass)
+                and scope.instantiation_state < ast.InstantiationState.PARTIAL
+            )
+        )
         and isinstance(scope, (ast.InstanceClass, InstanceTree))
     ):
         # Not found in instance tree, look in class tree

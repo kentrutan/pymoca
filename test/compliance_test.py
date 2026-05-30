@@ -156,9 +156,6 @@ _SHOULD_FAIL_UNDETECTED = {
     "ModelicaCompliance.Scoping.NameLookup.Composite.FunctionLookupViaArrayElement": (
         "shouldPass=false: pymoca does not reject non-function composite lookup via array element"
     ),
-    "ModelicaCompliance.Scoping.NameLookup.Composite.FunctionLookupViaCompNonCall": (
-        "shouldPass=false: pymoca does not reject non-call function lookup via component"
-    ),
     "ModelicaCompliance.Scoping.NameLookup.Composite.FunctionLookupViaNonClassComp": (
         "shouldPass=false: pymoca does not reject function lookup via non-class component"
     ),

@@ -629,6 +629,10 @@ class ExtendsClause(Node):
         self.class_modification = None  # type: Optional[ClassModification]
         self.visibility = Visibility.PUBLIC  # type: Visibility
         self.scope = None  # type: Optional[Union[Class, InstanceClass]]
+        # True when created from `class extends X` syntax (MLS §7.3.1).
+        # The base class X must be resolved in the inherited scope of the enclosing
+        # class, not the local scope (which already contains the redeclaration).
+        self.is_class_extends = False  # type: bool
         super().__init__(**kwargs)
 
     def __repr__(self):

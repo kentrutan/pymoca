@@ -1082,6 +1082,17 @@ def test_replaceable_record_modification():
     assert "state.T" in flat.symbols
 
 
+def test_time_in_modification():
+    """'time' used as a modification value must not raise NameLookupError.
+
+    'time' is a Modelica built-in variable (MLS §2.7) and must be left as-is
+    during modification resolution rather than looked up in the instance tree.
+    """
+    flat = parse_and_flatten_model("TimeInModification.mo", "TimeInModification")
+    assert "wz" in flat.symbols
+    assert "x" in flat.symbols
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

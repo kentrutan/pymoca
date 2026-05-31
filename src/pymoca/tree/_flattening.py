@@ -404,18 +404,22 @@ def _resolve_modification_attribute(
         value = value.value
     elif isinstance(value, ast.ComponentRef):
         assert isinstance(symbol.parent, ast.InstanceClass)
-        value = _resolve_name(
-            value,
-            arg.scope,
-            symbol.parent_instance,
-            name_flat_class=flat_class,
-            guard=guard,
-            opts=opts,
-        )
-        value = cast(ast.InstanceSymbol, value)
-        const_val = _get_constant_value(value)
-        if const_val is not None and isinstance(const_val, ast.Primary):
-            value = const_val.value
+        # 'time' is a Modelica built-in variable (MLS §2.7); leave it as-is.
+        if value.name == "time" and not value.child:
+            pass
+        else:
+            value = _resolve_name(
+                value,
+                arg.scope,
+                symbol.parent_instance,
+                name_flat_class=flat_class,
+                guard=guard,
+                opts=opts,
+            )
+            value = cast(ast.InstanceSymbol, value)
+            const_val = _get_constant_value(value)
+            if const_val is not None and isinstance(const_val, ast.Primary):
+                value = const_val.value
     elif isinstance(value, (ast.Array, ast.Expression)):
         # Discover function calls inside Array elements and Expressions so
         # that the function flattening pass can include them in the output.

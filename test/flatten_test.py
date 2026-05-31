@@ -976,6 +976,15 @@ def test_composite_lookup_via_extends():
     assert "tau_copy" in flat.symbols
 
 
+
+def test_inherited_connector_stub_via_extends():
+    """Connectors inherited via extends get connector stubs so connect() resolves (MLS 9.1.3)."""
+    ast_tree = parse_model_files("InheritedConnectorConnect.mo")
+    flat = tree.flatten(ast_tree, ast.ComponentRef.from_string("P.System"))
+    symbols = flat.classes["P.System"].symbols
+    assert "m.flange_a.s" in symbols
+    assert "m.flange_b.s" in symbols
+
 if __name__ == "__main__":
     import pytest as _pytest
 

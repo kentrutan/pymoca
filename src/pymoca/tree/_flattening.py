@@ -1441,6 +1441,9 @@ def _add_connector_symbols(
             flat_class.symbols[full_name] = stub
         # Recurse into composite types (models containing connectors)
         _add_connector_symbols(sym.type, flat_class, full_name)
+    # Recurse into extends instances (connectors inherited from base classes)
+    for extends in instance.extends:
+        _add_connector_symbols(extends, flat_class, prefix)
 
 
 def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:

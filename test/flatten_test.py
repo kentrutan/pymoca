@@ -1057,7 +1057,6 @@ def test_encapsulated_import_enclosing_package():
     assert "R.T[1,1]" in flat.symbols or any(k.startswith("R") for k in flat.symbols)
 
 
-
 def test_class_extends_redeclare_record():
     """Flatten a redeclared `class extends` record without infinite recursion (MLS 7.3.2)."""
     flat = parse_and_flatten_model("ClassExtendsRedeclare.mo", "P.M")
@@ -1069,6 +1068,19 @@ def test_inherited_type_in_enclosing_scope():
     """Resolve a record field type inherited via extends into an enclosing package (MLS 5.3)."""
     flat = parse_and_flatten_model("InheritedTypeEnclosingScope.mo", "P.M")
     assert "s.d" in flat.symbols
+
+
+def test_replaceable_record_modification():
+    """Modifications targeting symbols that only exist in the concrete redeclaration
+    of a replaceable record must not raise a false 'symbol does not exist' error.
+
+    Before the fix, _check_modification_targets ran against the abstract (empty) base
+    class and rejected modifications that are valid for the concrete redeclared class.
+    """
+    flat = parse_and_flatten_model("ReplaceableModification.mo", "P.Example")
+    assert "state.p" in flat.symbols
+    assert "state.T" in flat.symbols
+
 
 if __name__ == "__main__":
     import pytest as _pytest

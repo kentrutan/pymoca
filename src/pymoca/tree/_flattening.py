@@ -200,7 +200,11 @@ def _flatten_instance(
 
         # 1.4 Resolve modifications of value attributes of simple types and records
         # 1.5 Resolve modifications of other attributes of simple types
-        if flat_symbol.type.name in InstanceTree.BUILTIN_TYPES or "record" in flat_symbol.prefixes:
+        if (
+            flat_symbol.type.name in InstanceTree.BUILTIN_TYPES
+            or flat_symbol.type.name in ast.Tree.BUILTIN_ENUM_TYPES
+            or "record" in flat_symbol.prefixes
+        ):
             _resolve_modifications(
                 flat_symbol,
                 flat_class,
@@ -329,6 +333,9 @@ def _resolve_modifications(
     if isinstance(symbol.type, ast.ComponentRef):
         # type class, modifications at this level
         modification_environment = symbol.modification_environment
+    elif symbol.type.name in ast.Tree.BUILTIN_ENUM_TYPES:
+        # Enum types have no value-attribute modifications to inherit from the type class
+        modification_environment = symbol.modification_environment
     else:
         modification_environment = symbol.type.symbols[symbol.type.name].modification_environment
 
@@ -410,7 +417,7 @@ def _resolve_modification_attribute(
             )
             if result is not None:
                 value = result
-        except (NotImplementedError, ModelicaSemanticError):
+        except (NotImplementedError, ModelicaSemanticError, NameLookupError):
             pass  # keep original ast.Expression
         # When the expression cannot be folded to a scalar, rewrite any
         # ComponentRef operands to their flat names so that the stored

@@ -1168,6 +1168,11 @@ class Tree(Class):
         ),
     }
 
+    # Predefined enumeration types per MLS 4.8.4; maps name → tuple of literal names
+    BUILTIN_ENUM_TYPES = {
+        "StateSelect": ("never", "avoid", "default", "prefer", "always"),
+    }
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.type = "package"
@@ -1180,6 +1185,18 @@ class Tree(Class):
             type_class = Class(name=name, type="type", parent=self)
             new_symbol.parent = type_class
             type_class.symbols[name] = new_symbol
+            self.classes[name] = type_class
+        for name, literals in self.BUILTIN_ENUM_TYPES.items():
+            type_class = Class(name=name, type="type", parent=self)
+            for literal in literals:
+                enum_sym = Symbol(
+                    name=literal,
+                    type=ComponentRef(name=name),
+                    prefixes=["constant"],
+                    class_modification=ClassModification(),
+                )
+                enum_sym.parent = type_class
+                type_class.symbols[literal] = enum_sym
             self.classes[name] = type_class
 
     def extend(self, other: "Tree") -> None:

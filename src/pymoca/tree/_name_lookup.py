@@ -288,6 +288,7 @@ def _find_rest_of_name(
             and found.name == _first_name(rest_of_name)
             and first.type != "package"
             and not (isinstance(found, ast.Class) and found.encapsulated)
+            and not (isinstance(found, ast.Symbol) and "constant" in found.prefixes)
         ):
             raise NameLookupError(
                 f"{first.name} is not a package so {found.name} must be encapsulated"

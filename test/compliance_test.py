@@ -207,6 +207,9 @@ _SHOULD_FAIL_UNDETECTED = {
     "ModelicaCompliance.Scoping.Visibility.AccessProtectedClassComp": (
         "shouldPass=false: pymoca does not enforce protected class access via component restrictions"
     ),
+    "ModelicaCompliance.Scoping.Visibility.AccessInheritedProtectedCompInvalid": (
+        "shouldPass=false: pymoca does not enforce protected inherited component dot-access restrictions"
+    ),
     "ModelicaCompliance.Scoping.Visibility.AccessProtectedComp": (
         "shouldPass=false: pymoca does not enforce protected component access restrictions"
     ),

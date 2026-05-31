@@ -386,6 +386,17 @@ def test_modification_sub_attr_and_value():
     assert flat_tree2.symbols["m.k"].value == 2.0
 
 
+def test_nested_modification_arg_scope_resolves_param():
+    """Nested ClassModification args (k(unit=p_unit)=2) must resolve the inner
+    param ref from the instance scope, not the raw parse-time AST class scope.
+    """
+    flat = parse_and_flatten_model("NestedModificationArgScope.mo", "NestedModificationArgScope")
+    assert flat.symbols["m.k"].value == 2.0
+    assert isinstance(
+        flat.symbols["m.k"].unit, ast.InstanceSymbol
+    ), "unit sub-attr must resolve to InstanceSymbol for p_unit, not stay as raw ComponentRef"
+
+
 def test_flatten_to_tree_bouncing_ball():
     """flatten_to_tree returns ast.Tree with ast.Class/Symbol, not Instance types."""
     ast_tree = parse_model_files("BouncingBall.mo")

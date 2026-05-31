@@ -439,17 +439,20 @@ def _check_extends_rules(
             # loop completes.
             continue
         extends_other.add(composite_name)
-        for ident in ref_tuple:
-            for other_class in extends_list:
-                other_names = {
-                    *other_class.ast_ref.symbols.keys(),
-                    *other_class.ast_ref.classes.keys(),
-                }
-                if ident in other_names:
-                    raise ModelicaSemanticError(
-                        f"Cannot extend '{class_.full_name}' with '{composite_name}'; "
-                        f"'{ident}' also exists in names inherited from '{other_class.ast_ref.name}'"
-                    )
+        # Only the first path component is resolved from the class's merged scope;
+        # subsequent components are resolved relative to the preceding component,
+        # so inherited symbols cannot shadow them (MLS §5.3.2).
+        first_ident = ref_tuple[0]
+        for other_class in extends_list:
+            other_names = {
+                *other_class.ast_ref.symbols.keys(),
+                *other_class.ast_ref.classes.keys(),
+            }
+            if first_ident in other_names:
+                raise ModelicaSemanticError(
+                    f"Cannot extend '{class_.full_name}' with '{composite_name}'; "
+                    f"'{first_ident}' also exists in names inherited from '{other_class.ast_ref.name}'"
+                )
     if len(extends_builtin) > 1 or len(extends_builtin) and len(extends_other):
         raise ModelicaSemanticError(
             "When extending a built-in class (Real, Integer, ...) you cannot extend other classes as well"
@@ -766,6 +769,11 @@ def _check_modification_targets(
     ElementModification args in modification_environment that don't match
     a symbol or known attribute indicate a typo in the model.
     """
+    # Replaceable classes can be redeclared to a concrete type with additional
+    # symbols; modifications targeting those symbols are valid (MLS §7.3).
+    if instance.replaceable:
+        return
+
     all_names = set(instance.symbols.keys()) | set(instance.classes.keys())
 
     # Also collect names from extends chain

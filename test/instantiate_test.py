@@ -457,6 +457,18 @@ def test_error_extends_class_also_extended_name_nested():
             instance = tree.instantiate("D", ast_tree)  # noqa: F841
 
 
+def test_extends_path_middle_component_not_checked():
+    """A name that appears in the MIDDLE of a qualified extends path and is also
+    inherited from another base class must not trigger a false ambiguity error.
+
+    Only the FIRST path component can be ambiguous (it is the one resolved from
+    the merged scope); subsequent components are resolved relative to the preceding
+    component and are not affected by inherited names (MLS §5.3.2).
+    """
+    instance = parse_and_instantiate_model("ExtendsPathMiddleConflict.mo", "ExtendsOuter")
+    assert instance is not None
+
+
 def test_nested_classes():
     instance = parse_and_instantiate_model("NestedClasses.mo", "C2")
 

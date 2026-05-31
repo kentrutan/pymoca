@@ -1088,6 +1088,18 @@ def test_builtin_enum_literals_are_enumeration_literals():
         assert sym.ordinal == expected_ordinal
 
 
+def test_replaceable_record_modification():
+    """Modifications targeting symbols that only exist in the concrete redeclaration
+    of a replaceable record must not raise a false 'symbol does not exist' error.
+
+    Before the fix, _check_modification_targets ran against the abstract (empty) base
+    class and rejected modifications that are valid for the concrete redeclared class.
+    """
+    flat = parse_and_flatten_model("ReplaceableModification.mo", "P.Example")
+    assert "state.p" in flat.symbols
+    assert "state.T" in flat.symbols
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

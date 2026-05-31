@@ -31,6 +31,7 @@ pre-commit run --all-files        # lint (black + flake8)
 - Additional paragraphs or list: If necessary to describe anything important to understanding the diffs, but not covered above. (If not related to above, should it be a separate commit?). Keep paragraphs to one topic.
 - Title and body use the present imperative form, such as "Add," "Fix," or "Remove", especially on initial sentences in paragraphs.
 - **No meta-commentary** — don't mention code review, how an issue was found, or process artifacts in commit messages.
+- **Linear history** — this project uses a rebase workflow; force-pushing a feature branch after a rebase or commit reword is expected and correct.
 
 ## References
 

@@ -332,6 +332,54 @@ def _update_class_modification_scopes(
             scope = scope.parent
         return scope
 
+    def update_nested_args(
+        args: List[ast.ClassModificationArgument],
+        scope: Union[ast.Class, ast.InstanceClass],
+    ) -> List[ast.ClassModificationArgument]:
+        """Recursively update scopes of nested ClassModification args.
+
+        Inner args inside ``Temperature(min=T_min, max=T_max)`` keep the raw
+        AST class scope set at parse time.  When the outer arg's scope is
+        updated to an InstanceClass, we must update the inner args too so
+        that _resolve_name can skip the parent_instance walk (which may fail
+        for cached type instantiations with broken parent chains).
+
+        Returns the original list unchanged if no updates were needed.
+        """
+        if not isinstance(scope, ast.InstanceClass):
+            return args
+        updated = []
+        any_changed = False
+        for arg in args:
+            if isinstance(arg.scope, ast.InstanceClass):
+                updated.append(arg)
+                continue
+            arg_scope = resolve_scope(arg.scope, scope)
+            new_arg = copy.copy(arg)
+            new_arg.scope = arg_scope
+            # Recurse into nested ClassModifications (e.g. T(min=a, max=b) inside outer mod)
+            if isinstance(arg.value, ast.ElementModification):
+                inner_scope = arg_scope if isinstance(arg_scope, ast.InstanceClass) else scope
+                new_mods = []
+                sub_changed = False
+                for sub in arg.value.modifications:
+                    if isinstance(sub, ast.ClassModification) and sub.arguments:
+                        new_sub_args = update_nested_args(sub.arguments, inner_scope)
+                        if new_sub_args is not sub.arguments:
+                            new_sub = copy.copy(sub)
+                            new_sub.arguments = new_sub_args
+                            new_mods.append(new_sub)
+                            sub_changed = True
+                            continue
+                    new_mods.append(sub)
+                if sub_changed:
+                    new_value = copy.copy(arg.value)
+                    new_value.modifications = new_mods
+                    new_arg.value = new_value
+            updated.append(new_arg)
+            any_changed = True
+        return updated if any_changed else args
+
     scoped_mod_args = []
     for arg in element.class_modification.arguments:
         if isinstance(arg.scope, ast.InstanceClass):
@@ -342,6 +390,28 @@ def _update_class_modification_scopes(
         # Make a copy so we don't change original AST or same arg used elsewhere
         new_arg = copy.copy(arg)
         new_arg.scope = scope
+        # Also update scopes of any nested ClassModification args so that
+        # _resolve_name (called during flattening) can locate the scope InstanceClass
+        # without relying on the parent_instance chain (which may be stale for
+        # type-cache shallow clones).
+        if isinstance(arg.value, ast.ElementModification) and isinstance(scope, ast.InstanceClass):
+            inner_scope = scope
+            new_mods = []
+            changed = False
+            for sub in arg.value.modifications:
+                if isinstance(sub, ast.ClassModification) and sub.arguments:
+                    new_sub_args = update_nested_args(sub.arguments, inner_scope)
+                    if new_sub_args is not sub.arguments:
+                        new_sub = copy.copy(sub)
+                        new_sub.arguments = new_sub_args
+                        new_mods.append(new_sub)
+                        changed = True
+                        continue
+                new_mods.append(sub)
+            if changed:
+                new_value = copy.copy(arg.value)
+                new_value.modifications = new_mods
+                new_arg.value = new_value
         scoped_mod_args.append(new_arg)
     if scoped_mod_args or isinstance(element, ast.ExtendsClause):
         element = copy.copy(element)

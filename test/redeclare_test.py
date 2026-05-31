@@ -20,7 +20,6 @@ from pymoca import tree
 import pytest
 
 
-@pytest.mark.xfail  # `redeclare class extends` not implemented
 def test_flattening_redeclare_class_extends():
     """Test redeclare class extends construct"""
 

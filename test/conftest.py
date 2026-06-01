@@ -10,3 +10,4 @@ sys.path.insert(0, os.path.dirname(__file__))
 def pytest_configure(config):
     config.addinivalue_line("markers", "compliance: ModelicaCompliance test")
     config.addinivalue_line("markers", "flattening: Flattening level compliance test")
+    config.addinivalue_line("markers", "msl: MSL examples pipeline test")

@@ -1,39 +1,44 @@
 #!/usr/bin/env python
 """Modelica translator/compiler tool using pymoca"""
 
-# This duplicates some things in casadi.api, but is useful for other backends
-# TODO: Perhaps refactor the parts common with casadi backend
-
-from __future__ import generators
-
 import argparse
 import json
 import logging
 import os
 import sys
 import time
+from enum import IntEnum
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import pymoca.ast
 from pymoca import __version__
 
-# Import of backends delayed until needed
-
 log = logging.getLogger("pymoca")
 logging.basicConfig(stream=sys.stderr)
 
-# In lieu of a pluggable backend api, we'll use this for now.
+# Registry of available translation backends.
 TRANSLATOR_TYPES = ("casadi", "sympy")
 
 
-def list_modelica_files(paths: List[Path]) -> List[Path]:
-    """Find all Modelica files in given paths (can be files and directories)
+class Stage(IntEnum):
+    """Pipeline stages; value ordering defines execution sequence"""
 
-    :param paths: List of Paths to search
-    :return: List of valid Modelica file Paths found
-    """
-    # Make flat list of .mo files
+    PARSE = 0
+    INSTANTIATE = 1
+    FLATTEN = 2
+    TRANSLATE = 3
+
+
+class MyArgumentParser(argparse.ArgumentParser):
+    """Make options file treat each space separated word as a separate argument"""
+
+    def convert_arg_line_to_args(self, arg_line):
+        return arg_line.split()
+
+
+def list_modelica_files(paths: List[Path]) -> List[Path]:
+    """Find all Modelica files in given paths (can be files and directories)"""
     files = []
     for path in paths:
         if path.is_file() and path.suffix == ".mo":
@@ -44,15 +49,9 @@ def list_modelica_files(paths: List[Path]) -> List[Path]:
     return files
 
 
-def parse_file(path: Path) -> Union[pymoca.ast.Tree, None]:
-    """Parse a Modelica file and return AST or None on failure
-
-    :param path: single Path containing Modelica code
-    :return: parsed ast.Tree or None on error
-    """
-    # Per comment in backends.casadi.api.py, antlr4 is slow to load, so delay to here
-    # pylint: disable=redefined-outer-name
-    import pymoca.parser  # pylint: disable=imports
+def parse_file(path: Path) -> Optional[pymoca.ast.Tree]:
+    """Parse a Modelica file and return AST or None on failure"""
+    import pymoca.parser
 
     ast = None
     try:
@@ -81,16 +80,13 @@ def parse_file(path: Path) -> Union[pymoca.ast.Tree, None]:
 def parse_all(paths: List[Path], ast: pymoca.ast.Tree = None) -> Tuple[List[Path], List[Path]]:
     """Parse a list of files and directory trees and add to given AST
 
-    :param paths: List of files and directory trees to parse
-    :param ast: Optional ast.Tree to add parsed AST to
-    :return: tuple (list of all .mo files, list of files with parse errors)
+    Returns: tuple (list of all .mo files, list of files with parse errors)
     """
     files = list_modelica_files(paths)
     if not files:
         return [], []
     if not ast:
         ast = pymoca.ast.Tree(name="ModelicaTree")
-    # Parse all .mo files
     error_files = []
     for path in files:
         try:
@@ -105,23 +101,6 @@ def parse_all(paths: List[Path], ast: pymoca.ast.Tree = None) -> Tuple[List[Path
     return files, error_files
 
 
-def flatten_class(library_ast: pymoca.ast.Tree, class_: str) -> pymoca.ast.Tree:
-    """Flatten given class and return AST
-
-    :param library_ast: Previously parsed AST containing the above class
-    :param class_: Class to flatten, e.g. 'Package1.Package2.Model'
-    :return: flattened pymoca.ast.Tree
-    """
-    log.info("Flattening %s ...", class_)
-    import pymoca.tree  # pylint: disable=imports
-
-    component_ref = pymoca.ast.ComponentRef.from_string(class_)
-    flat_tree = pymoca.tree.flatten(library_ast, component_ref)
-    if log.level == logging.DEBUG:
-        log.debug(json.dumps(flat_tree.to_json(flat_tree), indent=2))
-    return flat_tree
-
-
 def translate(
     library_ast: pymoca.ast.Tree,
     model: str,
@@ -129,30 +108,24 @@ def translate(
     options: dict,
     outdir: Optional[Path] = None,
 ) -> bool:
-    """Given parsed Modelica AST, generate code for model into given directory
+    """Generate code for model from library_ast into outdir
 
-    :param library_ast: Previously parsed AST containing the above model class
-    :param model: Modelica Class to generate code for
-    :param translator: translator to use (e.g. 'sympy' or 'casadi')
-    :param options: dict of options to pass to translator
-    :param outdir: directory to put results in
-    :return: True on success, False on failure
+    Returns: True on success, False on failure
     """
     if outdir is None:
         outdir = Path(".")
 
     log.info("Generating model for %s ...", model)
-    # Currenly only support sympy; envision others being added in future
     if translator == "sympy":
-        import pymoca.backends.sympy.generator as sympy_gen  # pylint: disable=imports
+        import pymoca.backends.sympy.generator as sympy_gen
 
         try:
             result = sympy_gen.generate(library_ast, model, options)
-            outfile = outdir.joinpath(model + ".py")
+            outfile = outdir / (model + ".py")
             with outfile.open("w") as file:
                 file.write(result)
         except OSError:
-            if log.level is logging.DEBUG:
+            if log.level == logging.DEBUG:
                 log.exception('Error writing "%s"', outfile)
             else:
                 log.error('Error writing "%s"', outfile)
@@ -165,37 +138,87 @@ def translate(
     return True
 
 
-class MyArgumentParser(argparse.ArgumentParser):
-    """Make options file treat each space separated word as a separate argument"""
+def emit_stage_output(model: str, stage_name: str, result, args) -> None:
+    """Write pipeline stage result to stdout or a file in outdir"""
+    if args.output_format == "repr":
+        text, ext = repr(result), "txt"
+    else:
+        text, ext = json.dumps(result.to_json(result), indent=2), "json"
+    if args.outdir is not None:
+        outfile = args.outdir / "{}.{}.{}".format(model, stage_name, ext)
+        with outfile.open("w") as f:
+            f.write(text)
+        log.info("Stage output written to %s", outfile)
+    else:
+        print(text)
 
-    def convert_arg_line_to_args(self, arg_line):
-        return arg_line.split()
 
+def run_model(library_ast: pymoca.ast.Tree, model: str, stage: Stage, args, options: Dict) -> int:
+    """Run the pipeline up to stage for model
 
-def main(argv: List[str]) -> int:
-    """Parse command line options and do the work
-
-    :param argv: list of command line arguments, not including program name (pass "-h" for help printout)
-    :return: number of usage errors (not parse errors)
+    Returns: error count (0 or 1)
     """
+    import pymoca.parser
+    import pymoca.tree
+
+    try:
+        if stage == Stage.INSTANTIATE:
+            result = pymoca.tree.instantiate(model, library_ast)
+            emit_stage_output(model, "instantiate", result, args)
+        elif stage == Stage.FLATTEN:
+            result = pymoca.tree.flatten_model(library_ast, model)
+            emit_stage_output(model, "flatten", result, args)
+        elif stage == Stage.TRANSLATE:
+            outdir = args.outdir if args.outdir is not None else Path(".")
+            if not translate(library_ast, model, args.translator, options, outdir):
+                return 1
+    except pymoca.parser.ModelicaSyntaxError as exc:
+        import io
+
+        buf = io.StringIO()
+        pymoca.parser.print_syntax_error(exc, buf)
+        log.error("Syntax error while processing %s:\n%s", model, buf.getvalue())
+        return 1
+    except pymoca.tree.ModelicaError as exc:
+        log.error("Error at %s stage for %s: %s", stage.name.lower(), model, exc)
+        if log.level == logging.DEBUG:
+            log.exception("Traceback for %s", model)
+        return 1
+    except NotImplementedError as exc:
+        log.error("Not implemented at %s stage for %s: %s", stage.name.lower(), model, exc)
+        return 1
+    except Exception:  # pylint: disable=broad-except
+        if log.level == logging.DEBUG:
+            log.exception("Unexpected error at %s stage for %s", stage.name.lower(), model)
+        else:
+            log.error("Unexpected error at %s stage for %s", stage.name.lower(), model)
+        return 1
+    return 0
+
+
+def build_arg_parser() -> MyArgumentParser:
+    """Build and return the argument parser."""
     example_help = """
     Examples:
 
         Parse all files in "MSL-4.0.x" directory tree, printing any errors and time taken:
-            python tools/compiler.py -v test/libraries/MSL-4.0.x
+            pymoca -v test/libraries/MSL-4.0.x
 
-        Test flattening OpAmp model in "MSL-4.0.x/Modelica" library without generating translated code:
-            python tools/compiler.py -v -p test/libraries/MSL-4.0.x -m Modelica.Electrical.Analog.Basic.OpAmp
+        Instantiate the OpAmp model and dump its instance tree as JSON:
+            pymoca -v -p test/libraries/MSL-4.0.x \\
+                -m Modelica.Electrical.Analog.Basic.OpAmp --stage instantiate
 
-        Generate SymPy code for "Spring" model, putting it in the "sympy_models" directory:
-            python tools/compiler.py -v -p test/models -m Spring -t sympy -o sympy_models
+        Flatten "Spring" model and write to a file:
+            pymoca -p test/models -m Spring --stage flatten -o out/
+
+        Generate SymPy code for "Spring" model:
+            pymoca -p test/models -m Spring -t sympy -D verbose=true -o out/
 
         Read some options above from a file:
-            python tools/compiler.py -v -p test/models -m Spring @args.txt
-
-            where the args.txt file contains space-separated arguments:
+            pymoca -p test/models -m Spring @args.txt
+            where args.txt contains:
             -t sympy
-            -o sympy_models
+            -o out/
     """
     argp = MyArgumentParser(
         description="Translate Modelica code to specified output code",
@@ -226,32 +249,205 @@ def main(argv: List[str]) -> int:
     argp.add_argument(
         "--version", action="version", version=__version__, help="print pymoca version"
     )
-    genargs = argp.add_argument_group("translation arguments", "without these, just parse only")
+    genargs = argp.add_argument_group(
+        "pipeline arguments", "control which stage to run and what to output"
+    )
     genargs.add_argument(
         "-m",
         "--model",
         action="append",
-        help="model to translate (e.g. Package1.Package2.ModelName); "
-        "if translator not specified, then flatten only",
+        help="model to process (e.g. Package1.Package2.ModelName)",
     )
     genargs.add_argument(
         "-t",
         "--translator",
         choices=TRANSLATOR_TYPES,
-        help="translate Modelica to this output type",
+        help="translate Modelica to this output type (implies --stage translate)",
     )
     genargs.add_argument(
-        "-O",
-        "--option",
+        "--stage",
+        choices=("parse", "instantiate", "flatten", "translate"),
+        default=None,
+        help="stop at and emit output from this pipeline stage "
+        "(default: translate if -t given, flatten if -m given, parse otherwise)",
+    )
+    genargs.add_argument(
+        "--format",
+        dest="output_format",
+        choices=("json", "repr"),
+        default="json",
+        help="serialization format for intermediate stage output (default: json)",
+    )
+    genargs.add_argument(
+        "-D",
+        "--define",
         action="append",
         help="translator option in the form NAME=VALUE with no spaces or quoted",
     )
     genargs.add_argument(
-        "-o", "--outdir", type=Path, default=".", help="directory to contain translator output"
+        "-o",
+        "--outdir",
+        type=Path,
+        default=None,
+        help="directory for stage output files; if omitted, intermediate stages print to stdout",
     )
+    return argp
 
+
+def validate_args(argp: MyArgumentParser, args, modelicapath_env: str) -> None:
+    """Check for invalid argument combinations; calls argp.error() (sys.exit 2) on failure"""
+    if not (args.PATHNAME or args.path or modelicapath_env):
+        argp.error("PATHNAME or -p/--path or environment variable MODELICAPATH required")
+    if (args.path or modelicapath_env) and not (args.model or args.PATHNAME):
+        argp.error("Nothing to do. Specify at least -m/--model")
+    if args.translator and not args.model:
+        argp.error("-t/--translator requires -m/--model")
+    if args.stage == "translate" and not args.translator:
+        argp.error("--stage translate requires -t/--translator")
+    if args.translator == "casadi":
+        if not args.PATHNAME:
+            argp.error("--translator casadi requires at least one PATHNAME")
+        if args.stage and args.stage != "translate":
+            argp.error("CasADi backend only supports --stage translate")
+    if not args.translator:
+        if args.define:
+            log.warning("Ignoring -D (options only used with -t/--translator)")
+        if args.model and not args.stage:
+            log.info("No translator specified (-t), flattening model only")
+
+
+def build_modelica_path(args, modelicapath_env: str) -> Tuple[List[Path], int]:
+    """Resolve MODELICAPATH from -p args and environment variable.
+
+    Returns: (list of valid dirs, error count)
+    """
+    raw_paths: List[Path] = []
+    for mparg in args.path + [modelicapath_env]:
+        for path_str in mparg.split(os.pathsep):
+            if path_str:
+                raw_paths.append(Path(path_str))
+    modelica_path: List[Path] = []
+    errors = 0
+    for path in raw_paths:
+        if not path.is_dir():
+            log.error('Invalid MODELICAPATH directory: "%s"', path)
+            errors += 1
+        else:
+            modelica_path.append(path)
+    if not modelica_path and (args.path or modelicapath_env):
+        log.error("No valid MODELICAPATH directories given")
+        errors += 1
+    return modelica_path, errors
+
+
+def build_define_options(args) -> Tuple[Dict, int]:
+    """Parse -D NAME=VALUE args into a translator options dict.
+
+    Returns: (options dict, error count)
+    """
+    options: Dict = {}
+    errors = 0
+    if not args.define:
+        return options, errors
+    for opt in args.define:
+        parts = opt.split("=")
+        if len(parts) == 2:
+            key, raw_value = parts
+            value_lower = raw_value.lower()
+            if value_lower == "true":
+                value: Union[str, bool] = True
+            elif value_lower == "false":
+                value = False
+            else:
+                value = raw_value
+            options[key] = value
+        else:
+            log.error('Invalid option syntax (need -D NAME=VALUE): "%s"', opt)
+            errors += 1
+    return options, errors
+
+
+def infer_stage(args) -> Stage:
+    """Determine pipeline stop stage from explicit --stage or implicit flags"""
+    if args.stage:
+        return Stage[args.stage.upper()]
+    if args.translator:
+        return Stage.TRANSLATE
+    if args.model:
+        return Stage.FLATTEN
+    return Stage.PARSE
+
+
+def _run_casadi_models(args, options: Dict) -> int:
+    """Run the CasADi backend's directory-based transfer_model for each model"""
+    import pymoca.backends.casadi.api as casadi_api
+
+    modelica_files = list_modelica_files(args.PATHNAME)
+    if not modelica_files:
+        log.error("No Modelica files in given PATHNAMEs")
+        return 1
+
+    errors = 0
+    for model in args.model:
+        model_dir = None
+        ambiguous = False
+        for path in modelica_files:
+            if path.stem == model:
+                if model_dir:
+                    log.error("More than one Modelica file found for %s", model)
+                    errors += 1
+                    ambiguous = True
+                    model_dir = None
+                    break
+                model_dir = path.parent
+        if not model_dir and not ambiguous:
+            log.error("No unique Modelica file corresponding to model %s", model)
+            errors += 1
+        elif model_dir:
+            log.info("Generating model for %s ...", model)
+            try:
+                _ = casadi_api.transfer_model(str(model_dir), model, options)
+            except Exception:  # pylint: disable=broad-except
+                if log.level == logging.DEBUG:
+                    log.exception("Problem generating CasADi model %s", model)
+                else:
+                    log.error("Problem generating CasADi model %s", model)
+                errors += 1
+    return errors
+
+
+def _run_pipeline(args, modelica_path: List[Path], stage: Stage, options: Dict) -> int:
+    """Parse files then run each model through the new pipeline up to stage"""
+    import pymoca.parser
+
+    library_ast = pymoca.parser.modelicapath_to_tree(dirs=modelica_path)
+    modelica_files, error_files = parse_all(args.PATHNAME, library_ast)
+
+    errors = 0
+    if not modelica_files and not modelica_path:
+        log.error("No Modelica files in given PATHNAMEs")
+        errors += 1
+    else:
+        errors += len(error_files)
+
+    if not errors and args.model and stage > Stage.PARSE:
+        for model in args.model:
+            errors += run_model(library_ast, model, stage, args, options)
+
+    if error_files:
+        log.info("%d of %d files had parse errors", len(error_files), len(modelica_files))
+
+    return errors
+
+
+def main(argv: List[str]) -> int:
+    """Parse command line options and run the pipeline.
+
+    :param argv: command line arguments, not including program name (pass "-h" for help)
+    :return: number of errors
+    """
+    argp = build_arg_parser()
     args = argp.parse_args(argv)
-    errors = 0  # For additional argument checks beyond what argparse does
 
     if args.verbose == 0:
         log.setLevel(logging.WARNING)
@@ -260,24 +456,14 @@ def main(argv: List[str]) -> int:
     else:
         log.setLevel(logging.DEBUG)
 
-    # Check for invalid option combinations (argp.error will exit)
     modelicapath_env = os.getenv("MODELICAPATH", default="")
-    if not (args.PATHNAME or args.path or modelicapath_env):
-        argp.error("PATHNAME or -p/--path or environment variable MODELICAPATH required")
-    if (args.path or modelicapath_env) and not (args.model or args.PATHNAME):
-        argp.error("Nothing to do. Specify at least -m/--model")
-    if args.translator and not args.model:
-        argp.error("-t/--translator requires -m/--model")
-    if not args.translator:
-        if args.option:
-            log.warning("Ignoring -O (options only used with -t/--translator)")
-        if args.model:
-            log.info("No translator specified (-t option), flattening model only")
-    elif args.translator == "casadi" and not args.PATHNAME:
-        argp.error("--translator casadi requires at least one PATHNAME")
+    validate_args(argp, args, modelicapath_env)  # may call sys.exit(2)
 
-    # Check that paths exist
-    if not args.outdir.is_dir():
+    modelica_path, errors = build_modelica_path(args, modelicapath_env)
+    options, opt_errors = build_define_options(args)
+    errors += opt_errors
+
+    if args.outdir is not None and not args.outdir.is_dir():
         if args.outdir.is_file():
             log.error('Invalid output directory: "%s"', args.outdir)
             errors += 1
@@ -285,131 +471,27 @@ def main(argv: List[str]) -> int:
             try:
                 args.outdir.mkdir()
             except OSError:
-                log.error('Unable to create output directory: "%s', args.outdir)
+                log.error('Unable to create output directory: "%s"', args.outdir)
                 errors += 1
+
     for path in args.PATHNAME:
         if not path.exists():
             log.error('File or directory does not exist: "%s"', path)
             errors += 1
-    paths = []
-    for mparg in args.path + [modelicapath_env]:
-        for path in mparg.split(os.pathsep):
-            if path:
-                paths.append(Path(path))
-    modelica_path = []
-    for path in paths:
-        if not path.is_dir():
-            log.error('Invalid MODELICAPATH directory: "%s"', path)
-            errors += 1
-        else:
-            modelica_path.append(path)
-    if not modelica_path and (args.path or modelicapath_env):
-        # MODELICAPATH options specified but no valid paths found
-        log.error("No valid MODELICAPATH directories given")
-        errors += 1
-
-    # Build translator options dict from args
-    options = {}
-    if args.option:
-        for opt in args.option:
-            optsplit = opt.split("=")
-            if len(optsplit) == 2:
-                # Convert True/False values, otherwise string value as-is
-                value_lower = optsplit[1].lower()
-                if value_lower == "true":
-                    optsplit[1] = True
-                elif value_lower == "false":
-                    optsplit[1] = False
-                options[optsplit[0]] = optsplit[1]
-            else:
-                log.error('Invalid option syntax (need -O NAME=VALUE): "%s"', opt)
-                errors += 1
 
     if errors:
         return errors
 
+    stage = infer_stage(args)
     tic = time.perf_counter()
-    error_files = []  # type: List[Path]
-    modelica_files = []  # type: List[Path]
-    if args.translator == "sympy" or not args.translator:
 
-        import pymoca.parser  # pylint: disable=imports
-
-        library_ast = pymoca.parser.modelicapath_to_tree(dirs=modelica_path)
-
-        modelica_files, error_files = parse_all(args.PATHNAME, library_ast)
-        if not modelica_files and not modelica_path:
-            errors += 1
-            log.error("No Modelica files in given PATHNAMEs")
-        elif error_files:
-            errors += len(error_files)
-        if not errors and args.model:
-            for model in args.model:
-                if args.translator:
-                    translate(library_ast, model, "sympy", options, args.outdir)
-                elif args.model:
-                    # FIXME: Use new flattening API
-                    try:
-                        flat_class = flatten_class(library_ast, model)  # noqa: F841
-                        pass
-                    # tree.flatten_class can throw Exception in several places
-                    except Exception:  # pylint: disable=broad-except
-                        if log.level is logging.DEBUG:
-                            log.exception("Error flattening %s", model)
-                        else:
-                            log.error("Error flattening %s", model)
-                        errors += 1
-
-    elif args.translator == "casadi":
-        import pymoca.backends.casadi.api as casadi_api  # pylint: disable=imports
-
-        modelica_files = list_modelica_files(args.PATHNAME)
-        if not modelica_files:
-            errors += 1
-            log.error("No Modelica files in given PATHNAMEs")
-        else:
-            for model in args.model:
-                # Infer model directory to pass to casadi.api
-                model_dir = None
-                for path in modelica_files:
-                    if path.stem == model:
-                        if model_dir:
-                            # More than one found (ambiguous)
-                            log.error("More than one Modelica file found for %s", model)
-                            errors += 1
-                            model_dir = None
-                            break
-                        model_dir = path.parent
-                if not model_dir:
-                    log.error("No unique Modelica file corresponding to model %s", model)
-                else:
-                    log.info("Generating model for %s ...", model)
-                    try:
-                        _ = casadi_api.transfer_model(str(model_dir), model, options)
-                    # TODO: Figure out more specific Exceptions for CasADi transfer_model
-                    except Exception:  # pylint: disable=broad-except
-                        if log.level is logging.DEBUG:
-                            log.exception("Problem generating CasADi model %s", model)
-                        else:
-                            log.error("Problem generating CasADi model %s", model)
-                        errors += 1
-
+    if args.translator == "casadi":
+        errors = _run_casadi_models(args, options)
     else:
-        # Should never get here because argparse should have caught above
-        assert args.translator in TRANSLATOR_TYPES
-    toc = time.perf_counter()
+        errors = _run_pipeline(args, modelica_path, stage, options)
 
-    goodbye_message = "Finished in {:0.4f} seconds".format(toc - tic)
-    if error_files:
-        goodbye_message = " ".join(
-            [
-                goodbye_message,
-                "with {} of {} files with parse errors.".format(
-                    len(error_files), len(modelica_files)
-                ),
-            ]
-        )
-    log.info(goodbye_message)
+    toc = time.perf_counter()
+    log.info("Finished in {:0.4f} seconds".format(toc - tic))
     return errors
 
 

@@ -1,4 +1,8 @@
-"""Flatten every Example model in the Modelica Standard Library"""
+"""Process every Example model in the Modelica Standard Library
+
+By default each model is run through the new flatten pipeline (tree.flatten_model).
+Pass -t/--translator casadi to instead translate each model with the CasADi backend.
+"""
 
 import gc
 import os
@@ -22,12 +26,33 @@ MSL4_BASE_DIR = os.path.join(TEST_DIR, "libraries", "MSL-4.0.x")
 _worker_tree = None
 _use_legacy = False
 _msl4_base_dir = None
+_translator = None
+_options = None
+# CasADi modules, imported lazily by _worker_init only when translating.
+_casadi_generator = None
+_casadi_api = None
 
 
-def _worker_init(msl4_base_dir: str, use_legacy: bool = False, reuse_tree: bool = False) -> None:
-    global _worker_tree, _use_legacy, _msl4_base_dir
+def _worker_init(
+    msl4_base_dir: str,
+    use_legacy: bool = False,
+    reuse_tree: bool = False,
+    translator: str = None,
+    options: dict = None,
+) -> None:
+    global _worker_tree, _use_legacy, _msl4_base_dir, _translator, _options
+    global _casadi_generator, _casadi_api
     _msl4_base_dir = msl4_base_dir
     _use_legacy = use_legacy
+    _translator = translator
+    _options = options or {}
+    if translator == "casadi":
+        # Importing CasADi (and the generator) is slow; only do it when needed.
+        from pymoca.backends.casadi import api as _api
+        from pymoca.backends.casadi import generator as _gen
+
+        _casadi_api = _api
+        _casadi_generator = _gen
     if reuse_tree:
         _worker_tree = parser.modelicapath_to_tree([msl4_base_dir])
 
@@ -45,8 +70,9 @@ def _vsz_mb() -> float:
     return int(out.strip()) / 1024.0
 
 
-def _flatten_one(model_name: str) -> tuple:
-    """Flatten one model; return (status, message, elapsed_s, delta_vsz_mb)."""
+def _process_one(model_name: str) -> tuple:
+    """Process one model; return (status, message, elapsed_s, delta_vsz_mb)."""
+    verb = "translating" if _translator == "casadi" else "flattening"
     worker_tree = _worker_tree
     if worker_tree is None:
         worker_tree = parser.modelicapath_to_tree([_msl4_base_dir])
@@ -54,7 +80,18 @@ def _flatten_one(model_name: str) -> tuple:
     vsz_before = _vsz_mb()
     t0 = time.perf_counter()
     try:
-        if _use_legacy:
+        if _translator == "casadi":
+            # Replicate the compile tail of casadi.api._compile_model against the
+            # shared/fresh tree so that --reuse-tree is honored (transfer_model
+            # reparses a folder on every call and cannot reuse a tree).
+            opts = _casadi_api._merge_default_options(_options)
+            model = _casadi_generator.generate(worker_tree, model_name, opts)
+            if opts["check_balanced"]:
+                model.check_balanced()
+            model.simplify(opts)
+            model._post_checks()
+            name = model_name
+        elif _use_legacy:
             flat_class = ast.ComponentRef.from_string(model_name)
             flat_tree = tree.flatten(worker_tree, flat_class)
             name = flat_tree.classes[model_name].name
@@ -63,7 +100,7 @@ def _flatten_one(model_name: str) -> tuple:
             name = flat_instance.name
         elapsed = time.perf_counter() - t0
         delta_vsz = _vsz_mb() - vsz_before
-        return ("success", f"Success flattening {name}", elapsed, delta_vsz)
+        return ("success", f"Success {verb} {name}", elapsed, delta_vsz)
     except parser.ModelicaSyntaxError as exc:
         elapsed = time.perf_counter() - t0
         delta_vsz = _vsz_mb() - vsz_before
@@ -89,12 +126,12 @@ def _flatten_one(model_name: str) -> tuple:
     except tree.ModelicaError as exc:
         elapsed = time.perf_counter() - t0
         delta_vsz = _vsz_mb() - vsz_before
-        return ("error", f"Error flattening {model_name}: {exc}", elapsed, delta_vsz)
+        return ("error", f"Error {verb} {model_name}: {exc}", elapsed, delta_vsz)
     except Exception:
         elapsed = time.perf_counter() - t0
         delta_vsz = _vsz_mb() - vsz_before
         tb = traceback.format_exc()
-        return ("error", f"Error flattening {model_name}:\n{tb}", elapsed, delta_vsz)
+        return ("error", f"Error {verb} {model_name}:\n{tb}", elapsed, delta_vsz)
 
 
 def _default_jobs() -> int:
@@ -103,8 +140,13 @@ def _default_jobs() -> int:
     return 1
 
 
-def test_flatten_every_MSL_example(
-    jobs: int = 1, filters: list = None, legacy: bool = False, reuse_tree: bool = False
+def process_every_MSL_example(
+    jobs: int = 1,
+    filters: list = None,
+    legacy: bool = False,
+    reuse_tree: bool = False,
+    translator: str = None,
+    options: dict = None,
 ):
     msl_path = Path(MSL4_BASE_DIR) / "Modelica"
     root_index = len(msl_path.parts) - 1
@@ -122,18 +164,15 @@ def test_flatten_every_MSL_example(
 
     if jobs == 1:
         # Serial: initialize worker state in-process so ordering bugs remain reproducible.
-        global _worker_tree, _use_legacy, _msl4_base_dir
-        _msl4_base_dir = MSL4_BASE_DIR
-        _use_legacy = legacy
-        _worker_tree = parser.modelicapath_to_tree([MSL4_BASE_DIR]) if reuse_tree else None
-        results = map(_flatten_one, model_names)
+        _worker_init(MSL4_BASE_DIR, legacy, reuse_tree, translator, options)
+        results = map(_process_one, model_names)
     else:
         pool = Pool(
             processes=jobs,
             initializer=_worker_init,
-            initargs=[MSL4_BASE_DIR, legacy, reuse_tree],
+            initargs=[MSL4_BASE_DIR, legacy, reuse_tree, translator, options],
         )
-        results = pool.imap_unordered(_flatten_one, model_names)
+        results = pool.imap_unordered(_process_one, model_names)
 
     total_models = len(model_names)
     done = 0
@@ -155,10 +194,9 @@ def test_flatten_every_MSL_example(
     wall_elapsed = time.perf_counter() - wall_t0
     total = num_success + num_error
     pct = num_success / total * 100 if total else 0.0
+    verb = "translating" if translator == "casadi" else "flattening"
     print("==================================================================================")
-    print(
-        f"Success flattening {num_success} of {total} ({pct:.2f}%)  wall time: {wall_elapsed:.1f}s"
-    )
+    print(f"Success {verb} {num_success} of {total} ({pct:.2f}%)  wall time: {wall_elapsed:.1f}s")
 
 
 if __name__ == "__main__":
@@ -194,8 +232,39 @@ if __name__ == "__main__":
         default=False,
         help="reuse a single parsed tree across all models (faster, but uses more memory)",
     )
+    ap.add_argument(
+        "-t",
+        "--translator",
+        dest="translator",
+        choices=("casadi",),
+        default=None,
+        help="translate each model with this backend instead of only flattening",
+    )
+    ap.add_argument(
+        "-D",
+        "--define",
+        dest="define",
+        action="append",
+        metavar="NAME=VALUE",
+        help="translator option in the form NAME=VALUE (repeatable; only with -t)",
+    )
     args = ap.parse_args()
-    test_flatten_every_MSL_example(
-        jobs=args.jobs, filters=args.filters, legacy=args.legacy, reuse_tree=args.reuse_tree
+
+    # Reuse the CLI's option parser so -D semantics match `pymoca -D ...`.
+    from pymoca.compiler import build_define_options
+
+    options, opt_errors = build_define_options(args)
+    if opt_errors:
+        sys.exit(2)
+    if args.define and not args.translator:
+        ap.error("-D/--define requires -t/--translator")
+
+    process_every_MSL_example(
+        jobs=args.jobs,
+        filters=args.filters,
+        legacy=args.legacy,
+        reuse_tree=args.reuse_tree,
+        translator=args.translator,
+        options=options,
     )
     sys.exit(0)

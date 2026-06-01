@@ -8,9 +8,9 @@ Leave testing of pymoca details to other tests.
 import json
 import os
 
-import pytest
+import pymoca.compiler
 
-import tools.compiler
+import pytest
 
 FILE_DIR = os.path.dirname(os.path.realpath(__file__))
 MODEL_DIR = os.path.join(FILE_DIR, "models")
@@ -26,9 +26,9 @@ def run_compiler(args, check_errors=True):
     When argparse catches errors in command arguments it calls sys.exit(2).
     If arguments pass argparse, number of errors is expected to be returned from compiler.
     """
-    exitval = tools.compiler.main(args.split())
+    exitval = pymoca.compiler.main(args.split())
     if check_errors:
-        assert not exitval, "tools.compiler " + args
+        assert not exitval, "pymoca.compiler " + args
     return exitval
 
 

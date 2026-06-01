@@ -25,9 +25,9 @@ if [ "$title_len" -gt 60 ]; then
   errors+=("Title too long ($title_len chars, max 60). Goal: ≤50 chars.")
 fi
 
-# 2. Check for valid prefix (parser:, tree:, casadi:, sympy:, test:, doc:, ci/cd:, etc.)
-if ! echo "$title" | grep -qE '^(parser|tree|casadi|sympy|test|doc|ci/cd):\s'; then
-  errors+=("Title must start with a prefix (parser:, tree:, casadi:, sympy:, test:, doc:, ci/cd:).")
+# 2. Check for valid prefix (parser:, tree:, casadi:, sympy:, cli:, test:, doc:, ci/cd:, etc.)
+if ! echo "$title" | grep -qE '^(parser|tree|casadi|sympy|cli|test|doc|ci/cd):\s'; then
+  errors+=("Title must start with a prefix (parser:, tree:, casadi:, sympy:, cli:, test:, doc:, ci/cd:).")
 fi
 
 # 3. Check for imperative verb after prefix

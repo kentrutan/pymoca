@@ -952,7 +952,9 @@ def _generate_connect_equations(flat_class: ast.InstanceClass):
             elif prefixes[0] in ["constant", "parameter"]:
                 pass
             else:
-                raise Exception("Unsupported connector variable prefixes {}".format(prefixes))
+                raise NotImplementedError(
+                    "Unsupported connector variable prefixes {}".format(prefixes)
+                )
 
     # Generate flow sum-to-zero equations
     processed: Set[int] = set()

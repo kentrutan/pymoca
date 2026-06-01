@@ -5,6 +5,7 @@ Test compiler tool
 Leave testing of pymoca details to other tests.
 """
 
+import json
 import os
 
 import pytest
@@ -57,7 +58,7 @@ def test_argparse_checks_bad():
         "",  # Must give at least a PATH
         "-m",
         "-t",
-        "-O",
+        "-D",
         "-o",  # These expect an argument
         "-t sausage",  # Invalid translator
     ]
@@ -70,10 +71,20 @@ def test_argparse_checks_bad():
 
 def test_bad_argument_combinations():
     "Bad option combinations caught outside argparse"
-    # --target requires --model
+    # -t/--translator requires -m/--model
     # This one uses argparse.error which does a sys.exit(2)
     with pytest.raises(SystemExit) as exc_info:
         run_compiler("-tsympy " + SPRING_MODEL, check_errors=False)
+    assert exc_info.value.code == 2
+
+    # --stage translate requires -t/--translator
+    with pytest.raises(SystemExit) as exc_info:
+        run_compiler("-m Spring --stage translate " + SPRING_MODEL, check_errors=False)
+    assert exc_info.value.code == 2
+
+    # CasADi backend cannot use intermediate stages
+    with pytest.raises(SystemExit) as exc_info:
+        run_compiler("-t casadi -m Spring --stage flatten " + SPRING_MODEL, check_errors=False)
     assert exc_info.value.code == 2
 
     # These check multiple errors before exiting
@@ -83,10 +94,10 @@ def test_bad_argument_combinations():
         ("sausage", 1),
         # 1) No .mo files given (assume none in GENERATED_DIR)
         (GENERATED_DIR, 1),
-        # 1) Bad target option syntax
+        # 1) Bad define option syntax
         # 2) Give a file instead of a directory for output Path
         # 3) Give a Modelica file that does not exist
-        (" ".join(("-t casadi -m Spring -O eggs -o", SPRING_MODEL, "spam")), 3),
+        (" ".join(("-t casadi -m Spring -D eggs -o", SPRING_MODEL, "spam")), 3),
     ]
     for args, expected_errors in bad_options:
         errors = run_compiler(args, check_errors=False)
@@ -102,26 +113,61 @@ def test_parse_only():
     # Parse all files in a directory and a given file
     run_compiler(" ".join([MODEL_DIR, SPRING_MODEL]))
 
-    def test_flatten_only():
-        "If model is given and target is not, then compiler tool stops after flatten"
-        # Parse and flatten
-        run_compiler("-v -m Spring " + SPRING_MODEL)
-        run_compiler("-v -m Aircraft " + AIRCRAFT_MODEL)
-        run_compiler("-v -m Spring -m Aircraft " + " ".join([SPRING_MODEL, AIRCRAFT_MODEL]))
 
-    def test_modelicapath():
-        "No files given, use MODELICAPATH"
-        run_compiler("-v -m Spring -p " + MODEL_DIR)
+def test_flatten_only():
+    "If model is given and translator is not, then compiler tool stops after flatten"
+    run_compiler("-v -m Spring " + SPRING_MODEL)
+    run_compiler("-v -m Aircraft " + AIRCRAFT_MODEL)
+    run_compiler("-v -m Spring -m Aircraft " + " ".join([SPRING_MODEL, AIRCRAFT_MODEL]))
+
+
+def test_modelicapath():
+    "No files given, use MODELICAPATH"
+    run_compiler("-v -m Spring -p " + MODEL_DIR)
+
+
+def test_stage_instantiate(capsys):
+    "Instantiate stage emits JSON to stdout"
+    run_compiler("-p " + MODEL_DIR + " -m Spring --stage instantiate")
+    captured = capsys.readouterr()
+    assert captured.out
+    data = json.loads(captured.out)
+    assert data
+
+
+def test_stage_flatten_stdout(capsys):
+    "Flatten stage emits JSON to stdout when no -o given"
+    run_compiler("-p " + MODEL_DIR + " -m Spring --stage flatten")
+    captured = capsys.readouterr()
+    assert captured.out
+    data = json.loads(captured.out)
+    assert data
+
+
+def test_stage_flatten_file(tmp_path):
+    "Flatten stage writes JSON file to outdir when -o is given"
+    run_compiler("-p " + MODEL_DIR + " -m Spring --stage flatten -o " + str(tmp_path))
+    outfile = tmp_path / "Spring.flatten.json"
+    assert outfile.exists()
+    data = json.loads(outfile.read_text())
+    assert data
+
+
+def test_stage_flatten_format_repr(capsys):
+    "Flatten stage with --format repr emits repr output"
+    run_compiler("-p " + MODEL_DIR + " -m Spring --stage flatten --format repr")
+    captured = capsys.readouterr()
+    assert captured.out
 
 
 def test_casadi_options_good():
     "CasADi generation expected to run ok"
     # Run examples on default Spring model, give other options here
     arg_examples = [
-        "-vv -Ospam=eggs",  # Flatten only, -O ignored
+        "-vv -Dspam=eggs",  # Flatten only, -D ignored without -t
         "-v -tcasadi",  # -v = logging.INFO
         "-vv --translator=casadi",  # -vv = logging.DEBUG
-        "-t=casadi -Ocache=False -Ocodegen=False -Ocheck_balanced=True",
+        "-t=casadi -Dcache=False -Dcodegen=False -Dcheck_balanced=True",
     ]
     for args in arg_examples:
         run_compiler_add_model_dir(args)

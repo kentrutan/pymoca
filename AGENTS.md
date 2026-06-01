@@ -13,6 +13,8 @@ pytest test/parse_test.py -k X    # single test (serial, for debugging)
 tox -e py                         # via tox
 tox -e coverage                   # with coverage
 pre-commit run --all-files        # lint (black + flake8)
+pytest test -m msl                # run MSL examples pipeline test (skipped by default)
+python test/msl_examples_test.py  # MSL pipeline CLI (pass -h for options)
 ```
 
 ## Code Style

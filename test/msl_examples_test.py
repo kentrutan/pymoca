@@ -1,4 +1,4 @@
-"""Process every Example model in the Modelica Standard Library
+"""Pytest parametrized tests and CLI for MSL-4.0.x Example models
 
 By default each model is run through the new flatten pipeline (tree.flatten_model).
 Pass -t/--translator casadi to instead translate each model with the CasADi backend.
@@ -13,18 +13,69 @@ import traceback
 from multiprocessing import Pool
 from pathlib import Path
 
-from pymoca import ast
 from pymoca import parser
 from pymoca import tree
 
-MY_DIR = os.path.dirname(os.path.realpath(__file__))
-TEST_DIR = os.path.join(MY_DIR, "..", "test")
-MSL4_BASE_DIR = os.path.join(TEST_DIR, "libraries", "MSL-4.0.x")
+import pytest
 
-# Worker-process state (set once by _worker_init, reused for all tasks).
+MY_DIR = os.path.dirname(os.path.realpath(__file__))
+MSL4_BASE_DIR = os.path.join(MY_DIR, "libraries", "MSL-4.0.x")
+MSL4_AVAILABLE = os.path.isfile(os.path.join(MSL4_BASE_DIR, "Modelica", "package.mo"))
+
+# Maps model name → reason string for models known to fail.
+KNOWN_FAILURES = {}
+
+# ---------------------------------------------------------------------------
+# Discovery
+# ---------------------------------------------------------------------------
+
+
+def _discover_model_names():
+    msl_path = Path(MSL4_BASE_DIR) / "Modelica"
+    root_index = len(msl_path.parts) - 1
+    return sorted(
+        ".".join(p.parts[root_index:-1] + (p.stem,))
+        for p in msl_path.glob("**/Examples/**/*.mo")
+        if p.name != "package.mo"
+    )
+
+
+def _build_params():
+    params = []
+    for name in _discover_model_names():
+        marks = []
+        if name in KNOWN_FAILURES:
+            marks.append(pytest.mark.xfail(reason=KNOWN_FAILURES[name]))
+        params.append(pytest.param(name, id=name, marks=marks))
+    return params
+
+
+# ---------------------------------------------------------------------------
+# Pytest tests
+# ---------------------------------------------------------------------------
+
+pytestmark = pytest.mark.skipif(not MSL4_AVAILABLE, reason="MSL-4.0.x submodule not initialized")
+
+
+# Use scope="session" to reuse one tree (should be faster, but currently too memory-hungry)
+@pytest.fixture(scope="function")
+def msl_tree():
+    return parser.modelicapath_to_tree([MSL4_BASE_DIR])
+
+
+@pytest.mark.msl
+@pytest.mark.parametrize("model_name", _build_params() if MSL4_AVAILABLE else [])
+def test_msl_example(model_name, msl_tree):
+    flat_instance = tree.flatten_model(msl_tree, model_name)
+    assert flat_instance is not None
+
+
+# ---------------------------------------------------------------------------
+# CLI worker state (set once by _worker_init, reused for all tasks)
 # _worker_tree is None in fresh-tree mode: each task parses its own tree.
+# ---------------------------------------------------------------------------
+
 _worker_tree = None
-_use_legacy = False
 _msl4_base_dir = None
 _translator = None
 _options = None
@@ -35,15 +86,13 @@ _casadi_api = None
 
 def _worker_init(
     msl4_base_dir: str,
-    use_legacy: bool = False,
     reuse_tree: bool = False,
     translator: str = None,
     options: dict = None,
 ) -> None:
-    global _worker_tree, _use_legacy, _msl4_base_dir, _translator, _options
+    global _worker_tree, _msl4_base_dir, _translator, _options
     global _casadi_generator, _casadi_api
     _msl4_base_dir = msl4_base_dir
-    _use_legacy = use_legacy
     _translator = translator
     _options = options or {}
     if translator == "casadi":
@@ -91,10 +140,6 @@ def _process_one(model_name: str) -> tuple:
             model.simplify(opts)
             model._post_checks()
             name = model_name
-        elif _use_legacy:
-            flat_class = ast.ComponentRef.from_string(model_name)
-            flat_tree = tree.flatten(worker_tree, flat_class)
-            name = flat_tree.classes[model_name].name
         else:
             flat_instance = tree.flatten_model(worker_tree, model_name)
             name = flat_instance.name
@@ -143,18 +188,11 @@ def _default_jobs() -> int:
 def process_every_MSL_example(
     jobs: int = 1,
     filters: list = None,
-    legacy: bool = False,
     reuse_tree: bool = False,
     translator: str = None,
     options: dict = None,
 ):
-    msl_path = Path(MSL4_BASE_DIR) / "Modelica"
-    root_index = len(msl_path.parts) - 1
-    model_names = sorted(
-        ".".join(p.parts[root_index:-1] + (p.stem,))
-        for p in msl_path.glob("**/Examples/**/*.mo")
-        if p.name != "package.mo"
-    )
+    model_names = _discover_model_names()
     if filters:
         model_names = [n for n in model_names if any(f in n for f in filters)]
 
@@ -164,13 +202,13 @@ def process_every_MSL_example(
 
     if jobs == 1:
         # Serial: initialize worker state in-process so ordering bugs remain reproducible.
-        _worker_init(MSL4_BASE_DIR, legacy, reuse_tree, translator, options)
+        _worker_init(MSL4_BASE_DIR, reuse_tree, translator, options)
         results = map(_process_one, model_names)
     else:
         pool = Pool(
             processes=jobs,
             initializer=_worker_init,
-            initargs=[MSL4_BASE_DIR, legacy, reuse_tree, translator, options],
+            initargs=[MSL4_BASE_DIR, reuse_tree, translator, options],
         )
         results = pool.imap_unordered(_process_one, model_names)
 
@@ -220,13 +258,6 @@ if __name__ == "__main__":
         help="only run models whose name contains PATTERN (repeatable, OR logic)",
     )
     ap.add_argument(
-        "-l",
-        "--legacy",
-        action="store_true",
-        default=False,
-        help="use the legacy tree.flatten() pipeline instead of flatten_model()",
-    )
-    ap.add_argument(
         "--reuse-tree",
         action="store_true",
         default=False,
@@ -253,7 +284,7 @@ if __name__ == "__main__":
     # Reuse the CLI's option parser so -D semantics match `pymoca -D ...`.
     from pymoca.compiler import build_define_options
 
-    options, opt_errors = build_define_options(args)
+    cli_options, opt_errors = build_define_options(args)
     if opt_errors:
         sys.exit(2)
     if args.define and not args.translator:
@@ -262,9 +293,8 @@ if __name__ == "__main__":
     process_every_MSL_example(
         jobs=args.jobs,
         filters=args.filters,
-        legacy=args.legacy,
         reuse_tree=args.reuse_tree,
         translator=args.translator,
-        options=options,
+        options=cli_options,
     )
     sys.exit(0)

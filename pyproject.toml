@@ -82,3 +82,4 @@ force-exclude = '''
 
 [tool.pytest.ini_options]
 xfail_strict = true
+addopts = "-m 'not msl'"

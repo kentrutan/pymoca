@@ -10,6 +10,8 @@ python antlr/antlr_build.py       # regenerate parser after editing Modelica.g4
 pre-commit run --all-files        # run pre-commit hook on all (automatic on staged before commit)
 pytest test                       # all tests
 pytest test/parse_test.py -k X    # single test
+pytest test/msl_examples_test.py  # run MSL examples pipeline tests
+python test/msl_examples_test.py  # MSL pipeline CLI (pass -h for options)
 tox -e py                         # via tox
 tox -e coverage                   # with coverage
 ```

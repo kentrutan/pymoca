@@ -8,6 +8,7 @@ import os
 from conftest_parse import (
     MODEL_DIR,
     check_redeclare_expects,
+    parse_and_flatten_model,
     parse_and_instantiate_model,
     parse_model_files,
     redeclare_expect,
@@ -19,16 +20,21 @@ from pymoca import tree
 import pytest
 
 
-@pytest.mark.xfail  # `redeclare class extends` not implemented
 def test_flattening_redeclare_class_extends():
     """Test redeclare class extends construct"""
 
-    _ = parse_and_instantiate_model("RedeclareClassExtends.mo", "P.TestOK")
+    parse_and_instantiate_model("RedeclareClassExtends.mo", "P.TestOK")
 
-    # TODO: Test equations
+    flat = parse_and_flatten_model("RedeclareClassExtends.mo", "P.TestOK")
+    assert "ma.X" in flat.symbols
+    assert "ma.T" in flat.symbols
+    assert "eta" in flat.symbols
 
-    with pytest.raises(tree.ModelicaSemanticError, match="TODO: FILL IN ERROR MESSAGE"):
-        _ = parse_and_instantiate_model("RedeclareClassExtends.mo", "P.TestFail")
+    eq_map = {eq.left.name: eq.right for eq in flat.equations if hasattr(eq, "left")}
+    assert "ma.X" in eq_map
+    assert [v.value for v in eq_map["ma.X"].values] == [0, 1]
+    assert "eta" in eq_map
+    assert eq_map["eta"].operator == "P.MoistAir.dynamicViscosity"
 
 
 def test_redeclare_class():

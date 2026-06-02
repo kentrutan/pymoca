@@ -84,4 +84,24 @@ end TestFail;
 /* OMC 1.25.0 -i=P.TestFail gives:
 RedeclareClassExtends.mo:46:5-46:41:writable] Error: PartialMedium is partial, name lookup is not allowed in partial classes.
 */
+
+/* TestFail2: Isolates the nX-undefined error from MoistAir2 without the §5.3.2
+   partial-class lookup. Redeclares PartialMedium as non-partial and BaseProperties
+   as non-replaceable, so those guards do not fire. The error should be that nX has
+   no value when instantiating Real X[nX]. */
+package ConcreteMedium "PartialMedium made concrete: no partial keyword, BaseProperties non-replaceable"
+  extends PartialMedium;
+  redeclare model BaseProperties
+    Real X[nX];
+    Real T;
+  end BaseProperties;
+end ConcreteMedium;
+
+model TestFail2
+  ConcreteMedium.BaseProperties ma3;
+end TestFail2;
+
+/* OMC 1.25.0 -i=P.TestFail2 gives:
+RedeclareClassExtends.mo:95:5-95:15:writable] Error: Could not evaluate structural parameter (or constant): P.ConcreteMedium.nX which gives dimensions of array: X. Array dimensions must be known at compile time.
+ */
 end P;

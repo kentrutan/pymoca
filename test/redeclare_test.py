@@ -36,6 +36,17 @@ def test_flattening_redeclare_class_extends():
     assert eq_map["eta"].operator == "P.MoistAir.dynamicViscosity"
 
 
+@pytest.mark.xfail(
+    reason="undefined array-dimension constants are not yet detected (MLS §10.1)",
+)
+def test_undefined_array_dimension_constant():
+    """A constant used as an array dimension must be evaluable (MLS §10.1).
+    P.TestFail2 isolates the nX-undefined intent of MLS §7.3.1 (MoistAir2) without
+    triggering the §5.3.2 partial-class lookup error that masks it in P.TestFail."""
+    with pytest.raises(tree.ModelicaSemanticError):
+        parse_and_instantiate_model("RedeclareClassExtends.mo", "P.TestFail2")
+
+
 def test_redeclare_class():
     """Test redeclaration of class of contained components"""
 

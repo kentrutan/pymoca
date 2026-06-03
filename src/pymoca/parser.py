@@ -841,7 +841,7 @@ def _check_database_structure(conn: sqlite3.Connection):
     """
     cursor = conn.cursor()
 
-    cursor.execute("BEGIN TRANSACTION;")
+    cursor.execute("BEGIN IMMEDIATE;")
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='models'")
     table_exists = cursor.fetchone()
     table_correct = False
@@ -878,11 +878,17 @@ def _check_database_structure(conn: sqlite3.Connection):
         """
         )
 
+    # Index last_hit so the prune (DELETE ... WHERE last_hit < ?) is
+    # index-assisted instead of a full-table scan. Without this, pruning a
+    # multi-GB cache scans the entire table on every worker startup. Building
+    # the index on a pre-existing cache is a one-time cost on first upgrade.
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_models_last_hit ON models (last_hit)")
+
     conn.commit()
 
     # For metadata we check if the table layout is correct, but also whether
     # the metadata keys exist.
-    cursor.execute("BEGIN TRANSACTION;")
+    cursor.execute("BEGIN IMMEDIATE;")
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='metadata'")
     metadata_table_exists = cursor.fetchone()
     metadata_table_correct = False
@@ -916,7 +922,7 @@ def _check_database_structure(conn: sqlite3.Connection):
         )
     conn.commit()
 
-    cursor.execute("BEGIN TRANSACTION;")
+    cursor.execute("BEGIN IMMEDIATE;")
     cursor.execute(
         "INSERT OR IGNORE INTO metadata (key, value) VALUES (?, ?)",
         ("created_at", _microseconds_since_epoch()),
@@ -927,6 +933,42 @@ def _check_database_structure(conn: sqlite3.Connection):
         ("last_prune", _microseconds_since_epoch()),
     )
 
+    conn.commit()
+
+
+def _initialize_cache_db(conn: sqlite3.Connection, cache_expiration_days: int) -> None:
+    """Prepare a freshly opened cache connection: enable WAL, ensure the schema,
+    and prune expired entries.
+
+    Raises sqlite3.DatabaseError if the file is not a usable database, letting
+    the caller recreate it. We deliberately do NOT run ``PRAGMA integrity_check``
+    here: on a multi-GB cache that full-file scan costs ~1s per worker and, run
+    concurrently by every pytest-xdist worker at startup, serializes parallel
+    runs. Corruption instead surfaces lazily as a DatabaseError on first access.
+    """
+    # WAL mode lets readers and a single writer coexist without blocking each
+    # other, preventing SQLITE_BUSY deadlocks when many xdist workers hit the
+    # cache at once. Once set, WAL persists in the DB file so all future
+    # connections use it automatically. On a non-database file this is the first
+    # access that touches the header, so it raises DatabaseError for the caller.
+    conn.execute("PRAGMA journal_mode=WAL")
+
+    _check_database_structure(conn)
+
+    # Prune entries not hit recently. The DELETE is index-assisted (see
+    # idx_models_last_hit), so on a warm cache with nothing to expire it stays
+    # cheap even though it runs on every worker's first parse.
+    cursor = conn.cursor()
+    cursor.execute("BEGIN IMMEDIATE;")
+    cutoff_time = _microseconds_since_epoch(timedelta(days=-cache_expiration_days))
+    cursor.execute("DELETE FROM models WHERE last_hit < ?", (cutoff_time,))
+    # Sometimes Windows time resolution is a bit coarse, so we make
+    # sure that if we update the last_prune time, it is actually newer
+    # than the previous one.
+    cursor.execute(
+        "UPDATE metadata SET value = max(value + 1, ?) WHERE key = ?",
+        (_microseconds_since_epoch(), "last_prune"),
+    )
     conn.commit()
 
 
@@ -1010,42 +1052,31 @@ def parse(
     db_folder.mkdir(parents=True, exist_ok=True)
 
     full_db_path = db_folder / cache_db
-    conn = sqlite3.connect(full_db_path, isolation_level=None)
+    conn = sqlite3.connect(full_db_path, isolation_level=None, timeout=30)
 
     cursor = conn.cursor()
 
     if not hasattr(parse, "initialized_dbs") or full_db_path not in parse.initialized_dbs:
-        # Check if the database file is corrupt
         try:
-            cursor.execute("PRAGMA integrity_check;")
-            result = cursor.fetchone()
-            if result != ("ok",):
-                raise sqlite3.DatabaseError("Database integrity check failed")
+            _initialize_cache_db(conn, cache_expiration_days)
         except sqlite3.DatabaseError:
-            conn.close()
-
+            # A corrupt or truncated cache file surfaces as a DatabaseError on
+            # first access. Recreating it is far cheaper than the full-file
+            # PRAGMA integrity_check we used to run on every worker startup,
+            # which scans the entire (multi-GB) cache and serializes parallel
+            # test runs.
             logger.warning("Model cache database is corrupt, recreating...")
-            os.remove(full_db_path)
+            conn.close()
+            for suffix in ("", "-wal", "-shm"):
+                try:
+                    os.remove(f"{full_db_path}{suffix}")
+                except FileNotFoundError:
+                    pass
 
-            conn = sqlite3.connect(full_db_path, isolation_level=None)
-            cursor = conn.cursor()
+            conn = sqlite3.connect(full_db_path, isolation_level=None, timeout=30)
+            _initialize_cache_db(conn, cache_expiration_days)
 
-        _check_database_structure(conn)
-
-        # Prune the database of entries not hit recently
-        cursor.execute("BEGIN TRANSACTION;")
-        cutoff_time = _microseconds_since_epoch(timedelta(days=-cache_expiration_days))
-        cursor.execute("DELETE FROM models WHERE last_hit < ?", (cutoff_time,))
-        # Sometimes Windows time resolution is a bit coarse, so we make
-        # sure that if we update the last_prune time, it is actually newer
-        # than the previous one.
-        cursor.execute(
-            "UPDATE metadata SET value = max(value + 1, ?) WHERE key = ?",
-            (_microseconds_since_epoch(), "last_prune"),
-        )
-
-        conn.commit()
-
+        cursor = conn.cursor()
         if hasattr(parse, "initialized_dbs"):
             parse.initialized_dbs.add(full_db_path)
         else:
@@ -1054,13 +1085,17 @@ def parse(
     # Check if the txt exists in the database
     txt_hash = _calculate_txt_hash(txt)
 
-    cursor.execute("BEGIN TRANSACTION;")
+    # The cache-hit lookup is read-only and is by far the hottest path. In WAL
+    # mode reads never block other readers or the single writer, so we issue a
+    # plain autocommit SELECT instead of taking the exclusive write lock that
+    # BEGIN IMMEDIATE acquires. Wrapping this read in BEGIN IMMEDIATE would
+    # serialize every parallel xdist worker on each cache hit, making parallel
+    # runs slower than serial ones.
     cursor.execute(
         "SELECT last_hit, data FROM models WHERE txt_hash=? AND pymoca_version=?",
         (txt_hash, pymoca_version),
     )
     result = cursor.fetchone()
-    conn.commit()
 
     tree = None
 
@@ -1071,7 +1106,7 @@ def parse(
         yesterday = _microseconds_since_epoch(timedelta(days=-1))
 
         if always_update_last_hit or last_hit < yesterday:
-            cursor.execute("BEGIN TRANSACTION;")
+            cursor.execute("BEGIN IMMEDIATE;")
             # Sometimes Windows time resolution is a bit coarse, so we make
             # sure that if we update the last_hit time, it is actually newer
             # than the previous one.
@@ -1103,7 +1138,7 @@ def parse(
 
             # Note that we do an 'INSERT OR REPLACE' because concurrent access
             # might mean two processes/threads try to insert an entry
-            cursor.execute("BEGIN TRANSACTION;")
+            cursor.execute("BEGIN IMMEDIATE;")
             cursor.execute(
                 "INSERT OR REPLACE INTO models (txt_hash, pymoca_version, data, last_hit) VALUES (?, ?, ?, ?)",
                 (txt_hash, pymoca_version, pickled_data, _microseconds_since_epoch()),

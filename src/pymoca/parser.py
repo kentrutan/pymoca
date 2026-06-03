@@ -190,6 +190,7 @@ class ASTListener(ModelicaListener):
             scope=self.class_nodes[-2],
         )
         class_node.extends.append(extends_clause)
+        class_node.is_short_class_definition = True
         self.in_extends = False
         self.in_class_spec_base = False
 

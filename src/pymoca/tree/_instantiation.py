@@ -933,7 +933,29 @@ def _apply_redeclares(
         apply_args = redeclare.class_modification.arguments
     else:  # ast.ComponentClause
         apply_args = redeclare.symbol_list[0].class_modification.arguments
-    modification_environment.arguments = modification_environment.arguments + apply_args
+
+    # Preserve modifications from the original class's extends clauses
+    # MLS §7.3.2: when the original declaration is a short-class-definition with no
+    # constrainedby clause, "the modifiers for subsequent redeclarations … are the
+    # modifiers on the short-class-definition".  For `replaceable model Load=Resistor(R=R)`
+    # redeclared as `model Load=Resistor`, the (R=R) from the original short-class-
+    # definition must survive.  We recover those modifiers from element.ast_ref.extends
+    # (the extends clause that a short-class-definition expands to) and prepend them so
+    # they have the lowest priority: instance mods and explicit redeclare args (apply_args)
+    # both follow and therefore override them (last wins in modification merging).
+    # TODO: Implement the constrainedby case
+    orig_ext_mods = []
+    if isinstance(element, ast.InstanceClass) and getattr(
+        element.ast_ref, "is_short_class_definition", False
+    ):
+        for orig_ext in element.ast_ref.extends:
+            if isinstance(orig_ext, ast.ExtendsClause):
+                updated = _update_class_modification_scopes(orig_ext, element)
+                orig_ext_mods.extend(updated.class_modification.arguments)
+
+    modification_environment.arguments = (
+        orig_ext_mods + modification_environment.arguments + apply_args
+    )
 
     # Instantiate as an extends and add to extends list
     is_class = isinstance(element, ast.InstanceClass)

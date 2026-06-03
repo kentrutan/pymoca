@@ -441,8 +441,8 @@ def test_redeclare_package_with_package_accepted():
         "D",
     )
     assert "v" in flat.symbols
-    # PB is added as an unnamed extends per MLS, so check the underlying AST ref.
-    assert flat.symbols["v"].value.ast_ref.full_name == "PB.k"
+    # P.k resolves to PB.k = 2.0 after the redeclare; constant is now folded to literal.
+    assert flat.symbols["v"].value == 2.0
 
 
 def test_redeclare_component_preserves_original_modifier():

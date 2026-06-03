@@ -841,7 +841,7 @@ def _check_database_structure(conn: sqlite3.Connection):
     """
     cursor = conn.cursor()
 
-    cursor.execute("BEGIN TRANSACTION;")
+    cursor.execute("BEGIN IMMEDIATE;")
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='models'")
     table_exists = cursor.fetchone()
     table_correct = False
@@ -882,7 +882,7 @@ def _check_database_structure(conn: sqlite3.Connection):
 
     # For metadata we check if the table layout is correct, but also whether
     # the metadata keys exist.
-    cursor.execute("BEGIN TRANSACTION;")
+    cursor.execute("BEGIN IMMEDIATE;")
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='metadata'")
     metadata_table_exists = cursor.fetchone()
     metadata_table_correct = False
@@ -916,7 +916,7 @@ def _check_database_structure(conn: sqlite3.Connection):
         )
     conn.commit()
 
-    cursor.execute("BEGIN TRANSACTION;")
+    cursor.execute("BEGIN IMMEDIATE;")
     cursor.execute(
         "INSERT OR IGNORE INTO metadata (key, value) VALUES (?, ?)",
         ("created_at", _microseconds_since_epoch()),
@@ -1010,7 +1010,7 @@ def parse(
     db_folder.mkdir(parents=True, exist_ok=True)
 
     full_db_path = db_folder / cache_db
-    conn = sqlite3.connect(full_db_path, isolation_level=None)
+    conn = sqlite3.connect(full_db_path, isolation_level=None, timeout=30)
 
     cursor = conn.cursor()
 
@@ -1027,13 +1027,18 @@ def parse(
             logger.warning("Model cache database is corrupt, recreating...")
             os.remove(full_db_path)
 
-            conn = sqlite3.connect(full_db_path, isolation_level=None)
+            conn = sqlite3.connect(full_db_path, isolation_level=None, timeout=30)
             cursor = conn.cursor()
+
+        # WAL mode lets readers and a single writer coexist without blocking each other,
+        # preventing SQLITE_BUSY deadlocks when many xdist workers hit the cache at once.
+        # Once set, WAL persists in the DB file so all future connections use it automatically.
+        conn.execute("PRAGMA journal_mode=WAL")
 
         _check_database_structure(conn)
 
         # Prune the database of entries not hit recently
-        cursor.execute("BEGIN TRANSACTION;")
+        cursor.execute("BEGIN IMMEDIATE;")
         cutoff_time = _microseconds_since_epoch(timedelta(days=-cache_expiration_days))
         cursor.execute("DELETE FROM models WHERE last_hit < ?", (cutoff_time,))
         # Sometimes Windows time resolution is a bit coarse, so we make
@@ -1054,7 +1059,7 @@ def parse(
     # Check if the txt exists in the database
     txt_hash = _calculate_txt_hash(txt)
 
-    cursor.execute("BEGIN TRANSACTION;")
+    cursor.execute("BEGIN IMMEDIATE;")
     cursor.execute(
         "SELECT last_hit, data FROM models WHERE txt_hash=? AND pymoca_version=?",
         (txt_hash, pymoca_version),
@@ -1071,7 +1076,7 @@ def parse(
         yesterday = _microseconds_since_epoch(timedelta(days=-1))
 
         if always_update_last_hit or last_hit < yesterday:
-            cursor.execute("BEGIN TRANSACTION;")
+            cursor.execute("BEGIN IMMEDIATE;")
             # Sometimes Windows time resolution is a bit coarse, so we make
             # sure that if we update the last_hit time, it is actually newer
             # than the previous one.
@@ -1103,7 +1108,7 @@ def parse(
 
             # Note that we do an 'INSERT OR REPLACE' because concurrent access
             # might mean two processes/threads try to insert an entry
-            cursor.execute("BEGIN TRANSACTION;")
+            cursor.execute("BEGIN IMMEDIATE;")
             cursor.execute(
                 "INSERT OR REPLACE INTO models (txt_hash, pymoca_version, data, last_hit) VALUES (?, ?, ?, ?)",
                 (txt_hash, pymoca_version, pickled_data, _microseconds_since_epoch()),

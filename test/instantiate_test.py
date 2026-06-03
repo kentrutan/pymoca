@@ -58,16 +58,18 @@ def test_instantiation_modification_scope_spec_example():
     assert flat.symbols["a.R"].value == 4
     assert flat.symbols["j.R"].value == 2
 
-    # Values that resolve to Resistor default (R=1) or direct modifications
-    assert flat.symbols["b.R"].value == 1  # Load=Resistor(R=R), R resolves in Resistor scope
-    assert flat.symbols["c.R"].value == 5  # c(R=5) overrides
-    assert flat.symbols["e.R"].value == 1  # redeclared Load=Resistor, no R mod
-    assert flat.symbols["g.R"].value == 1  # same as e
+    # c(R=5) is an explicit instance override; the rest inherit Load's original R=R binding
+    assert flat.symbols["c.R"].value == 5
+
+    # b, e, g have no instance override; Load's original R=R is preserved through the redeclare
+    # so they resolve to the outer R from B (per OMC 1.25.0 reference output)
+    for name in ("b.R", "e.R", "g.R"):
+        assert isinstance(flat.symbols[name].value, ast.InstanceSymbol), f"{name} should be ref"
 
     # d.R: LoadError has extends Resistor(R=R) — self-referencing in Resistor scope
     assert isinstance(flat.symbols["d.R"].value, ast.InstanceSymbol)
 
-    # f.R, h.R, i.R: InstanceSymbol references (unresolved parameter refs)
+    # f.R, h.R, i.R: InstanceSymbol references (parameter refs)
     for name in ("f.R", "h.R", "i.R"):
         assert isinstance(flat.symbols[name].value, ast.InstanceSymbol), f"{name} should be ref"
 

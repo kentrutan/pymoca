@@ -445,6 +445,34 @@ def test_redeclare_package_with_package_accepted():
     assert flat.symbols["v"].value.ast_ref.full_name == "PB.k"
 
 
+def test_redeclare_component_preserves_original_modifier():
+    """MLS §7.3.2 spec example: redeclare B a(y=2) merges with original a(x=1).
+
+    Equivalent result: B a(x=1, y=2) — original modifier x=1 must survive.
+    """
+    flat = _flatten_inline(
+        """
+    class A
+        parameter Real x = 0.0;
+    end A;
+    class B
+        parameter Real x = 0.0;
+        parameter Real y = 0.0;
+    end B;
+    class C
+        replaceable A a(x = 1.0);
+    end C;
+    class D
+        extends C(redeclare B a(y = 2.0));
+    end D;""",
+        "D",
+    )
+    assert "a.x" in flat.symbols
+    assert "a.y" in flat.symbols
+    assert flat.symbols["a.x"].value == 1.0
+    assert flat.symbols["a.y"].value == 2.0
+
+
 if __name__ == "__main__":
     import pytest as _pytest
 

@@ -122,7 +122,7 @@ def parse_and_instantiate(filename, class_name):
     ast_tree = parser.parse_file(filename)
     assert ast_tree is not None, f"Failed to parse {filename}"
     pickled_before = pickle.dumps(ast_tree)
-    instance = tree.instantiate(class_name, ast_tree)
+    instance = tree.instantiate(ast_tree, class_name)
     assert instance is not None, f"Failed to instantiate {filename}"
     pickled_after = pickle.dumps(ast_tree)
     assert pickled_before == pickled_after, "AST was modified during instantiation"
@@ -158,7 +158,7 @@ def check_redeclare_expects(instance, expects):
     for name, type_, value, replaceable in expects:
         from pymoca.tree import LookupOptions, RecursionGuard
 
-        x = _find_name(name, instance, RecursionGuard(), LookupOptions(check_encapsulated=False))
+        x = _find_name(instance, name, RecursionGuard(), LookupOptions(check_encapsulated=False))
         assert x is not None, f"{name} not found in instance"
         assert x.replaceable == replaceable, f"for {name}"
         if x.type.type == "type":

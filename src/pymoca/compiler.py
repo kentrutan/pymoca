@@ -163,7 +163,7 @@ def run_model(library_ast: pymoca.ast.Tree, model: str, stage: Stage, args, opti
 
     try:
         if stage == Stage.INSTANTIATE:
-            result = pymoca.tree.instantiate(model, library_ast)
+            result = pymoca.tree.instantiate(library_ast, model)
             emit_stage_output(model, "instantiate", result, args)
         elif stage == Stage.FLATTEN:
             result = pymoca.tree.flatten_model(library_ast, model)

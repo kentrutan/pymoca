@@ -510,7 +510,7 @@ def test_extend_from_self():
     ast_tree = parser.parse(txt)
 
     with pytest.raises(tree.ModelicaSemanticError, match="Cannot extend class 'A' with itself"):
-        instance = tree.instantiate("A", ast_tree)  # noqa: F841
+        instance = tree.instantiate(ast_tree, "A")  # noqa: F841
 
     class_name = "A"
     comp_ref = ast.ComponentRef.from_string(class_name)
@@ -680,7 +680,7 @@ def _flatten_inline(txt, model_name):
     """Parse inline Modelica, instantiate, and flatten. Returns the flat InstanceClass."""
     ast_tree = parser.parse(txt)
     pickled_before = pickle.dumps(ast_tree)
-    instance = tree.instantiate(model_name, ast_tree)
+    instance = tree.instantiate(ast_tree, model_name)
     flat = tree.flatten_instance(instance)
     pickled_after = pickle.dumps(ast_tree)
     assert pickled_before == pickled_after, "AST was modified during instantiation/flattening"

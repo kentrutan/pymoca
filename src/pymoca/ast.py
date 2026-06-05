@@ -836,8 +836,8 @@ class Class(Node):
             )
 
         found = tree._find_name(
-            name=component_ref,
             scope=self,
+            name=component_ref,
             search_imports=search_imports,
             search_parent=search_parent,
         )

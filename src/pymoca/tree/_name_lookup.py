@@ -2,7 +2,7 @@
 """
 Modelica name lookup — MLS Chapter 5
 
-Entry: find_name(name, scope) → _find_name() → _find_simple_name() / _find_rest_of_name()
+Entry: find_name(scope, name) → _find_name() → _find_simple_name() / _find_rest_of_name()
 """
 
 from __future__ import absolute_import, division, print_function, unicode_literals
@@ -16,28 +16,28 @@ from .. import ast
 
 
 def find_name(
-    name: Union[str, ast.ComponentRef],
     scope: ast.Class,
+    name: Union[str, ast.ComponentRef],
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
     """Modelica name lookup on a tree of ast.Class and ast.InstanceClass starting at scope class
 
-    :param name: name to look up (can be a Class or Symbol name)
     :param scope: scope in which to start name lookup
+    :param name: name to look up (can be a Class or Symbol name)
 
     Implements lookup rules per Modelica Language Specification version 3.5 chapter 5,
     see also chapter 13. This is more succinctly outlined in the "Modelica by Example"
     book https://mbe.modelica.university/components/packages/lookup/
     """
-    if not isinstance(name, (str, ast.ComponentRef)):
-        raise TypeError(f"name must be a string or ComponentRef, not {type(name)}")
     if not isinstance(scope, ast.Class):
         raise TypeError(f"scope must be a Class or Tree, not {type(scope)}")
-    return _find_name(name, scope, RecursionGuard(), LookupOptions())
+    if not isinstance(name, (str, ast.ComponentRef)):
+        raise TypeError(f"name must be a string or ComponentRef, not {type(name)}")
+    return _find_name(scope, name, RecursionGuard(), LookupOptions())
 
 
 def _find_name(
-    name: Union[str, ast.ComponentRef],
     scope: ast.Class,
+    name: Union[str, ast.ComponentRef],
     guard: RecursionGuard,
     opts: LookupOptions,
 ) -> Optional[Union[ast.Class, ast.Symbol]]:
@@ -113,7 +113,7 @@ def _find_name(
         and isinstance(scope, (ast.InstanceClass, InstanceTree))
     ):
         # Not found in instance tree, look in class tree
-        found = _find_name(name, scope.ast_ref, guard, opts)
+        found = _find_name(scope.ast_ref, name, guard, opts)
 
     return found
 
@@ -271,7 +271,7 @@ def _find_rest_of_name(
         if isinstance(first.type, ast.Class):
             type_class = first.type
         else:
-            type_class = _find_name(first.type, first.parent, guard, opts)
+            type_class = _find_name(first.parent, first.type, guard, opts)
             if type_class is None:
                 raise NameLookupError(f"Lookup failed for type of symbol {first.full_name}")
         found = _find_composite_name_in_symbols(rest_of_name, type_class, guard, opts)
@@ -305,7 +305,7 @@ def _find_rest_of_name(
                 first, rest_of_name, guard, replace(opts, instantiate_in_place=True)
             )
         else:
-            found = _find_name(rest_of_name, first, guard, opts)
+            found = _find_name(first, rest_of_name, guard, opts)
         # Check that found meets non-package lookup requirements in spec section 5.3.2
         # The found.name test is so we only check going left to right in composite name
         # and not the other direction as we pop the recursive call stack.
@@ -344,12 +344,12 @@ def _find_composite_name_in_symbols(
     # declared named *component* elements of the component".
     # This can include inherited and imported components.
     # Look up the type (Class) within the current scope if necessary
-    found = _find_name(first_name, scope, guard, replace(opts, search_parent=False))
+    found = _find_name(scope, first_name, guard, replace(opts, search_parent=False))
     if isinstance(found, ast.Symbol):
         if next_names:
             if isinstance(found.type, ast.ComponentRef):
                 type_name = str(found.type)
-                found_type_class = _find_name(type_name, scope, guard, opts)
+                found_type_class = _find_name(scope, type_name, guard, opts)
                 if found_type_class is None or isinstance(found_type_class, ast.Symbol):
                     raise NameLookupError(
                         f'Symbol type "{type_name}" not found in scope "{scope.full_name}"'
@@ -477,8 +477,8 @@ def _flatten_first_and_find_rest(
         # in a composite name.
         # The spec is a ambiguous about what to do when looking up the rest.
         found = _find_name(
-            rest_of_name,
             first_instance,
+            rest_of_name,
             guard,
             replace(opts, search_parent=False),
         )
@@ -581,7 +581,7 @@ def _find_inherited(
                 continue
             searched.add(key)
             found = _find_name(
-                name, extends, guard, replace(opts, search_imports=False, search_parent=False)
+                extends, name, guard, replace(opts, search_imports=False, search_parent=False)
             )
             guard.current_extends.discard(extends)
             if found is not None:
@@ -596,8 +596,8 @@ def _find_inherited(
         # may pass search_parent=False for the target-name search itself, but that
         # restriction must not bleed into base-class-name resolution.
         extends_scope = _find_name(
-            extends.component,
             scope,
+            extends.component,
             guard,
             replace(opts, search_inherited=False, search_parent=True, _searched_extends=None),
         )
@@ -611,8 +611,8 @@ def _find_inherited(
                 continue
             searched.add(key)
             found = _find_name(
-                name,
                 extends_scope,
+                name,
                 guard,
                 replace(opts, search_imports=False, search_parent=False),
             )
@@ -652,7 +652,7 @@ def _find_imported(
             _check_import_rules(found, scope)
             return found, True
         fallback_opts = replace(opts, search_parent=False, search_imports=search_imports)
-        found = _find_name(import_ref, scope.root, guard, fallback_opts)
+        found = _find_name(scope.root, import_ref, guard, fallback_opts)
         # TODO: Should _check_import_rules be inside `if found is not None` check? (fix in rewrite)
         _check_import_rules(found, scope)
         return found, False

@@ -31,7 +31,7 @@ def test_ast_element_full_name():
         "Level1.Level2.Level3.TestPackage.c",  # Symbol
     )
     for name in full_names:
-        element = tree.find_name(name, ast_tree)
+        element = tree.find_name(ast_tree, name)
         assert element is not None
         assert ast.element_full_name(element) == name
 
@@ -373,7 +373,7 @@ def test_modelicapath_lookup():
     msl_dir = os.path.join(MSL4_DIR, "Modelica")
     msl = parser.modelicapath_to_tree(dirs=[msl_dir])
     # Units is a .mo file, SI is defined inside Units
-    si = tree.find_name("Modelica.Units.SI", msl)
+    si = tree.find_name(msl, "Modelica.Units.SI")
     assert isinstance(si, ast.Class)
     assert "Angle" in si.classes
     # TODO: More tests to get high enough coverage

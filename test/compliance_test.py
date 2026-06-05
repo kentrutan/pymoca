@@ -475,7 +475,7 @@ def test_flatten(mo_path, model_name, should_pass):
     assert ast_tree is not None, f"Failed to parse {mo_path}"
 
     if should_pass:
-        instance = instantiate(model_name, ast_tree)
+        instance = instantiate(ast_tree, model_name)
         assert instance is not None
         flat = flatten_instance(instance)
         assert flat is not None
@@ -503,5 +503,5 @@ def test_flatten(mo_path, model_name, should_pass):
                 NotImplementedError,
             )
         ):
-            instance = instantiate(model_name, ast_tree)
+            instance = instantiate(ast_tree, model_name)
             flatten_instance(instance)

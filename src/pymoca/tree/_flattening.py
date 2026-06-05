@@ -1817,8 +1817,6 @@ def expand_connectors(node: ast.Class) -> None:
 
 
 def add_variable_value_statements(node: ast.Node) -> None:
-    # we do this here, instead of in flatten_class, because symbol values
-    # inside flattened classes may be modified later by modify_class().
     for sym in node.symbols.values():
         if not (isinstance(sym.value, ast.Primary) and sym.value.value is None):
             node.statements.append(ast.AssignmentStatement(left=[sym], right=sym.value))

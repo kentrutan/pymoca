@@ -498,7 +498,6 @@ def test_flatten(mo_path, model_name, should_pass):
             (
                 NameLookupError,
                 InstantiationError,
-                ast.ClassNotFoundError,
                 ModelicaError,
                 NotImplementedError,
             )

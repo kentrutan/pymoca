@@ -19,14 +19,6 @@ class ClassNotFoundError(Exception):
     pass
 
 
-class ConstantSymbolNotFoundError(Exception):
-    pass
-
-
-class FoundElementaryClassError(Exception):
-    pass
-
-
 class Visibility(Enum):
     PROTECTED = 1, "protected"
     PUBLIC = 2, "public"
@@ -672,23 +664,6 @@ class ExtendsClause(Node):
 class Class(Node):
     BUILTIN = ("Real", "Integer", "String", "Boolean")
 
-    # TODO: Remove use_find_name when done with new instantiation/flattening
-    FIND_CLASS = None
-    _FIND_CLASS = None
-
-    @classmethod
-    def use_find_name(cls, setting: bool):
-        """False = use find_class (default), True = use tree.find_name"""
-        if cls.FIND_CLASS is None:
-            cls.FIND_CLASS = cls.find_class
-            cls._FIND_CLASS = cls._find_class
-        if setting:
-            cls._find_class = cls.new_find_class  # noqa: F811
-            cls.find_class = cls.new_find_class  # noqa: F811
-        else:
-            cls._find_class = cls._FIND_CLASS
-            cls.find_class = cls.FIND_CLASS
-
     def __init__(self, **kwargs):
         self.name = None  # type: Optional[str]
         self.imports = OrderedDict()  # type: OrderedDict[str, Union[ImportClause, ComponentRef]]
@@ -714,172 +689,7 @@ class Class(Node):
         self.is_short_class_definition = False  # type: bool
         self.enumeration = False  # type: bool  # True iff this is an enumeration type
 
-        # TODO: Remove hard-wired tree.find_name() when done with prototype
-        self.use_find_name(False)
         super().__init__(**kwargs)
-
-    # TODO: Delete _find_class and find_class if tree.find_name is accepted as permanent
-    def _find_class(
-        self, component_ref: ComponentRef, search_parent=True, search_imports=True
-    ) -> "Class":
-        """Recursively search for component_ref in self and linked classes
-
-        Implement lookup rules per spec chapter 5, see also chapter 13.
-        This is more succinctly outlined in
-        https://mbe.modelica.university/components/packages/lookup/
-        """
-        # TODO: Get rid of exception-based algorithm or make imports have separate exception?
-        # TODO: Move import logic to separate function?
-        # TODO: Implement library path lookup from section 13.2.2 of spec
-        # TODO: Try @functools.lru_cache if profile shows this is hotspot
-        try:
-            if not component_ref.child:
-                return self.classes[component_ref.name]
-            else:
-                # Avoid infinite recursion by passing search_parent = False
-                return self.classes[component_ref.name]._find_class(component_ref.child[0], False)
-        except (KeyError, ClassNotFoundError):
-            try:
-                if search_imports:
-                    if component_ref.name in self.imports:
-                        # First search qualified imports (most common case)
-                        import_ = self.imports[
-                            component_ref.name
-                        ]  # type: Union[ImportClause, ComponentRef]
-                        if isinstance(import_, ImportClause):
-                            # Expand short name
-                            if component_ref.child:
-                                import_ = import_.components[0].concatenate(component_ref.child[0])
-                            else:
-                                import_ = import_.components[0]
-                        elif component_ref.child:
-                            import_ = import_.concatenate(component_ref.child[0])
-                        return self._find_class(import_)
-                    else:
-                        # Next search packages for unqualified imports (slow, but assuming not common)
-                        if "*" in self.imports:
-                            c = None
-                            for package_ref in self.imports["*"].components:
-                                imported_comp_ref = package_ref.concatenate(
-                                    ComponentRef(name=component_ref.name)
-                                )
-                                # Search within the package
-                                try:
-                                    # Avoid infinite recursion with search_imports = False
-                                    c = self._find_class(imported_comp_ref, search_imports=False)
-                                except (KeyError, ClassNotFoundError):
-                                    pass
-                            if c is not None:
-                                # Store result for next lookup
-                                self.imports[component_ref.name] = imported_comp_ref
-                                return c
-                            else:
-                                raise ClassNotFoundError
-                        else:
-                            raise ClassNotFoundError
-                else:
-                    raise ClassNotFoundError
-            except (KeyError, ClassNotFoundError):
-                if search_parent and self.parent is not None and not self.encapsulated:
-                    return self.parent._find_class(component_ref)
-                else:
-                    raise ClassNotFoundError("Could not find class '{}'".format(component_ref))
-
-    def find_class(
-        self,
-        component_ref: ComponentRef,
-        copy=True,
-        check_builtin_classes=False,
-        search_imports=True,
-    ) -> "Class":
-        if component_ref.name in self.BUILTIN:
-            if check_builtin_classes:
-                type_ = component_ref.name
-
-                c = Class(name=type_)
-                c.type = "__builtin"
-                c.parent = self.root
-
-                cref = ComponentRef(name=type_)
-                s = Symbol(name="__value", type=cref, parent=c)
-                c.symbols[s.name] = s
-
-                return c
-            else:
-                raise FoundElementaryClassError()
-
-        c = self._find_class(component_ref, search_imports)
-
-        if copy:
-            c = c.copy_including_children()
-
-        return c
-
-    # TODO: Delete new_find_class when done with new instantiation/flattening
-    def new_find_class(
-        self,
-        component_ref: ComponentRef,
-        copy=True,
-        check_builtin_classes=False,
-        search_imports=True,
-        search_parent=True,
-    ) -> "Class":
-        """Hook into tree.find_name for code that uses Class.find_class"""
-        from . import tree
-
-        if component_ref.name in self.BUILTIN:
-            # Just do the find_class logic for BUILTINs
-            return self.FIND_CLASS(
-                component_ref, copy=copy, check_builtin_classes=check_builtin_classes
-            )
-
-        found = tree._find_name(
-            scope=self,
-            name=component_ref,
-            search_imports=search_imports,
-            search_parent=search_parent,
-        )
-        if found is None or isinstance(found, Symbol):
-            raise ClassNotFoundError("Could not find class '{}'".format(component_ref))
-
-        if copy:
-            found = found.copy_including_children()
-
-        return found
-
-    def _find_constant_symbol(self, component_ref: ComponentRef, search_parent=True) -> Symbol:
-        if component_ref.child:
-            # Try classes first, and constant symbols second
-            t = component_ref.to_tuple()
-
-            try:
-                node = self._find_class(ComponentRef(name=t[0]), search_parent)
-                return node._find_constant_symbol(ComponentRef.from_tuple(t[1:]), False)
-            except ClassNotFoundError:
-                try:
-                    s = self.symbols[t[0]]
-                except KeyError:
-                    raise ConstantSymbolNotFoundError()
-
-                if "constant" not in s.prefixes:
-                    raise ConstantSymbolNotFoundError()
-
-                # Found a symbol. Continue lookup on type of this symbol.
-                if isinstance(s.type, InstanceClass):
-                    return s.type._find_constant_symbol(ComponentRef.from_tuple(t[1:]), False)
-                elif isinstance(s.type, ComponentRef):
-                    node = self._find_class(s.type)  # Parent lookups is OK here.
-                    return node._find_constant_symbol(ComponentRef.from_tuple(t[1:]), False)
-                else:
-                    raise Exception("Unknown object type of symbol type: {}".format(type(s.type)))
-        else:
-            try:
-                return self.symbols[component_ref.name]
-            except KeyError:
-                raise ConstantSymbolNotFoundError()
-
-    def find_constant_symbol(self, component_ref: ComponentRef) -> Symbol:
-        return self._find_constant_symbol(component_ref)
 
     def full_reference(self) -> ComponentRef:
         return element_full_reference(self)

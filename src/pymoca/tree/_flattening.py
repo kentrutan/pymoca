@@ -2,7 +2,7 @@
 """
 Modelica flattening — MLS 5.6.2
 
-Entry: flatten_model(root, class_name) → ast.InstanceClass (new pipeline, steps 1+2)
+Entry: flatten_class(root, class_name) → ast.InstanceClass (new pipeline, steps 1+2)
        flatten_instance(instance) → _flatten_instance()
 Adapter: flatten_to_tree(root, class_name) → ast.Tree (for backend compatibility)
 """
@@ -1509,7 +1509,7 @@ def _add_connector_symbols(
         _add_connector_symbols(extends, flat_class, prefix)
 
 
-def flatten_model(
+def flatten_class(
     root: ast.Tree,
     class_name: Union[str, ast.ComponentRef],
     *,

@@ -1,6 +1,6 @@
 """Pytest parametrized tests and CLI for MSL-4.0.x Example models
 
-By default each model is run through the new flatten pipeline (tree.flatten_model).
+By default each model is run through the new flatten pipeline (tree.flatten_class).
 Pass -t/--translator casadi to instead translate each model with the CasADi backend.
 """
 
@@ -66,7 +66,7 @@ def msl_tree():
 @pytest.mark.msl
 @pytest.mark.parametrize("model_name", _build_params() if MSL4_AVAILABLE else [])
 def test_msl_example(model_name, msl_tree):
-    flat_instance = tree.flatten_model(msl_tree, model_name)
+    flat_instance = tree.flatten_class(msl_tree, model_name)
     assert flat_instance is not None
 
 
@@ -141,7 +141,7 @@ def _process_one(model_name: str) -> tuple:
             model._post_checks()
             name = model_name
         else:
-            flat_instance = tree.flatten_model(worker_tree, model_name)
+            flat_instance = tree.flatten_class(worker_tree, model_name)
             name = flat_instance.name
         elapsed = time.perf_counter() - t0
         delta_vsz = _vsz_mb() - vsz_before
@@ -263,7 +263,7 @@ if __name__ == "__main__":
         "--legacy",
         action="store_true",
         default=False,
-        help="use the legacy tree.flatten() pipeline instead of flatten_model()",
+        help="use the legacy tree.flatten() pipeline instead of flatten_class()",
     )
     ap.add_argument(
         "--reuse-tree",

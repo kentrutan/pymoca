@@ -166,7 +166,7 @@ def run_model(library_ast: pymoca.ast.Tree, model: str, stage: Stage, args, opti
             result = pymoca.tree.instantiate(library_ast, model)
             emit_stage_output(model, "instantiate", result, args)
         elif stage == Stage.FLATTEN:
-            result = pymoca.tree.flatten_model(library_ast, model)
+            result = pymoca.tree.flatten_class(library_ast, model)
             emit_stage_output(model, "flatten", result, args)
         elif stage == Stage.TRANSLATE:
             outdir = args.outdir if args.outdir is not None else Path(".")

@@ -19,26 +19,36 @@ if echo "$title" | grep -qE '^(fixup|squash)! '; then
   exit 0
 fi
 
-# 1. Check title length (≤50 chars goal, ≤60 chars hard limit)
+# Do Checks
+
+allowable_verbs='Add|Fix|Remove|Delete|Update|Refactor|Improve|Change|Allow|Prevent|Handle|Support|Implement|Rename|Reorganize|Simplify|Optimize|Enhance|Make|Set|Include|Exclude|Use|Replace|Move|Copy|Revert|Restore'
+allowable_prefixes='parser|tree|casadi|sympy|cli|test|doc|ci/cd'
+prefix_list="$(echo "$allowable_prefixes" | sed 's/|/:, /')"
+
+# Check title length (≤50 chars goal, ≤60 chars hard limit)
 title_len=${#title}
 if [ "$title_len" -gt 60 ]; then
   errors+=("Title too long ($title_len chars, max 60). Goal: ≤50 chars.")
 fi
 
-# 2. Check for valid prefix (parser:, tree:, casadi:, sympy:, cli:, test:, doc:, ci/cd:, etc.)
-if ! echo "$title" | grep -qE '^(parser|tree|casadi|sympy|cli|test|doc|ci/cd):\s'; then
-  errors+=("Title must start with a prefix (parser:, tree:, casadi:, sympy:, cli:, test:, doc:, ci/cd:).")
+# Check for valid prefix
+if ! echo "$title" | grep -qE "^($allowable_prefixes):\s"; then
+  errors+=("Title must start with a prefix ($prefix_list).")
 fi
 
-# 3. Check for imperative verb after prefix
-# Valid imperative verbs: Add, Fix, Remove, Update, Refactor, Improve, etc.
-if ! echo "$title" | grep -qE '^[a-z/]+:\s(Add|Fix|Remove|Update|Refactor|Improve|Change|Allow|Prevent|Handle|Support|Implement|Rename|Reorganize|Simplify|Optimize|Enhance|Make|Set|Include|Exclude|Use|Replace|Move|Copy|Revert|Restore)(\s|$)'; then
+# Check for imperative verb after prefix
+if ! echo "$title" | grep -qE "^[a-z/]+:\\s($allowable_verbs)(\\s|\\$)"; then
   errors+=("Title must use imperative verb (Add, Fix, Remove, Update, etc.) after the prefix.")
 fi
 
-# 4. Check body paragraph 1 exists (at least one non-empty line)
+# Check body paragraph 1 exists (at least one non-empty line)
 if [ -z "$(echo "$body" | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')" ]; then
   errors+=("Body must have at least one paragraph with 1–3 sentences explaining the change.")
+fi
+
+# Check that body paragraph 1 begins with an imperative verb
+if ! echo "$body" | grep -qE "^\s*($allowable_verbs)"; then
+  errors+=("Body 1st paragraph must start with an imperative verb (present tense).")
 fi
 
 # 5. Check for meta-commentary (code review references, process artifacts)

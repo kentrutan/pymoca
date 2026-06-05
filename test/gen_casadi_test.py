@@ -7,8 +7,6 @@ import glob
 import os
 import re
 
-import pytest
-
 import casadi as ca
 
 import numpy as np
@@ -24,6 +22,8 @@ from pymoca.backends.casadi.model import (
     StringVariable,
     Variable,
 )
+
+import pytest
 
 MODEL_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "models")
 
@@ -494,10 +494,6 @@ def test_inheritance():
     assert_model_equivalent_numeric(ref_model, casadi_model)
 
 
-@pytest.mark.xfail(
-    not __import__("pymoca.tree", fromlist=["USE_NEW_FLATTENING"]).USE_NEW_FLATTENING,
-    reason="Parser setting modification argument scope breaks old flattening",
-)
 def test_inheritance_instantiation():
     with open(os.path.join(MODEL_DIR, "InheritanceInstantiation.mo"), "r") as f:
         txt = f.read()
@@ -2882,32 +2878,18 @@ def test_nested_constants():
     ast_tree = parser.parse(txt)
     casadi_model = gen_casadi.generate(ast_tree, "Test")
 
-    from pymoca.tree import USE_NEW_FLATTENING
-
     ref_model = Model()
     q1 = ca.MX.sym("a1.q")
     q2 = ca.MX.sym("a2.q")
 
-    if USE_NEW_FLATTENING:
-        # Per MLS spec, constant values are inlined during flattening.
-        ref_model.parameters = list(map(Variable, [q1, q2]))
-        ref_model.parameters[0].value = 1
-        ref_model.parameters[1].value = 1
+    # Per MLS spec, constant values are inlined during flattening.
+    ref_model.parameters = list(map(Variable, [q1, q2]))
+    ref_model.parameters[0].value = 1
+    ref_model.parameters[1].value = 1
 
-        assert_model_equivalent(ref_model, casadi_model)
-        for p in casadi_model.parameters:
-            assert float(p.value) == 1.0
-    else:
-        c1 = ca.MX.sym("a1.P1.p")
-        c2 = ca.MX.sym("a2.P1.p")
-        ref_model.parameters = list(map(Variable, [q1, q2]))
-        ref_model.constants = list(map(Variable, [c1, c2]))
-        ref_model.parameters[0].value = c1
-        ref_model.parameters[1].value = c2
-
-        assert_model_equivalent(ref_model, casadi_model)
-        assert casadi_model.parameters[0].value.name() == c1.name()
-        assert casadi_model.parameters[1].value.name() == c2.name()
+    assert_model_equivalent(ref_model, casadi_model)
+    for p in casadi_model.parameters:
+        assert float(p.value) == 1.0
 
 
 def test_derivative_initialization():

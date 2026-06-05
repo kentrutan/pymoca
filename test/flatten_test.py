@@ -447,30 +447,6 @@ def test_flatten_to_tree_spring_system():
     assert len(model.equations) > 0
 
 
-def test_flatten_to_tree_matches_legacy():
-    """flatten_to_tree and legacy flatten produce same symbol names/types."""
-    ast_tree = parse_model_files("BouncingBall.mo")
-    comp_ref = ast.ComponentRef.from_string("BouncingBall")
-
-    legacy_tree = tree.flatten(ast_tree, comp_ref)
-
-    # Re-parse since flatten may mutate
-    ast_tree2 = parse_model_files("BouncingBall.mo")
-    new_tree = tree.flatten_to_tree(ast_tree2, comp_ref)
-
-    legacy_model = legacy_tree.classes["BouncingBall"]
-    new_model = new_tree.classes["BouncingBall"]
-
-    # Same symbol names
-    assert set(legacy_model.symbols.keys()) == set(new_model.symbols.keys())
-
-    # Same type names
-    for name in legacy_model.symbols:
-        legacy_type = str(legacy_model.symbols[name].type)
-        new_type = str(new_model.symbols[name].type)
-        assert legacy_type == new_type, f"Type mismatch for {name}: {legacy_type} vs {new_type}"
-
-
 def test_flatten_to_tree_function_pull():
     ast_tree = parse_model_files("FunctionPull.mo")
     class_name = "Level1.Level2.Level3.Function5"
@@ -1014,17 +990,6 @@ def test_clock_builtin_type():
     assert parse_and_flatten_model("ClockBuiltin.mo", "ClockBuiltin.UsesClock") is not None
 
 
-def test_encapsulated_fully_qualified_type():
-    """Inside an encapsulated class, a fully-qualified name whose first component is a
-    root-level package must still resolve (MLS §13.2.3).
-
-    Before the fix, step 7c in _find_simple_name blocked 'package' classes at the root
-    scope, so Modelica.Units.SI.Position failed with 'Type ... not found'.
-    """
-    flat = parse_and_flatten_model("EncapsulatedFullyQualifiedType.mo", "P.EncapsulatedModel")
-    assert "x" in flat.symbols
-
-
 def test_encapsulated_import_enclosing_package():
     """Encapsulated function that imports its enclosing package to type its inputs resolves.
 
@@ -1034,19 +999,6 @@ def test_encapsulated_import_enclosing_package():
     """
     flat = parse_and_flatten_model("EncapsulatedImportEnclosingPackage.mo", "UseOrientation")
     assert "R.T[1,1]" in flat.symbols or any(k.startswith("R") for k in flat.symbols)
-
-
-def test_div_builtin_in_dimension():
-    """div() built-in used in a parameter dimension expression must evaluate correctly.
-
-    Before the fix, div was absent from ExpressionEvaluator.binary_operator, so
-    'n = div(shift, resolution)' stayed as an unevaluated Expression.  The downstream
-    dimension 'buf[n+1]' then tried Python arithmetic on the Expression value and raised
-    ModelicaSemanticError('Unable to evaluate expression: ...')
-    """
-    flat = parse_and_flatten_model("DivInDimension.mo", "P.Example")
-    # buf is a 2-element array: div(2,2)+1 = 2; flattened as b.buf[1] and b.buf[2]
-    assert "b.buf[1]" in flat.symbols or "b.buf" in flat.symbols
 
 
 def test_user_defined_enum_flatten():

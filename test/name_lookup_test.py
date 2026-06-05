@@ -5,11 +5,11 @@ Test against Modelica name lookup rules
 
 import os
 
-import pytest
-
 import pymoca.ast
 import pymoca.parser
 from pymoca.tree import NameLookupError, find_name, flatten, flatten_instance, instantiate
+
+import pytest
 
 MY_DIR = os.path.dirname(os.path.realpath(__file__))
 COMPLIANCE_DIR = os.path.join(MY_DIR, "libraries", "Modelica-Compliance", "ModelicaCompliance")
@@ -500,9 +500,9 @@ def test_function_lookup_via_array_element():
 def test_need_for_temporary_flattening():
     """Test name lookup through 2 levels of inheritance with symbol value modifications
 
-    This is a case where ast.Class.find_class fails and tree.find_name
-    works, even if it is not "temporarily flattened" as mentioned in the
-    Modelica 3.5 spec section 5.3.2.
+    This is a case where name lookup through 2 levels of inheritance with
+    symbol value modifications works, even if it is not "temporarily
+    flattened" as mentioned in the Modelica 3.5 spec section 5.3.2.
     """
     txt = """
     class A

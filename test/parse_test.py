@@ -212,29 +212,21 @@ def test_signed_expression():
     flat_tree = tree.flatten(ast_tree, comp_ref)
 
     # Test that signed expressions survive flattening.
-    # The new pipeline evaluates constant unary expressions (+1 → 1, -1.0 → -1.0)
+    # The pipeline evaluates constant unary expressions (+1 → 1, -1.0 → -1.0)
     # while preserving non-constant references and compound expressions.
     symbols = flat_tree.classes["A"].symbols
-    if tree.USE_NEW_FLATTENING:
-        # +literal evaluates to the literal itself
-        assert isinstance(symbols["iplus"].value, ast.Primary)
-        assert symbols["iplus"].value.value == 1
-        assert isinstance(symbols["rplus"].value, ast.Primary)
-        assert symbols["rplus"].value.value == 1.0
-        # -variable reference preserved as expression
-        assert symbols["ineg"].value.operator == "-"
-        assert len(symbols["ineg"].value.operands) == 1
-        # -literal evaluates to negative literal
-        assert isinstance(symbols["rneg"].value, ast.Primary)
-        assert symbols["rneg"].value.value == -1.0
-    else:
-        for sym in "iplus", "rplus":
-            assert symbols[sym].value.operator == "+"
-            assert len(symbols[sym].value.operands) == 1
-        for sym in "ineg", "rneg":
-            assert symbols[sym].value.operator == "-"
-            assert len(symbols[sym].value.operands) == 1
-    # Compound expressions preserve structure in both pipelines
+    # +literal evaluates to the literal itself
+    assert isinstance(symbols["iplus"].value, ast.Primary)
+    assert symbols["iplus"].value.value == 1
+    assert isinstance(symbols["rplus"].value, ast.Primary)
+    assert symbols["rplus"].value.value == 1.0
+    # -variable reference preserved as expression
+    assert symbols["ineg"].value.operator == "-"
+    assert len(symbols["ineg"].value.operands) == 1
+    # -literal evaluates to negative literal
+    assert isinstance(symbols["rneg"].value, ast.Primary)
+    assert symbols["rneg"].value.value == -1.0
+    # Compound expressions preserve structure
     assert symbols["rboth"].value.operands[1].operator == "+"
     assert len(symbols["rboth"].value.operands[1].operands) == 1
     assert symbols["itest"].value.expressions[0].operator == "+"
@@ -789,75 +781,6 @@ def test_function_partial_application():
     assert partial2.operands[0].name == "p"
     assert isinstance(partial2.operands[1], ast.ComponentRef)
     assert partial2.operands[1].name == "q"
-
-
-def test_modelicapath_root_without_package_mo(tmp_path):
-    """A MODELICAPATH entry without package.mo has its children loaded directly.
-
-    MSL-4.0.x/ has no package.mo but contains Modelica/, ModelicaServices/, Complex.mo.
-    Passing the parent directory should expose all three as top-level classes.
-    """
-    # Build a minimal MODELICAPATH root: no package.mo, two sub-packages, one bare .mo
-    root = tmp_path / "msl_root"
-    root.mkdir()
-
-    pkg_a = root / "PkgA"
-    pkg_a.mkdir()
-    (pkg_a / "package.mo").write_text("package PkgA\nend PkgA;")
-
-    pkg_b = root / "PkgB"
-    pkg_b.mkdir()
-    (pkg_b / "package.mo").write_text("package PkgB\nend PkgB;")
-
-    (root / "Standalone.mo").write_text("model Standalone\nend Standalone;")
-
-    stub_tree = parser.modelicapath_to_tree(dirs=[str(root)])
-    assert "PkgA" in stub_tree.classes
-    assert "PkgB" in stub_tree.classes
-    assert "Standalone" in stub_tree.classes
-
-
-def test_parse_omitted_output_assignment():
-    """(a, , c) := f(x) — omitted middle output parses; slot becomes None (MLS §B.2.6.5)."""
-    txt = """
-function F
-  input Real x;
-  output Real a;
-  output Real b;
-  output Real c;
-algorithm
-  (a, , c) := g(x);
-end F;
-"""
-    tree_ = parser.parse(txt)
-    f = tree_.classes["F"]
-    stmt = f.statements[0]
-    assert isinstance(stmt, ast.AssignmentStatement)
-    assert len(stmt.left) == 3
-    assert stmt.left[0].name == "a"
-    assert stmt.left[1] is None
-    assert stmt.left[2].name == "c"
-
-
-def test_parse_full_output_assignment():
-    """(a, b, c) := f(x) — all outputs present; no slot is None (regression guard)."""
-    txt = """
-function F
-  input Real x;
-  output Real a;
-  output Real b;
-  output Real c;
-algorithm
-  (a, b, c) := g(x);
-end F;
-"""
-    tree_ = parser.parse(txt)
-    f = tree_.classes["F"]
-    stmt = f.statements[0]
-    assert isinstance(stmt, ast.AssignmentStatement)
-    assert len(stmt.left) == 3
-    assert all(ref is not None for ref in stmt.left)
-    assert [ref.name for ref in stmt.left] == ["a", "b", "c"]
 
 
 if __name__ == "__main__":

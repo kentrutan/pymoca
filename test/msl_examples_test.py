@@ -13,7 +13,6 @@ import traceback
 from multiprocessing import Pool
 from pathlib import Path
 
-from pymoca import ast
 from pymoca import parser
 from pymoca import tree
 
@@ -77,7 +76,6 @@ def test_msl_example(model_name, msl_tree):
 # ---------------------------------------------------------------------------
 
 _worker_tree = None
-_use_legacy = False
 _msl4_base_dir = None
 _translator = None
 _options = None
@@ -88,15 +86,13 @@ _casadi_api = None
 
 def _worker_init(
     msl4_base_dir: str,
-    use_legacy: bool = False,
     reuse_tree: bool = False,
     translator: str = None,
     options: dict = None,
 ) -> None:
-    global _worker_tree, _use_legacy, _msl4_base_dir, _translator, _options
+    global _worker_tree, _msl4_base_dir, _translator, _options
     global _casadi_generator, _casadi_api
     _msl4_base_dir = msl4_base_dir
-    _use_legacy = use_legacy
     _translator = translator
     _options = options or {}
     if translator == "casadi":
@@ -144,10 +140,6 @@ def _process_one(model_name: str) -> tuple:
             model.simplify(opts)
             model._post_checks()
             name = model_name
-        elif _use_legacy:
-            flat_class = ast.ComponentRef.from_string(model_name)
-            flat_tree = tree.flatten(worker_tree, flat_class)
-            name = flat_tree.classes[model_name].name
         else:
             flat_instance = tree.flatten_model(worker_tree, model_name)
             name = flat_instance.name

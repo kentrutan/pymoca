@@ -38,7 +38,7 @@ def test_instantiation_same_names():
 def test_instantiation_modification_scope_instance_class():
     """Test that modification scopes are updated to InstanceClass"""
     ast_tree = parse_model_files("TreeInTree.mo")
-    instance = tree.instantiate("Tree.Tree", ast_tree)
+    instance = tree.instantiate(ast_tree, "Tree.Tree")
     assert instance is not None
 
     assert "t" in instance.extends[0].symbols, "t not found in instance"
@@ -160,17 +160,17 @@ def test_instantiation_function_input_order():
     # declarations in one list or ordered dictionary containing both symbols and
     # extends. The checks below are intended to fail until we have implemented this.
 
-    instance = tree.instantiate("P.B", ast_tree)
+    instance = tree.instantiate(ast_tree, "P.B")
     assert ("a", "b") == tuple(instance.extends[0].symbols)
     assert "b" not in instance.symbols
     assert "a" not in instance.symbols
 
-    instance = tree.instantiate("P.C", ast_tree)
+    instance = tree.instantiate(ast_tree, "P.C")
     assert ("b", "a") == tuple(instance.symbols)
     assert "a" not in instance.extends[0].symbols
     assert "b" not in instance.extends[0].symbols
 
-    instance = tree.instantiate("P.D", ast_tree)
+    instance = tree.instantiate(ast_tree, "P.D")
     assert "a" in instance.symbols
     assert "b" not in instance.symbols
     assert "a" not in instance.extends[0].symbols
@@ -311,7 +311,7 @@ def test_visibility_in_instance():
 
     ast_tree = parse_model_files("Visibility.mo")
 
-    instance = tree.instantiate("A", ast_tree)
+    instance = tree.instantiate(ast_tree, "A")
     # Test visibility of the classes
     B = instance.classes["B"]
     C = instance.classes["C"]
@@ -363,7 +363,7 @@ def test_extends_lookup_not_in_extended():
         ast_tree = parser.parse(txt.format(extends_1, extends_2))
 
         with pytest.raises(tree.ModelicaSemanticError, match="Extends name B not found in scope C"):
-            instance = tree.instantiate("C", ast_tree)  # noqa: F841
+            instance = tree.instantiate(ast_tree, "C")  # noqa: F841
 
 
 def test_error_extends_class_also_extended_name_simple():
@@ -395,7 +395,7 @@ def test_error_extends_class_also_extended_name_simple():
             tree.ModelicaSemanticError,
             match="Cannot extend 'C' with 'B'; 'B' also exists in names inherited from 'A'",
         ):
-            instance = tree.instantiate("C", ast_tree)  # noqa: F841
+            instance = tree.instantiate(ast_tree, "C")  # noqa: F841
 
 
 def test_error_extends_class_also_extended_name_of_self():
@@ -420,7 +420,7 @@ def test_error_extends_class_also_extended_name_of_self():
         tree.ModelicaSemanticError,
         match="Cannot extend 'C' with 'A'; 'A' also exists in names inherited from 'A'",
     ):
-        instance = tree.instantiate("C", ast_tree)  # noqa: F841
+        instance = tree.instantiate(ast_tree, "C")  # noqa: F841
 
 
 def test_error_extends_class_also_extended_name_nested():
@@ -454,7 +454,7 @@ def test_error_extends_class_also_extended_name_nested():
             tree.ModelicaSemanticError,
             match="Cannot extend 'D' with 'B.C'; 'B' also exists in names inherited from 'A'",
         ):
-            instance = tree.instantiate("D", ast_tree)  # noqa: F841
+            instance = tree.instantiate(ast_tree, "D")  # noqa: F841
 
 
 def test_extends_path_middle_component_not_checked():
@@ -630,7 +630,7 @@ def test_value_modification_ordering():
     )
     from pymoca.tree import LookupOptions, RecursionGuard
 
-    x = _find_name("x", instance, RecursionGuard(), LookupOptions(check_encapsulated=False))
+    x = _find_name(instance, "x", RecursionGuard(), LookupOptions(check_encapsulated=False))
     assert x is not None, "x not found in ValM instance"
     value_args = get_modifiers_by_name(x, "value")
     assert len(value_args) > 0, "x missing value modification"
@@ -659,7 +659,7 @@ def test_derived_type_value_modification():
         end A;
     """
     ast_tree = parser.parse(txt)
-    instance = tree.instantiate("A.D", ast_tree)
+    instance = tree.instantiate(ast_tree, "A.D")
     assert instance is not None
     c_y = (
         instance.extends[0]
@@ -673,7 +673,7 @@ def test_derived_type_value_modification():
     assert c_y_mod.value.component.name == "value"
     assert c_y_mod.value.modifications[0].value == 3
 
-    instance = tree.instantiate("A.E", ast_tree)
+    instance = tree.instantiate(ast_tree, "A.E")
     d_c_y = (
         instance.symbols["d"]
         .type.extends[0]

@@ -198,7 +198,7 @@ def test_redeclare_class_with_symbol_error():
     with pytest.raises(
         tree.ModelicaSemanticError, match="Redeclaring C with component a in scope A"
     ):
-        _ = tree.instantiate("A", ast_tree)
+        _ = tree.instantiate(ast_tree, "A")
 
 
 def test_missing_redeclare_class_error():
@@ -217,7 +217,7 @@ def test_missing_redeclare_class_error():
     """
     ast_tree = parser.parse(txt)
     with pytest.raises(tree.NameLookupError, match="Redeclare class D not found in scope A"):
-        _ = tree.instantiate("A", ast_tree)
+        _ = tree.instantiate(ast_tree, "A")
 
 
 def test_redeclare_in_extends():
@@ -262,14 +262,14 @@ def test_extends_redeclareable():
     with pytest.raises(
         tree.ModelicaSemanticError, match="In D extends C, C and parents cannot be replaceable"
     ):
-        instance = tree.instantiate("E", ast_tree)  # noqa: F841
+        instance = tree.instantiate(ast_tree, "E")  # noqa: F841
 
 
 def test_redeclare_nonreplaceable():
     ast_tree = parser.parse_file(os.path.join(MODEL_DIR, "RedeclareNonReplaceable.mo"))
 
     with pytest.raises(tree.ModelicaSemanticError, match="Redeclaring D.C that is not replaceable"):
-        instance = tree.instantiate("E", ast_tree)  # noqa: F841
+        instance = tree.instantiate(ast_tree, "E")  # noqa: F841
 
 
 def test_redeclare_nested():
@@ -282,7 +282,7 @@ def test_redeclare_nested():
 
 def _flatten_inline(txt, model_name):
     ast_tree = parser.parse(txt)
-    instance = tree.instantiate(model_name, ast_tree)
+    instance = tree.instantiate(ast_tree, model_name)
     return tree.flatten_instance(instance)
 
 

@@ -706,7 +706,7 @@ class _FunctionCallResolver(TreeListener):
         if not isinstance(tree.operator, ast.ComponentRef):
             return
         try:
-            found = _find_name(tree.operator, self.instance, RecursionGuard(), LookupOptions())
+            found = _find_name(self.instance, tree.operator, RecursionGuard(), LookupOptions())
         except Exception:
             return
         if found is None or not isinstance(found, ast.Class):
@@ -1239,8 +1239,8 @@ def _resolve_name(
         )
 
     found = _find_name(
-        name,
         scope,
+        name,
         guard,
         LookupOptions(instantiate_in_place=opts.instantiate_in_place),
     )
@@ -1515,7 +1515,7 @@ def flatten_model(
     evaluate_parameters: bool = False,
 ) -> ast.InstanceClass:
     """Instantiate and flatten class_name, returning the flat InstanceClass."""
-    instance = instantiate(str(class_name), root)
+    instance = instantiate(root, str(class_name))
     return flatten_instance(
         instance,
         keep_connectors=keep_connectors,
@@ -1538,7 +1538,7 @@ def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
 
     # 1. Instantiate
     class_name_str = str(class_name)
-    instance = instantiate(class_name_str, root)
+    instance = instantiate(root, class_name_str)
 
     # 2. Flatten (keep connectors for expand_connectors)
     flat_instance = flatten_instance(instance, keep_connectors=True)

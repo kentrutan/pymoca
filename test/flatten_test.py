@@ -447,30 +447,6 @@ def test_flatten_to_tree_spring_system():
     assert len(model.equations) > 0
 
 
-def test_flatten_to_tree_matches_legacy():
-    """flatten_to_tree and legacy flatten produce same symbol names/types."""
-    ast_tree = parse_model_files("BouncingBall.mo")
-    comp_ref = ast.ComponentRef.from_string("BouncingBall")
-
-    legacy_tree = tree.flatten(ast_tree, comp_ref)
-
-    # Re-parse since flatten may mutate
-    ast_tree2 = parse_model_files("BouncingBall.mo")
-    new_tree = tree.flatten_to_tree(ast_tree2, comp_ref)
-
-    legacy_model = legacy_tree.classes["BouncingBall"]
-    new_model = new_tree.classes["BouncingBall"]
-
-    # Same symbol names
-    assert set(legacy_model.symbols.keys()) == set(new_model.symbols.keys())
-
-    # Same type names
-    for name in legacy_model.symbols:
-        legacy_type = str(legacy_model.symbols[name].type)
-        new_type = str(new_model.symbols[name].type)
-        assert legacy_type == new_type, f"Type mismatch for {name}: {legacy_type} vs {new_type}"
-
-
 def test_flatten_to_tree_function_pull():
     ast_tree = parse_model_files("FunctionPull.mo")
     class_name = "Level1.Level2.Level3.Function5"

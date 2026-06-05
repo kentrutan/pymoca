@@ -212,29 +212,21 @@ def test_signed_expression():
     flat_tree = tree.flatten(ast_tree, comp_ref)
 
     # Test that signed expressions survive flattening.
-    # The new pipeline evaluates constant unary expressions (+1 → 1, -1.0 → -1.0)
+    # The pipeline evaluates constant unary expressions (+1 → 1, -1.0 → -1.0)
     # while preserving non-constant references and compound expressions.
     symbols = flat_tree.classes["A"].symbols
-    if tree.USE_NEW_FLATTENING:
-        # +literal evaluates to the literal itself
-        assert isinstance(symbols["iplus"].value, ast.Primary)
-        assert symbols["iplus"].value.value == 1
-        assert isinstance(symbols["rplus"].value, ast.Primary)
-        assert symbols["rplus"].value.value == 1.0
-        # -variable reference preserved as expression
-        assert symbols["ineg"].value.operator == "-"
-        assert len(symbols["ineg"].value.operands) == 1
-        # -literal evaluates to negative literal
-        assert isinstance(symbols["rneg"].value, ast.Primary)
-        assert symbols["rneg"].value.value == -1.0
-    else:
-        for sym in "iplus", "rplus":
-            assert symbols[sym].value.operator == "+"
-            assert len(symbols[sym].value.operands) == 1
-        for sym in "ineg", "rneg":
-            assert symbols[sym].value.operator == "-"
-            assert len(symbols[sym].value.operands) == 1
-    # Compound expressions preserve structure in both pipelines
+    # +literal evaluates to the literal itself
+    assert isinstance(symbols["iplus"].value, ast.Primary)
+    assert symbols["iplus"].value.value == 1
+    assert isinstance(symbols["rplus"].value, ast.Primary)
+    assert symbols["rplus"].value.value == 1.0
+    # -variable reference preserved as expression
+    assert symbols["ineg"].value.operator == "-"
+    assert len(symbols["ineg"].value.operands) == 1
+    # -literal evaluates to negative literal
+    assert isinstance(symbols["rneg"].value, ast.Primary)
+    assert symbols["rneg"].value.value == -1.0
+    # Compound expressions preserve structure
     assert symbols["rboth"].value.operands[1].operator == "+"
     assert len(symbols["rboth"].value.operands[1].operands) == 1
     assert symbols["itest"].value.expressions[0].operator == "+"

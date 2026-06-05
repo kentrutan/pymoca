@@ -16,6 +16,8 @@ import sys
 from collections import OrderedDict
 from typing import Optional, Set, Union, cast
 
+import numpy as np
+
 from . import LookupOptions, ModelicaSemanticError, NameLookupError, RecursionGuard
 from ._instantiation import (
     InstanceTree,
@@ -23,7 +25,7 @@ from ._instantiation import (
     _instantiate_class,
     instantiate,
 )
-from ._listener import TreeListener, TreeWalker
+from ._listener import TreeListener, TreeWalker, logger
 from ._name_lookup import _find_name
 from .. import ast
 
@@ -1527,13 +1529,6 @@ def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
 
     Plug-compatible with legacy ``flatten(root, class_name)``.
     """
-    from ._legacy import (
-        ComponentRefFlattener,
-        add_variable_value_statements,
-        annotate_states,
-        expand_connectors,
-    )
-
     # 1. Instantiate
     class_name_str = str(class_name)
     instance = instantiate(root, class_name_str)
@@ -1599,3 +1594,279 @@ def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
     out.classes = functions_and_classes
 
     return out
+
+
+# ---------------------------------------------------------------------------
+# Post-processing helpers (used by flatten_to_tree above)
+# ---------------------------------------------------------------------------
+
+
+class ComponentRefFlattener(TreeListener):
+    """
+    A listener that flattens references to components and performs name mangling,
+    it also locates all symbols and determines which are states (
+    one of the equations contains a derivative of the symbol)
+    """
+
+    def __init__(self, container: ast.Class, instance_prefix: str):
+        self.container = container
+        self.instance_prefix = instance_prefix
+        self.depth = 0
+        self.cutoff_depth = sys.maxsize
+        self.inside_modification = 0  # We do flatten component references in modifications
+        super().__init__()
+
+    def enterClassModificationArgument(self, tree: ast.ClassModificationArgument):
+        if tree.scope is not None:
+            self.inside_modification += 1
+
+    def exitClassModificationArgument(self, tree: ast.ClassModificationArgument):
+        if tree.scope is not None:
+            self.inside_modification -= 1
+
+    def enterComponentRef(self, tree: ast.ComponentRef):
+        self.depth += 1
+        if self.depth > self.cutoff_depth:
+            return
+
+        # Compose flatted name
+        new_name = self.instance_prefix + tree.name
+        c = tree
+        while len(c.child) > 0:
+            c = c.child[0]
+            new_name += "." + c.name
+
+        # If the flattened name exists in the container, use it.
+        # Otherwise, skip this reference.
+        # We also do not want to modify any component references inside
+        # modifications (that still need to be applied), as those have an
+        # accompanying scope and will be handled by the modification applier.
+        # Only when modifications have been applied, will they be picked up
+        # below.
+        if new_name in self.container.symbols and self.inside_modification == 0:
+            tree.name = new_name
+            c = tree
+            while len(c.child) > 0:
+                c = c.child[0]
+                tree.indices += c.indices
+            tree.child = []
+        else:
+            # The component was not found in the container.  We leave this
+            # reference alone.
+            self.cutoff_depth = self.depth
+
+    def exitComponentRef(self, tree: ast.ComponentRef):
+        self.depth -= 1
+        if self.depth < self.cutoff_depth:
+            self.cutoff_depth = sys.maxsize
+
+
+def expand_connectors(node: ast.Class) -> None:
+    # keep track of which flow variables have been connected to, and which ones haven't
+    disconnected_flow_variables = OrderedDict()
+    for sym in node.symbols.values():
+        if "flow" in sym.prefixes:
+            disconnected_flow_variables[sym.name] = sym
+
+    # add flow equations
+    # for all equations in original class
+    flow_connections = OrderedDict()
+    orig_equations = node.equations[:]
+    node.equations = []
+    for equation in orig_equations:
+        if isinstance(equation, ast.ConnectClause):
+            # expand connector
+            if len(equation.left.child) != 0:
+                raise Exception(
+                    "Could not resolve {} in connect clause ({}*, {}*)".format(
+                        equation.left, equation.left, equation.right
+                    )
+                )
+            if len(equation.right.child) != 0:
+                raise Exception(
+                    "Could not resolve {} in connect clause ({}*, {}*)".format(
+                        equation.right, equation.left, equation.right
+                    )
+                )
+
+            sym_left = node.symbols[equation.left.name]
+            sym_right = node.symbols[equation.right.name]
+
+            class_left = getattr(sym_left, "__connector_type", None)
+            class_right = getattr(sym_right, "__connector_type", None)
+            if class_left is None or class_right is None:
+                # Elementary connect (no connector type — e.g. Real): emit equation directly.
+                primary_types = ["Real"]
+                # TODO
+                if (
+                    sym_left.type.name not in primary_types
+                    or sym_right.type.name not in primary_types
+                ):
+                    logger.warning(
+                        "Connector class {} or {} not defined.  "
+                        "Assuming it to be an elementary type.".format(
+                            sym_left.type, sym_right.type
+                        )
+                    )
+                connect_equation = ast.Equation(left=equation.left, right=equation.right)
+                node.equations.append(connect_equation)
+            else:
+                # TODO: Add check about matching inputs and outputs
+
+                for connector_variable in class_left.symbols.values():
+                    left_name = equation.left.name + "." + connector_variable.name
+                    right_name = equation.right.name + "." + connector_variable.name
+                    left = ast.ComponentRef(
+                        name=left_name,
+                        indices=equation.left.indices + connector_variable.type.indices,
+                    )
+                    right = ast.ComponentRef(
+                        name=right_name,
+                        indices=equation.right.indices + connector_variable.type.indices,
+                    )
+                    if len(connector_variable.prefixes) == 0 or connector_variable.prefixes[0] in [
+                        "input",
+                        "output",
+                    ]:
+                        connect_equation = ast.Equation(left=left, right=right)
+                        node.equations.append(connect_equation)
+                    elif connector_variable.prefixes == ["flow"]:
+                        # TODO generic way to get a tuple representation of a component ref, including indices.
+                        left_key = (
+                            left_name,
+                            tuple(
+                                i.value if isinstance(i, ast.Primary) else str(i)
+                                for index_array in left.indices
+                                for i in index_array
+                                if i is not None
+                            ),
+                            equation.__left_inner,
+                        )
+                        right_key = (
+                            right_name,
+                            tuple(
+                                i.value if isinstance(i, ast.Primary) else str(i)
+                                for index_array in right.indices
+                                for i in index_array
+                                if i is not None
+                            ),
+                            equation.__right_inner,
+                        )
+
+                        left_connected_variables = flow_connections.get(left_key, OrderedDict())
+                        right_connected_variables = flow_connections.get(right_key, OrderedDict())
+
+                        left_connected_variables.update(right_connected_variables)
+                        connected_variables = left_connected_variables
+                        connected_variables[left_key] = (left, equation.__left_inner)
+                        connected_variables[right_key] = (right, equation.__right_inner)
+
+                        for connected_variable in connected_variables:
+                            flow_connections[connected_variable] = connected_variables
+
+                        # TODO When dealing with an array of connectors, we can lose
+                        # disconnected flow variables in this way.  We don't initialize
+                        # all components of vectors to zero in 'flow_connections' as we
+                        # do not always know the length of vectors a priori.
+                        disconnected_flow_variables.pop(left_name, None)
+                        disconnected_flow_variables.pop(right_name, None)
+                    elif connector_variable.prefixes[0] in ["constant", "parameter"]:
+                        # Skip constants and parameters in connectors.
+                        pass
+                    else:
+                        raise Exception(
+                            "Unsupported connector variable prefixes {}".format(
+                                connector_variable.prefixes
+                            )
+                        )
+        else:
+            node.equations.append(equation)
+
+    processed = []  # OrderedDict is not hashable, so we cannot use sets.
+    for connected_variables in flow_connections.values():
+        if connected_variables not in processed:
+            operand_specs = list(connected_variables.values())
+            if np.all([not op_spec[1] for op_spec in operand_specs]):
+                # All outer variables. Don't include unnecessary minus expressions.
+                operands = [op_spec[0] for op_spec in operand_specs]
+            else:
+                operands = [
+                    (
+                        op_spec[0]
+                        if op_spec[1]
+                        else ast.Expression(operator="-", operands=[op_spec[0]])
+                    )
+                    for op_spec in operand_specs
+                ]
+            expr = operands[-1]
+            for op in reversed(operands[:-1]):
+                expr = ast.Expression(operator="+", operands=[op, expr])
+            connect_equation = ast.Equation(left=expr, right=ast.Primary(value=0))
+            node.equations.append(connect_equation)
+            processed.append(connected_variables)
+
+    # disconnected flow variables default to 0
+    for sym in disconnected_flow_variables.values():
+        connect_equation = ast.Equation(left=sym, right=ast.Primary(value=0))
+        node.equations.append(connect_equation)
+
+    # strip connector symbols
+    for i, sym in list(node.symbols.items()):
+        if hasattr(sym, "__connector_type"):
+            del node.symbols[i]
+
+
+def add_variable_value_statements(node: ast.Node) -> None:
+    # we do this here, instead of in flatten_class, because symbol values
+    # inside flattened classes may be modified later by modify_class().
+    for sym in node.symbols.values():
+        if not (isinstance(sym.value, ast.Primary) and sym.value.value is None):
+            node.statements.append(ast.AssignmentStatement(left=[sym], right=sym.value))
+            sym.value = ast.Primary(value=None)
+
+
+class StateAnnotator(TreeListener):
+    """
+    Finds all variables that are differentiated and annotates them with the state prefix
+    """
+
+    def __init__(self, node: ast.Node):
+        self.node = node
+        self.in_der = 0
+        super().__init__()
+
+    def enterExpression(self, tree: ast.Expression):
+        """
+        When entering an expression, check if it is a derivative, if it is
+        put state prefix on contained symbols
+        """
+        if tree.operator == "der":
+            self.in_der += 1
+
+    def exitExpression(self, tree: ast.Expression):
+        if tree.operator == "der":
+            self.in_der -= 1
+
+    def exitComponentRef(self, tree: ast.Expression):
+        if self.in_der > 0:
+            assert len(tree.child) == 0
+
+            try:
+                s = self.node.symbols[tree.name]
+            except KeyError:
+                # Ignore index variables, parameters, and so forth.
+                pass
+            else:
+                if "state" not in s.prefixes:
+                    s.prefixes.append("state")
+
+
+def annotate_states(node: ast.Node) -> None:
+    """
+    Finds all derivative expressions and annotates all differentiated
+    symbols as states by adding state the prefix list
+    :param node: node of tree to walk
+    :return:
+    """
+    w = TreeWalker()
+    w.walk(StateAnnotator(node), node)

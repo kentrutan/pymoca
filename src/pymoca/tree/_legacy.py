@@ -792,16 +792,10 @@ def expand_connectors(node: ast.Class) -> None:
             sym_left = node.symbols[equation.left.name]
             sym_right = node.symbols[equation.right.name]
 
-            try:
-                class_left = getattr(sym_left, "__connector_type", None)
-                if class_left is None:
-                    # We may be connecting classes which are not connectors, such as Reals.
-                    class_left = node.find_class(sym_left.type)
-                class_right = getattr(sym_right, "__connector_type", None)
-                if class_right is None:
-                    # We may be connecting classes which are not connectors, such as Reals.
-                    class_right = node.find_class(sym_right.type)
-            except ast.FoundElementaryClassError:
+            class_left = getattr(sym_left, "__connector_type", None)
+            class_right = getattr(sym_right, "__connector_type", None)
+            if class_left is None or class_right is None:
+                # Elementary connect (no connector type — e.g. Real): emit equation directly.
                 primary_types = ["Real"]
                 # TODO
                 if (
@@ -819,9 +813,7 @@ def expand_connectors(node: ast.Class) -> None:
             else:
                 # TODO: Add check about matching inputs and outputs
 
-                flat_class_left = flatten_class(class_left)
-
-                for connector_variable in flat_class_left.symbols.values():
+                for connector_variable in class_left.symbols.values():
                     left_name = equation.left.name + "." + connector_variable.name
                     right_name = equation.right.name + "." + connector_variable.name
                     left = ast.ComponentRef(

@@ -143,7 +143,7 @@ def test_msl_opamp_units():
     )
     model_name = "Modelica.Electrical.Analog.Basic.OpAmp"
 
-    instance = tree.instantiate(model_name, library_tree)
+    instance = tree.instantiate(library_tree, model_name)
     assert instance is not None
 
     # Check that we have a fully connected InstanceTree with only Instances
@@ -196,7 +196,7 @@ def test_msl3_twopin_units():
     )
     model_name = "Modelica.Electrical.Analog.Interfaces.TwoPort"
 
-    instance = tree.instantiate(model_name, library_tree)
+    instance = tree.instantiate(library_tree, model_name)
     assert instance is not None
 
     assert "i" in instance.symbols["p1"].type.symbols
@@ -241,7 +241,7 @@ def test_msl_flange_units():
         "Modelica/Mechanics/Rotational/Interfaces/PartialAbsoluteSensor.mo",
     )
     model_name = "Modelica.Mechanics.Rotational.Interfaces.PartialAbsoluteSensor"
-    instance = tree.instantiate(model_name, library_tree)
+    instance = tree.instantiate(library_tree, model_name)
     assert instance is not None
 
     assert "flange" in instance.symbols

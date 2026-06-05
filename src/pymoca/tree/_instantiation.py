@@ -2,7 +2,7 @@
 """
 Modelica instantiation — MLS 5.6.1
 
-Entry: instantiate(class_name, class_tree) → _instantiate_class()
+Entry: instantiate(class_tree, class_name) → _instantiate_class()
 """
 
 from __future__ import absolute_import, division, print_function, unicode_literals
@@ -49,11 +49,11 @@ class InstanceTree(ast.Tree):
         self.classes.update(builtin_instances)
 
 
-def instantiate(class_name: str, class_tree: ast.Tree) -> ast.InstanceClass:
+def instantiate(class_tree: ast.Tree, class_name: str) -> ast.InstanceClass:
     """Instantiate a class from the class tree
 
-    :param class_name: The name of the class to instantiate
     :param class_tree: The AST tree containing class definitions
+    :param class_name: The name of the class to instantiate
     :return: Instantiated class in an instance tree ready for flattening
 
     The returned class will be fully instantiated, but name lookup
@@ -63,7 +63,7 @@ def instantiate(class_name: str, class_tree: ast.Tree) -> ast.InstanceClass:
     flattening by calling this function on the class.
     """
     instance_tree = InstanceTree(class_tree)
-    class_ = find_name(class_name, instance_tree)
+    class_ = find_name(instance_tree, class_name)
     if class_ is None:
         raise NameLookupError(f"{class_name} not found in given tree")
     if isinstance(class_, ast.Symbol):
@@ -656,8 +656,8 @@ def _find_extends_class(
         extends_class = _find_class_extends_target(str(extends_name), ast_scope)
     else:
         extends_class = _find_name(
-            extends_name,
             scope,
+            extends_name,
             guard,
             LookupOptions(
                 instantiate_in_place=opts.instantiate_in_place,
@@ -734,8 +734,8 @@ def _get_lexical_parent_instance(
     else:
         # Lookup class in the instance tree
         found = _find_name(
-            class_.name,
             lookup_scope,
+            class_.name,
             guard,
             LookupOptions(instantiate_in_place=False),
         )
@@ -847,8 +847,8 @@ def _instantiate_symbol(
 
     if not isinstance(symbol.type, ast.InstanceClass):
         symbol_type = _find_name(
-            symbol.type,
             parent_instance,
+            symbol.type,
             guard,
             LookupOptions(instantiate_in_place=opts.instantiate_in_place),
         )
@@ -1111,8 +1111,8 @@ def _apply_redeclares(
         redeclare_name = redeclare.type
 
     redeclare_class = _find_name(
-        redeclare_name,
         scope_class,
+        redeclare_name,
         guard,
         # Type class lookup: instantiate_in_place=False avoids triggering cascading
         # partial instantiation of the entire package hierarchy.  The ast_ref fallback
@@ -1195,8 +1195,8 @@ def _apply_redeclares(
         # element.type is an ast.ComponentRef — fully instantiate the resolved class
         # before mutating its extends, else re-instantiation would overwrite the mutation.
         resolved = _find_name(
-            element.type,
             element.parent_instance,
+            element.type,
             guard,
             LookupOptions(instantiate_in_place=False),
         )

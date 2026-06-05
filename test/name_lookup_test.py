@@ -45,7 +45,7 @@ def lookup_composite_using_simple_only(composite_name, start_scope):
         if scope is None:
             return None
         name = simple_names.pop(0)
-        found = find_name(name, scope)
+        found = find_name(scope, name)
         if len(simple_names) == 0 or found is None:
             return found
         if isinstance(found, pymoca.ast.Symbol):
@@ -76,7 +76,7 @@ def parse_imported_lookup_file(pathname):
 
 def flatten_compliance_model(ast_tree, full_model_name):
     """Instantiate and flatten a compliance model by full dotted name."""
-    instance = instantiate(full_model_name, ast_tree)
+    instance = instantiate(ast_tree, full_model_name)
     return flatten_instance(instance)
 
 
@@ -112,7 +112,7 @@ def test_encapsulation():
     scope = lookup_composite_using_simple_only(
         "Scoping.NameLookup.Simple.Encapsulation.A", ast.classes["ModelicaCompliance"]
     )
-    found = find_name("x", scope)
+    found = find_name(scope, "x")
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
 
@@ -122,7 +122,7 @@ def test_encapsulation():
     assert "a.x" in flat.symbols
 
     # Now go in the reverse direction, bumping into encapsulation
-    found = find_name("Encapsulation", found.parent)
+    found = find_name(found.parent, "Encapsulation")
     assert found is None
 
     # Check that builtin abs function is looked up correctly in encapsulated scope
@@ -130,7 +130,7 @@ def test_encapsulation():
         "Scoping.NameLookup.Simple.Encapsulation.A", ast.classes["ModelicaCompliance"]
     )
     assert abs_scope is not None
-    found = find_name("abs", abs_scope)
+    found = find_name(abs_scope, "abs")
     # TODO: Uncomment after implementing abs built-in function lookup
     # assert found is not None
 
@@ -164,10 +164,10 @@ def test_enclosing_class_lookup_constant():
     )
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
-    scope = find_name("A", scope)
+    scope = find_name(scope, "A")
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
-    found = find_name("x", scope)
+    found = find_name(scope, "x")
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
     flat = flatten_compliance_model(
@@ -183,11 +183,11 @@ def test_enclosing_class_lookup_nonconstant():
         "Scoping.NameLookup.Simple.EnclosingClassLookupNonConstant",
         ast.classes["ModelicaCompliance"],
     )
-    scope = find_name("A", scope)
+    scope = find_name(scope, "A")
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
     with pytest.raises(NameLookupError, match=r"Non-constant Symbol found in enclosing class"):
-        find_name("x", scope)
+        find_name(scope, "x")
 
 
 def test_enclosing_class_lookup_shadowed_constant():
@@ -199,14 +199,14 @@ def test_enclosing_class_lookup_shadowed_constant():
     )
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
-    scope = find_name("A", scope)
+    scope = find_name(scope, "A")
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
-    scope = find_name("B", scope)
+    scope = find_name(scope, "B")
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
     with pytest.raises(NameLookupError, match=r"Non-constant Symbol found in enclosing class"):
-        find_name("x", scope)
+        find_name(scope, "x")
 
 
 def test_local_class_name_lookup():
@@ -218,7 +218,7 @@ def test_local_class_name_lookup():
     )
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
-    found = find_name("A", scope)
+    found = find_name(scope, "A")
     assert found is not None
     assert isinstance(found, pymoca.ast.Class)
 
@@ -232,10 +232,10 @@ def test_local_comp_name_lookup():
     )
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
-    found = find_name("x", scope)
+    found = find_name(scope, "x")
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
-    found = find_name("y", scope)
+    found = find_name(scope, "y")
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
 
@@ -250,7 +250,7 @@ def test_outside_encapsulation():
     )
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
-    found = find_name("x", scope)
+    found = find_name(scope, "x")
     assert found is None
 
 
@@ -264,13 +264,13 @@ def test_outside_encapsulation_multi():
     )
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
-    scope = find_name("A", scope)
+    scope = find_name(scope, "A")
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
-    scope = find_name("B", scope)
+    scope = find_name(scope, "B")
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
-    found = find_name("x", scope)
+    found = find_name(scope, "x")
     assert found is None
 
 
@@ -281,10 +281,10 @@ def test_package_lookup_class():
     """Checks that it's possible to look up a class in a package"""
     ast = parse_composite_lookup_file("PackageLookupClass.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.PackageLookupClass",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.PackageLookupClass",
     )
-    found = find_name("a.x", scope)
+    found = find_name(scope, "a.x")
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
     flat = flatten_compliance_model(
@@ -297,10 +297,10 @@ def test_package_lookup_constant():
     """Checks that it's possible to look up a constant in a package"""
     ast = parse_composite_lookup_file("PackageLookupConstant.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.PackageLookupConstant",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.PackageLookupConstant",
     )
-    found = find_name("P.x", scope)
+    found = find_name(scope, "P.x")
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
     flat = flatten_compliance_model(
@@ -314,10 +314,10 @@ def test_nested_comp_lookup():
     """Checks that composite names where each identifier is a component can be looked up"""
     ast = parse_composite_lookup_file("NestedCompLookup.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.NestedCompLookup",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.NestedCompLookup",
     )
-    found = find_name("c.b.a.x", scope)
+    found = find_name(scope, "c.b.a.x")
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
     flat = flatten_compliance_model(
@@ -334,10 +334,10 @@ def test_partial_class_lookup():
     is left to the caller and find_name returns the found class."""
     ast = parse_composite_lookup_file("PartialClassLookup.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.PartialClassLookup",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.PartialClassLookup",
     )
-    found = find_name("P.x", scope)
+    found = find_name(scope, "P.x")
     assert found is not None
     assert found.parent.partial
 
@@ -346,10 +346,10 @@ def test_non_function_lookup_via_comp():
     """Checks that it's not allowed to look up a non-function class via a component."""
     ast = parse_composite_lookup_file("NonFunctionLookupViaComp.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.NonFunctionLookupViaComp",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.NonFunctionLookupViaComp",
     )
-    found = find_name("a.B", scope)
+    found = find_name(scope, "a.B")
     assert found is None
 
 
@@ -359,13 +359,13 @@ def test_non_package_lookup_comp():
     a package is forbidden"""
     ast = parse_composite_lookup_file("NonPackageLookupComp.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.NonPackageLookupComp",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.NonPackageLookupComp",
     )
     with pytest.raises(
         pymoca.tree.NameLookupError, match=r"A is not a package so x must be encapsulated"
     ):
-        _ = find_name("A.x", scope)
+        _ = find_name(scope, "A.x")
 
 
 def test_non_package_lookup_encapsulated():
@@ -373,10 +373,10 @@ def test_non_package_lookup_encapsulated():
     which does not satisfy the requirements for a package is allowed."""
     ast = parse_composite_lookup_file("NonPackageLookupEncapsulated.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.NonPackageLookupEncapsulated",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.NonPackageLookupEncapsulated",
     )
-    found = find_name("A.B", scope)
+    found = find_name(scope, "A.B")
     assert found is not None
 
 
@@ -385,23 +385,23 @@ def test_non_package_lookup_non_encapsulated():
     which does not satisfy the requirements for a package is forbidden"""
     ast = parse_composite_lookup_file("NonPackageLookupNonEncapsulated.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.NonPackageLookupNonEncapsulated",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.NonPackageLookupNonEncapsulated",
     )
     with pytest.raises(
         pymoca.tree.NameLookupError, match=r"A is not a package so B must be encapsulated"
     ):
-        _ = find_name("A.B", scope)
+        _ = find_name(scope, "A.B")
 
 
 def test_function_lookup_via_comp():
     """Checks that it's allowed to look up a function via a component"""
     ast = parse_composite_lookup_file("FunctionLookupViaComp.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.FunctionLookupViaComp",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.FunctionLookupViaComp",
     )
-    found = find_name("a.f", scope)
+    found = find_name(scope, "a.f")
     assert found is not None
 
 
@@ -412,11 +412,11 @@ def test_function_lookup_via_comp_non_call():
     # TODO: How to check that name is used as a function call?
     ast = parse_composite_lookup_file("FunctionLookupViaComp.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.FunctionLookupViaComp",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.FunctionLookupViaComp",
     )
     with pytest.raises(pymoca.tree.NameLookupError, match=r"ADD REGEX WHEN UNSKIPPED"):
-        _ = find_name("a.f", scope)
+        _ = find_name(scope, "a.f")
 
 
 def test_function_lookup_via_class_comp():
@@ -424,10 +424,10 @@ def test_function_lookup_via_class_comp():
     if the rest of the composite name consists of class references"""
     ast = parse_composite_lookup_file("FunctionLookupViaClassComp.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.FunctionLookupViaClassComp",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.FunctionLookupViaClassComp",
     )
-    found = find_name("a.B.C.f", scope)
+    found = find_name(scope, "a.B.C.f")
     assert found is not None
 
 
@@ -436,10 +436,10 @@ def test_function_lookup_via_non_class_comp():
     allowed if the rest of the composite name consists of class references"""
     ast = parse_composite_lookup_file("FunctionLookupViaNonClassComp.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.FunctionLookupViaNonClassComp",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.FunctionLookupViaNonClassComp",
     )
-    found = find_name("a.B.c.f", scope)
+    found = find_name(scope, "a.B.c.f")
     assert found is None
 
 
@@ -449,11 +449,11 @@ def test_function_in_operator_lookup_via_comp():
     via a component"""
     ast = parse_composite_lookup_file("FunctionInOperatorLookupViaComp.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.FunctionInOperatorLookupViaComp.FunctionInOperatorLookupViaComp",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.FunctionInOperatorLookupViaComp.FunctionInOperatorLookupViaComp",
     )
     with pytest.raises(pymoca.tree.NameLookupError, match=r"ADD REGEX WHEN UNSKIPPED"):
-        _ = find_name("or1.'+'.add", scope)
+        _ = find_name(scope, "or1.'+'.add")
 
 
 @pytest.mark.skip("TODO: Do this test when operator functions are implemented")
@@ -462,11 +462,11 @@ def test_operator_function_lookup_via_comp():
     via a component"""
     ast = parse_composite_lookup_file("OperatorFunctionLookupViaComp.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.OperatorFunctionLookupViaComp.OperatorFunctionLookupViaComp",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.OperatorFunctionLookupViaComp.OperatorFunctionLookupViaComp",
     )
     with pytest.raises(pymoca.tree.NameLookupError, match=r"ADD REGEX WHEN UNSKIPPED"):
-        _ = find_name("or1.'+'", scope)
+        _ = find_name(scope, "or1.'+'")
 
 
 def test_function_lookup_via_array_comp():
@@ -474,13 +474,13 @@ def test_function_lookup_via_array_comp():
     array component"""
     ast = parse_composite_lookup_file("FunctionLookupViaArrayComp.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.FunctionLookupViaArrayComp",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.FunctionLookupViaArrayComp",
     )
     with pytest.raises(
         pymoca.tree.NameLookupError, match=r"Array a must have subscripts to lookup function f"
     ):
-        _ = find_name("a.f", scope)
+        _ = find_name(scope, "a.f")
 
 
 @pytest.mark.skip("Needs array subscript handling in find_name")
@@ -489,11 +489,11 @@ def test_function_lookup_via_array_element():
     array element if the element is a scalar component"""
     ast = parse_composite_lookup_file("FunctionLookupViaArrayElement.mo")
     scope = find_name(
-        "Scoping.NameLookup.Composite.FunctionLookupViaArrayElement",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Composite.FunctionLookupViaArrayElement",
     )
     # with pytest.raises(pymoca.tree.NameLookupError):
-    found = find_name("a[2].f", scope)
+    found = find_name(scope, "a[2].f")
     assert found is not None
 
 
@@ -534,10 +534,10 @@ def test_encapsulated_global_lookup():
     the current scope is encapsulated"""
     ast = parse_global_lookup_file("EncapsulatedGlobalLookup.mo")
     scope = find_name(
-        "Scoping.NameLookup.Global.EncapsulatedGlobalLookup",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Global.EncapsulatedGlobalLookup",
     )
-    found = find_name("a.y", scope)
+    found = find_name(scope, "a.y")
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
 
@@ -550,8 +550,8 @@ def test_encapsulated():
     encapsulated model"""
     ast = parse_imported_lookup_file("EncapsulatedImport.mo")
     found = find_name(
-        "ModelicaCompliance.Scoping.NameLookup.Imports.EncapsulatedImport.a.m.x",
         ast,
+        "ModelicaCompliance.Scoping.NameLookup.Imports.EncapsulatedImport.a.m.x",
     )
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
@@ -565,14 +565,14 @@ def test_extend_import():
     """Checks that imports are not inherited"""
     ast = parse_imported_lookup_file("ExtendImport.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.ExtendImport",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.ExtendImport",
     )
     # We can't access C.A directly because C is not a package or encapsulated
     # Make C a package to work around the check when accessing A
-    found = find_name("C", scope)
+    found = find_name(scope, "C")
     found.type = "package"
-    found = find_name("A", found)
+    found = find_name(found, "A")
     assert found is None
 
 
@@ -581,10 +581,10 @@ def test_local_scope():
     in the local scope"""
     ast = parse_imported_lookup_file("ImportLookupLocalScope.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.ImportLookupLocalScope",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.ImportLookupLocalScope",
     )
-    found = find_name("B", scope)
+    found = find_name(scope, "B")
     assert found is None
 
 
@@ -592,14 +592,14 @@ def test_scope_type():
     """Checks that it's allowed to import into any kind of class"""
     ast = parse_imported_lookup_file("ImportScopeType.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.ImportScopeType",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.ImportScopeType",
     )
-    found = find_name("a", scope)
+    found = find_name(scope, "a")
     assert found is not None
-    found = find_name("b", scope)
+    found = find_name(scope, "b")
     assert found is not None
-    found = find_name("m.y", scope)
+    found = find_name(scope, "m.y")
     assert found is not None
 
     flat = flatten_compliance_model(
@@ -614,10 +614,10 @@ def test_modify_import():
     """Checks that it's not allowed to modify an import"""
     ast = parse_imported_lookup_file("ModifyImport.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.ModifyImport",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.ModifyImport",
     )
-    found = find_name("b", scope)
+    found = find_name(scope, "b")
     assert found is None
 
 
@@ -625,10 +625,10 @@ def test_qualified_import():
     """Tests that a qualified import works"""
     ast = parse_imported_lookup_file("QualifiedImport.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.QualifiedImport",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.QualifiedImport",
     )
-    found = find_name("b.a.x", scope)
+    found = find_name(scope, "b.a.x")
     assert found is not None
 
     flat = flatten_compliance_model(
@@ -650,42 +650,42 @@ def test_qualified_import_non_package():
     not a package or package element via a qualified import"""
     ast = parse_imported_lookup_file("QualifiedImportNonPackage.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.QualifiedImportNonPackage",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.QualifiedImportNonPackage",
     )
     with pytest.raises(
         pymoca.tree.NameLookupError,
         match=r"QualifiedImportNonPackage must be a package in import ModelicaCompliance.Scoping.NameLookup.Imports.QualifiedImportNonPackage.A in scope ModelicaCompliance.Scoping.NameLookup.Imports.QualifiedImportNonPackage",
     ):
-        _ = find_name("A2", scope)
+        _ = find_name(scope, "A2")
 
 
 def test_qualified_import_protected():
     """Checks that it's an error to import a protected element"""
     ast = parse_imported_lookup_file("QualifiedImportProtected.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.QualifiedImportProtected",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.QualifiedImportProtected",
     )
     with pytest.raises(
         pymoca.tree.NameLookupError,
         match=r"Import y must not be protected in scope ModelicaCompliance.Scoping.NameLookup.Imports.QualifiedImportProtected.A",
     ):
-        _ = find_name("A.y", scope)
+        _ = find_name(scope, "A.y")
 
 
 def test_recursive():
     """Tests that a named recursive import does not work"""
     ast = parse_imported_lookup_file("Recursive.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.Recursive",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.Recursive",
     )
     with pytest.raises(
         pymoca.tree.NameLookupError,
         match=r"Import ModelicaCompliance.Scoping.NameLookup.Imports.Recursive in scope ModelicaCompliance.Scoping.NameLookup.Imports.Recursive is recursive",
     ):
-        _ = find_name("A", scope)
+        _ = find_name(scope, "A")
 
 
 @pytest.mark.skip("Needs import redeclaration validation")
@@ -693,10 +693,10 @@ def test_redeclare_import():
     """Checks that it's not allowed to redeclare an import"""
     ast = parse_imported_lookup_file("RedeclareImport.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.RedeclareImport",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.RedeclareImport",
     )
-    found = find_name("b", scope)
+    found = find_name(scope, "b")
     assert found is None
 
 
@@ -704,10 +704,10 @@ def test_renaming_import():
     """Tests that a renaming import works"""
     ast = parse_imported_lookup_file("RenamingImport.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.RenamingImport",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.RenamingImport",
     )
-    found = find_name("b.a.x", scope)
+    found = find_name(scope, "b.a.x")
     assert found is not None
 
     flat = flatten_compliance_model(
@@ -721,24 +721,24 @@ def test_renaming_import_non_package():
     not a package or package element via a renaming import"""
     ast = parse_imported_lookup_file("RenamingImportNonPackage.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.RenamingImportNonPackage",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.RenamingImportNonPackage",
     )
     with pytest.raises(
         pymoca.tree.NameLookupError,
         match=r"RenamingImportNonPackage must be a package in import ModelicaCompliance.Scoping.NameLookup.Imports.RenamingImportNonPackage.A in scope ModelicaCompliance.Scoping.NameLookup.Imports.RenamingImportNonPackage",
     ):
-        _ = find_name("A2", scope)
+        _ = find_name(scope, "A2")
 
 
 def test_renaming_single_definition_import():
     """Tests that a renaming import works"""
     ast = parse_imported_lookup_file("RenamingSingleDefinitionImport.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.RenamingSingleDefinitionImport",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.RenamingSingleDefinitionImport",
     )
-    found = find_name("b.a.x", scope)
+    found = find_name(scope, "b.a.x")
     assert found is not None
 
     flat = flatten_compliance_model(
@@ -751,10 +751,10 @@ def test_single_definition_import():
     """Tests that a single definition import works"""
     ast = parse_imported_lookup_file("SingleDefinitionImport.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.SingleDefinitionImport",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.SingleDefinitionImport",
     )
-    found = find_name("b.a.x", scope)
+    found = find_name(scope, "b.a.x")
     assert found is not None
 
     flat = flatten_compliance_model(
@@ -767,10 +767,10 @@ def test_unqualified_import():
     """Tests that an unqualified import works"""
     ast = parse_imported_lookup_file("UnqualifiedImport.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.UnqualifiedImport",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.UnqualifiedImport",
     )
-    found = find_name("b.a.x", scope)
+    found = find_name(scope, "b.a.x")
     assert found is not None
 
     flat = flatten_compliance_model(
@@ -788,11 +788,11 @@ def test_unqualified_import_conflict():
     # not a good idea at this stage for Pymoca.
     ast = parse_imported_lookup_file("UnqualifiedImportConflict.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.UnqualifiedImportConflict",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.UnqualifiedImportConflict",
     )
     with pytest.raises(pymoca.tree.NameLookupError, match=r"ADD REGEX WHEN UNSKIPPED"):
-        _ = find_name("A.x", scope)
+        _ = find_name(scope, "A.x")
 
 
 def test_unqualified_import_non_conflict():
@@ -802,10 +802,10 @@ def test_unqualified_import_non_conflict():
     that's ok since x is not used by the importer A."""
     ast = parse_imported_lookup_file("UnqualifiedImportNonConflict.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.UnqualifiedImportNonConflict",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.UnqualifiedImportNonConflict",
     )
-    found = find_name("a", scope)
+    found = find_name(scope, "a")
     assert found is not None
 
 
@@ -818,8 +818,8 @@ def test_unqualified_import_non_package():
         match=r"A must be a package in import ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImportNonPackage.A.B in scope ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImportNonPackage",
     ):
         _ = find_name(
-            "ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImportNonPackage.B",
             ast,
+            "ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImportNonPackage.B",
         )
 
 
@@ -838,10 +838,10 @@ def test_import_package_name_prefix_overlap():
     end Outer;
     """
     ast_tree = pymoca.parser.parse(txt)
-    scope = find_name("Outer.ABCPackage.M", ast_tree)
+    scope = find_name(ast_tree, "Outer.ABCPackage.M")
     assert scope is not None
     # Resolving ABC via the import must not infinite-loop or crash
-    found = find_name("ABC", scope)
+    found = find_name(scope, "ABC")
     assert found is not None
     assert isinstance(found, pymoca.ast.Class)
 
@@ -851,14 +851,14 @@ def test_unqualified_import_protected():
     packages imported via unqualified imports"""
     ast = parse_imported_lookup_file("UnqualifiedImportProtected.mo")
     scope = find_name(
-        "Scoping.NameLookup.Imports.UnqualifiedImportProtected",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Imports.UnqualifiedImportProtected",
     )
     with pytest.raises(
         pymoca.tree.NameLookupError,
         match=r"Import y must not be protected in scope ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImportProtected.A",
     ):
-        _ = find_name("A.y", scope)
+        _ = find_name(scope, "A.y")
 
 
 # test_qualified_import_priority and test_unqualified_import_priority use models
@@ -869,14 +869,14 @@ def test_qualified_import_priority():
     and inherited names during name lookup"""
     ast = parse_simple_lookup_file("QualifiedImportPriority.mo")
     scope = find_name(
-        "Scoping.NameLookup.Simple.QualifiedImportPriority",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Simple.QualifiedImportPriority",
     )
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
     expect = (("d.x", 2.0), ("b.x", 3.0), ("c.x", 1.0))
     for name, _value in expect:
-        found = find_name(name, scope)
+        found = find_name(scope, name)
         assert found is not None, f" for {name}"
 
     flat = flatten_compliance_model(
@@ -891,14 +891,14 @@ def test_unqualified_import_priority():
     """Tests that unqualified imports have lowest priority"""
     ast = parse_simple_lookup_file("UnqualifiedImportPriority.mo")
     scope = find_name(
-        "Scoping.NameLookup.Simple.UnqualifiedImportPriority",
         ast.classes["ModelicaCompliance"],
+        "Scoping.NameLookup.Simple.UnqualifiedImportPriority",
     )
     assert scope is not None
     assert isinstance(scope, pymoca.ast.Class)
     expect = (("e.x", 2.0), ("b.x", 3.0), ("c.x", 1.0), ("d.x", 4.0))
     for name, _value in expect:
-        found = find_name(name, scope)
+        found = find_name(scope, name)
         assert found is not None, f" for {name}"
 
     flat = flatten_compliance_model(

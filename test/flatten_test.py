@@ -1068,7 +1068,7 @@ def test_user_defined_enum_flatten():
     assert enum_cls.symbols["two"].ordinal == 2
 
     # Flattening succeeds and treats 'e' as a simple type (no spurious child symbols)
-    flat = tree.flatten_model(ast_tree, "M")
+    flat = tree.flatten_class(ast_tree, "M")
     assert "e" in flat.symbols
     # Enum literals must not leak into the flat model as child symbols
     assert not any(name.startswith("e.") for name in flat.symbols)

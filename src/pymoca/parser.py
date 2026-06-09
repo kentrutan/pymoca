@@ -46,6 +46,7 @@ DEFAULT_MODEL_CACHE_DB = "model_txt_cache.db"
 
 
 class ModelicaPathError(Exception):
+    """Error in MODELICAPATH or a Modelica library's on-disk structure"""
 
     def __init__(self, msg):
         self.msg = msg
@@ -59,7 +60,7 @@ class ModelicaPathError(Exception):
 
 
 class ModelicaSyntaxError(SyntaxError):
-    pass
+    """Syntax error in Modelica source"""
 
 
 def syntax_error_from_ctx(

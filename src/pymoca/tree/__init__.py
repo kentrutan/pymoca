@@ -11,8 +11,9 @@ The implementation is split across submodules:
   _flattening.py     — flatten_instance and helpers (MLS 5.6.2)
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Optional, Set
 
 from .. import ast
 
@@ -56,8 +57,8 @@ class RecursionGuard:
     Mutable and shared across a single instantiation/lookup operation.
     """
 
-    current_instances: Set[ast.InstanceClass] = field(default_factory=set)
-    current_extends: Set = field(default_factory=set)
+    current_instances: set[ast.InstanceClass] = field(default_factory=set)
+    current_extends: set = field(default_factory=set)
     # Memoization cache for _find_inherited results.
     # Key: (name_str, id(scope)) — stable within a single flatten() call because
     # extends lists are populated at PARTIAL instantiation and don't grow after that.
@@ -86,7 +87,7 @@ class LookupOptions:
     # Mutable set shared by reference across a single inherited-scope traversal to prevent
     # exponential re-visits of the same scope in diamond inheritance hierarchies.
     # Keyed by (name, id(scope)).  Not included in equality/hash.
-    _searched_extends: Optional[set] = field(default=None, compare=False, hash=False, repr=False)
+    _searched_extends: set | None = field(default=None, compare=False, hash=False, repr=False)
 
 
 from ._listener import (  # noqa: E402,F401,I100,I202

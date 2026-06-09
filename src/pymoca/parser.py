@@ -3,7 +3,7 @@
 Modelica parse Tree to AST tree.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
+from __future__ import annotations
 
 import copy
 import hashlib
@@ -18,7 +18,7 @@ import time
 from collections import OrderedDict, deque
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union  # noqa: F401
+from typing import Any, cast as _cast
 
 import antlr4
 import antlr4.Parser
@@ -67,16 +67,18 @@ def syntax_error_from_ctx(
     message: str, ctx: ParserRuleContext, file_name: str = ""
 ) -> ModelicaSyntaxError:
     """Create a ModelicaSyntaxError from an ANTLR context object"""
+    assert ctx.start is not None and ctx.stop is not None
     line1 = ctx.start.line
     col1 = ctx.start.column
     line2 = ctx.stop.line
     col2 = ctx.stop.column
-    text = ctx.start.source[1].strdata.splitlines()
+    assert ctx.start.source is not None
+    text = ctx.start.source[1].strdata.splitlines()  # type: ignore[union-attr]
     error_text = text[line1 - 1]
     for line in range(line1, line2):
         error_text += text[line]
-    # Last two values were were added in Python 3.10, previous will ignore
-    info = file_name, line1, col1, error_text, line2, col2
+    # Last two values were added in Python 3.10; earlier versions ignore them
+    info: tuple = file_name, line1, col1, error_text, line2, col2
     return ModelicaSyntaxError(message, info)
 
 
@@ -100,8 +102,8 @@ def print_syntax_error(exception: ModelicaSyntaxError, file=sys.stderr):
 
 class ModelicaFile:
     def __init__(self, **kwargs):
-        self.within = []  # type: List[ast.ComponentRef]
-        self.classes = OrderedDict()  # type: OrderedDict[str, ast.Class]
+        self.within: list[ast.ComponentRef] = []
+        self.classes: OrderedDict[str, ast.Class] = OrderedDict()
         super().__init__(**kwargs)
 
 
@@ -152,9 +154,9 @@ class LazyParseClass(ast.Class):
         }
     )
 
-    def __init__(self, path: Optional[Path] = None, **kwargs):
+    def __init__(self, path: Path | None = None, **kwargs):
         super().__init__(**kwargs)
-        self.path = path  # type: Optional[Path]
+        self.path: Path | None = path
 
     def __getattribute__(self, name: str) -> Any:
         if name in LazyParseClass._ATTRS_NEEDING_PARSE:
@@ -178,7 +180,7 @@ class LazyParseClass(ast.Class):
         # parsed content without needing to know a swap occurred.
         self.__dict__.update(parsed_class.__dict__)
         self.parent = saved_parent
-        self.__class__ = ast.Class  # demote: drops .path, removes __getattribute__ overhead
+        self.__class__ = ast.Class  # type: ignore[assignment]  # demote: drops .path, removes __getattribute__ overhead
 
         # Re-parent classes/symbols that arrived via parsed_class (parsed_class is orphaned)
         for sub in dict.values(self.classes):
@@ -220,7 +222,7 @@ class LazyParseClass(ast.Class):
             c._update_parent_refs()
 
 
-def _path_to_class(path: Path) -> Optional[ast.Class]:
+def _path_to_class(path: Path) -> ast.Class | None:
     """Transform a filesystem path into a LazyParseClass"""
     if path.is_dir():
         try:
@@ -265,7 +267,7 @@ def dir_to_tree(dir_: Path) -> ast.Tree:
     return root_tree
 
 
-def modelicapath_to_tree(dirs: List[Union[str, Path]]) -> ast.Tree:
+def modelicapath_to_tree(dirs: list[str | Path]) -> ast.Tree:
     """Return ast.Tree for all directories in dirs list
 
     TODO: Add version handling (spec 18.8.3, 18.8.4)
@@ -285,16 +287,17 @@ def modelicapath_to_tree(dirs: List[Union[str, Path]]) -> ast.Tree:
 # noinspection PyPep8Naming
 class ASTListener(ModelicaListener):
     def __init__(self):
-        self.file_node = None  # type: ModelicaFile
-        self.ast = {}  # type: Dict[ast.Node]
-        self.class_nodes = deque([ast.Class()])  # type: deque[ast.Class]
-        self.comp_clause = None  # type: ast.ComponentClause
-        self.comp_clause1 = None  # type: ast.ComponentClause
-        self.eq_sect = None  # type: ast.EquationSection
-        self.alg_sect = None  # type: ast.AlgorithmSection
-        self.symbol_nodes = []  # type: List[ast.Symbol]
-        self.eq_comment = None  # type: str
-        self.sym_count = 0  # type: int
+        self.file_node: ModelicaFile | None = None
+        # Keyed by ANTLR parse-tree context objects; values are AST nodes or lists thereof.
+        self.ast: dict[Any, Any] = {}
+        self.class_nodes: deque[ast.Class] = deque([ast.Class()])
+        self.comp_clause: ast.ComponentClause | None = None
+        self.comp_clause1: ast.ComponentClause | None = None
+        self.eq_sect: ast.EquationSection | None = None
+        self.alg_sect: ast.AlgorithmSection | None = None
+        self.symbol_nodes: list[ast.Symbol] = []
+        self.eq_comment: str | None = None
+        self.sym_count: int = 0
         self.in_extends = False
         self.in_class_spec_base = False
         self.in_redeclaration = False
@@ -311,12 +314,13 @@ class ASTListener(ModelicaListener):
         self.file_node = file_node
 
     def exitStored_definition(self, ctx: ModelicaParser.Stored_definitionContext):
+        assert self.file_node is not None
         within = []
         if ctx.component_reference() is not None:
             within = [self.ast[ctx.component_reference()]]
         self.file_node.within = within
 
-        for class_node in [self.ast[e] for e in ctx.stored_definition_class()]:
+        for class_node in [self.ast[e] for e in ctx.stored_definition_class()]:  # type: ignore[union-attr]
             self.ast[ctx].classes[class_node.name] = class_node
         self.file_node = self.ast[ctx]
 
@@ -333,8 +337,10 @@ class ASTListener(ModelicaListener):
             parent=self.class_node,
         )
         class_node.encapsulated = ctx.ENCAPSULATED() is not None
-        class_node.partial = ctx.class_prefixes().PARTIAL() is not None
-        class_node.type = ctx.class_prefixes().class_type().getText()
+        class_prefixes = ctx.class_prefixes()
+        assert class_prefixes is not None
+        class_node.partial = class_prefixes.PARTIAL() is not None
+        class_node.type = class_prefixes.class_type().getText()  # type: ignore[union-attr]
 
         self.class_nodes.append(class_node)
 
@@ -348,19 +354,21 @@ class ASTListener(ModelicaListener):
     def exitClass_definition(self, ctx: ModelicaParser.Class_definitionContext):
         class_node = self.class_nodes.pop()
         if class_node.name == ctx.getText():
+            assert ctx.start is not None
             raise NotImplementedError(
                 f"Unsupported class specifier at line {ctx.start.line}: "
-                f"{ctx.class_specifier().getText()[:60]}"
+                f"{ctx.class_specifier().getText()[:60]}"  # type: ignore[union-attr]
             )
+        assert class_node.name is not None
         self._prevent_builtin_name(class_node.name, ctx)
         self.class_node.classes[class_node.name] = class_node
 
     def exitShort_class_definition(self, ctx):
-        name = ctx.IDENT().getText()
+        name = ctx.IDENT().getText()  # type: ignore[union-attr]
         self._prevent_builtin_name(name, ctx)
         self.ast[ctx] = ast.ShortClassDefinition(
             name=name,
-            type=ctx.class_prefixes().class_type().getText(),
+            type=ctx.class_prefixes().class_type().getText(),  # type: ignore[union-attr]
             component=self.ast[ctx.component_reference()],
         )
         if ctx.class_modification() is not None:
@@ -370,7 +378,7 @@ class ASTListener(ModelicaListener):
 
     def exitClass_spec_comp(self, ctx: ModelicaParser.Class_spec_compContext):
         class_node = self.class_node
-        class_node.name = ctx.IDENT()[0].getText()
+        class_node.name = ctx.IDENT()[0].getText()  # type: ignore[index, union-attr]
         class_node.comment = self.ast[ctx.string_comment()]
 
     def enterClass_spec_base(self, ctx: ModelicaParser.Class_spec_baseContext):
@@ -379,12 +387,13 @@ class ASTListener(ModelicaListener):
 
     def exitClass_spec_enum(self, ctx: ModelicaParser.Class_spec_enumContext):
         class_node = self.class_node
-        class_node.name = ctx.IDENT().getText()
+        class_node.name = ctx.IDENT().getText()  # type: ignore[union-attr]
         class_node.comment = self.ast[ctx.comment()]
         class_node.enumeration = True
-        if ctx.enum_list() is not None:
-            for ordinal, lit in enumerate(ctx.enum_list().enumeration_literal(), start=1):
-                lit_name = lit.IDENT().getText()
+        enum_list = ctx.enum_list()
+        if enum_list is not None:
+            for ordinal, lit in enumerate(enum_list.enumeration_literal(), start=1):  # type: ignore[union-attr]
+                lit_name = lit.IDENT().getText()  # type: ignore[union-attr]
                 enum_sym = ast.EnumerationLiteral(
                     name=lit_name,
                     type=ast.ComponentRef(name=class_node.name),
@@ -399,7 +408,7 @@ class ASTListener(ModelicaListener):
         class_node = self.class_node
         # IDENT()[0] is the name after `extends`; IDENT()[1] repeats it after `end`.
         # There is no component_reference() on this production.
-        class_node.name = ctx.IDENT()[0].getText()
+        class_node.name = ctx.IDENT()[0].getText()  # type: ignore[index, union-attr]
         class_node.comment = self.ast[ctx.string_comment()]
 
         if ctx.class_modification() is not None:
@@ -421,7 +430,7 @@ class ASTListener(ModelicaListener):
 
     def exitClass_spec_base(self, ctx: ModelicaParser.Class_spec_baseContext):
         class_node = self.class_node
-        class_node.name = ctx.IDENT().getText()
+        class_node.name = ctx.IDENT().getText()  # type: ignore[union-attr]
         class_node.comment = self.ast[ctx.comment()]
 
         if ctx.class_modification() is not None:
@@ -452,14 +461,14 @@ class ASTListener(ModelicaListener):
                     element.visibility = ast.Visibility.PROTECTED
                 # Visibility does not apply to ImportClause
 
-        for eqlist in [self.ast[e] for e in ctx.equation_section()]:
+        for eqlist in [self.ast[e] for e in ctx.equation_section()]:  # type: ignore[union-attr]
             if eqlist is not None:
                 if eqlist.initial:
                     self.class_node.initial_equations += eqlist.equations
                 else:
                     self.class_node.equations += eqlist.equations
 
-        for alglist in [self.ast[e] for e in ctx.algorithm_section()]:
+        for alglist in [self.ast[e] for e in ctx.algorithm_section()]:  # type: ignore[union-attr]
             if alglist is not None:
                 if alglist.initial:
                     self.class_node.initial_statements += alglist.statements
@@ -479,6 +488,7 @@ class ASTListener(ModelicaListener):
         if ctx.element_modification_or_replaceable() is not None:
             production = ctx.element_modification_or_replaceable()
             argument.value = self.ast[production]
+            assert production is not None
             if production.element_replaceable() is not None:
                 argument.redeclare = True
             else:
@@ -489,7 +499,7 @@ class ASTListener(ModelicaListener):
         self.ast[ctx] = argument
 
     def exitArgument_list(self, ctx: ModelicaParser.Argument_listContext):
-        self.ast[ctx] = [self.ast[a] for a in ctx.argument()]
+        self.ast[ctx] = [self.ast[a] for a in ctx.argument()]  # type: ignore[union-attr]
 
     def exitClass_modification(self, ctx: ModelicaParser.Class_modificationContext):
         arguments = []
@@ -507,10 +517,10 @@ class ASTListener(ModelicaListener):
         eq_sect.equations.extend(self.ast[ctx.equation_block()])
 
     def exitEquation_block(self, ctx: ModelicaParser.Equation_blockContext):
-        self.ast[ctx] = [self.ast[e] for e in ctx.equation()]
+        self.ast[ctx] = [self.ast[e] for e in ctx.equation()]  # type: ignore[union-attr]
 
     def exitStatement_block(self, ctx):
-        self.ast[ctx] = [self.ast[e] for e in ctx.statement()]
+        self.ast[ctx] = [self.ast[e] for e in ctx.statement()]  # type: ignore[union-attr]
 
     def enterAlgorithm_section(self, ctx: ModelicaParser.Algorithm_sectionContext):
         alg_sect = ast.AlgorithmSection(initial=ctx.INITIAL() is not None)
@@ -573,8 +583,8 @@ class ASTListener(ModelicaListener):
 
     def exitConnect_clause(self, ctx: ModelicaParser.Connect_clauseContext):
         self.ast[ctx] = ast.ConnectClause(
-            left=self.ast[ctx.component_reference()[0]],
-            right=self.ast[ctx.component_reference()[1]],
+            left=self.ast[ctx.component_reference()[0]],  # type: ignore[index]
+            right=self.ast[ctx.component_reference()[1]],  # type: ignore[index]
         )
 
     # STATEMENT ==========================================================
@@ -623,6 +633,7 @@ class ASTListener(ModelicaListener):
         # outputs (MLS §B.2.6.5).  Each comma terminates a slot; omitted slots become
         # None so discard positions are preserved for backends.
         oel = ctx.output_expression_list()
+        assert oel is not None
         left = []
         current = None
         for child in oel.getChildren():
@@ -687,22 +698,23 @@ class ASTListener(ModelicaListener):
     # EXPRESSIONS ===========================================================
 
     def exitSimple_expression(self, ctx: ModelicaParser.Simple_expressionContext):
-        if len(ctx.expr()) > 1:
-            if len(ctx.expr()) > 2:
-                step = self.ast[ctx.expr()[2]]
+        exprs: list[Any] = _cast(
+            list, ctx.expr()
+        )  # stubs type as ExprContext|None, runtime is list
+        if len(exprs) > 1:
+            if len(exprs) > 2:
+                step = self.ast[exprs[2]]
             else:
                 step = ast.Primary(value=1)
-            self.ast[ctx] = ast.Slice(
-                start=self.ast[ctx.expr()[0]], stop=self.ast[ctx.expr()[1]], step=step
-            )
+            self.ast[ctx] = ast.Slice(start=self.ast[exprs[0]], stop=self.ast[exprs[1]], step=step)
         else:
-            self.ast[ctx] = self.ast[ctx.expr()[0]]
+            self.ast[ctx] = self.ast[exprs[0]]
 
     def exitExpression_simple(self, ctx: ModelicaParser.Expression_simpleContext):
         self.ast[ctx] = self.ast[ctx.simple_expression()]
 
     def exitExpression_if(self, ctx: ModelicaParser.Expression_ifContext):
-        all_expr = [self.ast[s] for s in ctx.expression()]
+        all_expr = [self.ast[s] for s in ctx.expression()]  # type: ignore[union-attr]
         # Note that an else block is guaranteed to exist.
         conditions = all_expr[:-1:2]
         expressions = all_expr[1::2] + all_expr[-1:]
@@ -714,26 +726,26 @@ class ASTListener(ModelicaListener):
 
     def exitExpr_add(self, ctx: ModelicaParser.Expr_addContext):
         self.ast[ctx] = ast.Expression(
-            operator=ctx.op.text,
-            operands=[self.ast[e] for e in ctx.expr()],
+            operator=ctx.op.text,  # type: ignore[union-attr]
+            operands=[self.ast[e] for e in ctx.expr()],  # type: ignore[union-attr]
         )
 
     def exitExpr_exp(self, ctx: ModelicaParser.Expr_expContext):
         self.ast[ctx] = ast.Expression(
-            operator=ctx.op.text,
-            operands=[self.ast[e] for e in ctx.primary()],
+            operator=ctx.op.text,  # type: ignore[union-attr]
+            operands=[self.ast[e] for e in ctx.primary()],  # type: ignore[union-attr]
         )
 
     def exitExpr_mul(self, ctx: ModelicaParser.Expr_mulContext):
         self.ast[ctx] = ast.Expression(
-            operator=ctx.op.text,
-            operands=[self.ast[e] for e in ctx.expr()],
+            operator=ctx.op.text,  # type: ignore[union-attr]
+            operands=[self.ast[e] for e in ctx.expr()],  # type: ignore[union-attr]
         )
 
     def exitExpr_rel(self, ctx: ModelicaParser.Expr_relContext):
         self.ast[ctx] = ast.Expression(
-            operator=ctx.op.text,
-            operands=[self.ast[e] for e in ctx.expr()],
+            operator=ctx.op.text,  # type: ignore[union-attr]
+            operands=[self.ast[e] for e in ctx.expr()],  # type: ignore[union-attr]
         )
 
     def exitExpr_not(self, ctx: ModelicaParser.Expr_notContext):
@@ -742,17 +754,17 @@ class ASTListener(ModelicaListener):
     def exitExpr_and(self, ctx: ModelicaParser.Expr_andContext):
         self.ast[ctx] = ast.Expression(
             operator="and",
-            operands=[self.ast[e] for e in ctx.expr()],
+            operands=[self.ast[e] for e in ctx.expr()],  # type: ignore[union-attr]
         )
 
     def exitExpr_or(self, ctx: ModelicaParser.Expr_orContext):
         self.ast[ctx] = ast.Expression(
             operator="or",
-            operands=[self.ast[e] for e in ctx.expr()],
+            operands=[self.ast[e] for e in ctx.expr()],  # type: ignore[union-attr]
         )
 
     def exitExpr_signed(self, ctx: ModelicaParser.Expr_signedContext):
-        self.ast[ctx] = ast.Expression(operator=ctx.op.text, operands=[self.ast[ctx.expr()]])
+        self.ast[ctx] = ast.Expression(operator=ctx.op.text, operands=[self.ast[ctx.expr()]])  # type: ignore[union-attr]
 
     def exitSubscript(self, ctx: ModelicaParser.SubscriptContext):
         if ctx.expression() is not None:
@@ -761,15 +773,16 @@ class ASTListener(ModelicaListener):
             self.ast[ctx] = ast.Slice()
 
     def exitArray_subscripts(self, ctx: ModelicaParser.Array_subscriptsContext):
-        self.ast[ctx] = [self.ast[s] for s in ctx.subscript()]
+        self.ast[ctx] = [self.ast[s] for s in ctx.subscript()]  # type: ignore[union-attr]
 
     def exitFor_index(self, ctx):
         self.ast[ctx] = ast.ForIndex(
-            name=ctx.IDENT().getText(), expression=self.ast[ctx.expression()]
+            name=ctx.IDENT().getText(),  # type: ignore[union-attr]
+            expression=self.ast[ctx.expression()],
         )
 
     def exitFor_indices(self, ctx: ModelicaParser.For_indicesContext):
-        self.ast[ctx] = [self.ast[s] for s in ctx.for_index()]
+        self.ast[ctx] = [self.ast[s] for s in ctx.for_index()]  # type: ignore[union-attr]
 
     # PRIMARY ===========================================================
 
@@ -810,14 +823,14 @@ class ASTListener(ModelicaListener):
             #       `named_arguments`).
             operands = (
                 [
-                    self._function_argument_ast(na.function_argument())
-                    for na in named.named_argument()
+                    self._function_argument_ast(na.function_argument())  # type: ignore[union-attr]
+                    for na in named.named_argument()  # type: ignore[union-attr]
                 ]
                 if named is not None
                 else []
             )
             return ast.Expression(
-                operator=ast.ComponentRef.from_string(arg_ctx.name().getText()),
+                operator=ast.ComponentRef.from_string(arg_ctx.name().getText()),  # type: ignore[union-attr]
                 operands=operands,
             )
         return self.ast[arg_ctx.expression()]
@@ -827,7 +840,7 @@ class ASTListener(ModelicaListener):
         func_args = func_call_args_ctx.function_arguments()
         if func_args is None:
             return []
-        return [self._function_argument_ast(x) for x in func_args.function_argument()]
+        return [self._function_argument_ast(x) for x in func_args.function_argument()]  # type: ignore[union-attr]
 
     def exitPrimary_function(self, ctx: ModelicaParser.Primary_functionContext):
         # TODO: Could possible be cleaner if we let the expression in the ast bubble up.
@@ -857,10 +870,12 @@ class ASTListener(ModelicaListener):
         self.ast[ctx] = ast.ComponentRef(name="end", indices=[[None]], child=[])
 
     def exitType_specifier_element(self, ctx: ModelicaParser.Type_specifier_elementContext):
-        self.ast[ctx] = ast.ComponentRef(name=ctx.IDENT().getText(), indices=[[None]], child=[])
+        self.ast[ctx] = ast.ComponentRef(
+            name=ctx.IDENT().getText(), indices=[[None]], child=[]  # type: ignore[union-attr]
+        )
 
     def exitType_specifier(self, ctx: ModelicaParser.Type_specifierContext):
-        for element in reversed([self.ast[x] for x in ctx.type_specifier_element()]):
+        for element in reversed([self.ast[x] for x in ctx.type_specifier_element()]):  # type: ignore[union-attr]
             if ctx in self.ast:
                 element.child = [self.ast[ctx]]
             self.ast[ctx] = element
@@ -869,13 +884,17 @@ class ASTListener(ModelicaListener):
         self, ctx: ModelicaParser.Component_reference_elementContext
     ):
         if ctx.array_subscripts() is not None:
-            indices = [[self.ast[x] for x in ctx.array_subscripts().subscript()]]
+            arr_sub = ctx.array_subscripts()
+            assert arr_sub is not None
+            indices = [[self.ast[x] for x in arr_sub.subscript()]]  # type: ignore[union-attr]
         else:
             indices = [[None]]
-        self.ast[ctx] = ast.ComponentRef(name=ctx.IDENT().getText(), indices=indices, child=[])
+        self.ast[ctx] = ast.ComponentRef(
+            name=ctx.IDENT().getText(), indices=indices, child=[]  # type: ignore[union-attr]
+        )
 
     def exitComponent_reference(self, ctx: ModelicaParser.Component_referenceContext):
-        for element in reversed([self.ast[x] for x in ctx.component_reference_element()]):
+        for element in reversed([self.ast[x] for x in ctx.component_reference_element()]):  # type: ignore[union-attr]
             if ctx in self.ast:
                 element.child = [self.ast[ctx]]
             self.ast[ctx] = element
@@ -888,27 +907,31 @@ class ASTListener(ModelicaListener):
     def exitPrimary_output_expression_list(
         self, ctx: ModelicaParser.Primary_output_expression_listContext
     ):
-        self.ast[ctx] = [self.ast[x] for x in ctx.output_expression_list().expression()]
+        oel = ctx.output_expression_list()
+        assert oel is not None
+        self.ast[ctx] = [self.ast[x] for x in oel.expression()]  # type: ignore[union-attr]
         # Collapse lists containing a single expression
         if len(self.ast[ctx]) == 1:
             self.ast[ctx] = self.ast[ctx][0]
 
     def exitPrimary_expression_list(self, ctx: ModelicaParser.Primary_expression_listContext):
         rows = [
-            ast.Array(values=[self.ast[x] for x in expr_list.expression()])
-            for expr_list in ctx.expression_list()
+            ast.Array(values=[self.ast[x] for x in expr_list.expression()])  # type: ignore[union-attr]
+            for expr_list in ctx.expression_list()  # type: ignore[union-attr]
         ]
         self.ast[ctx] = rows[0] if len(rows) == 1 else ast.Array(values=rows)
 
     def exitPrimary_function_arguments(self, ctx: ModelicaParser.Primary_function_argumentsContext):
         # TODO: This does not support for generators yet.
         #       Only expressions are supported, e.g. {1.0, 2.0, 3.0}.
-        v = [self.ast[x.expression()] for x in ctx.function_arguments().function_argument()]
+        func_args = ctx.function_arguments()
+        assert func_args is not None
+        v = [self.ast[x.expression()] for x in func_args.function_argument()]  # type: ignore[union-attr]
         self.ast[ctx] = ast.Array(values=v)
 
     def exitEquation_function(self, ctx: ModelicaParser.Equation_functionContext):
         self.ast[ctx] = ast.Function(
-            name=ctx.name().getText(),
+            name=ctx.name().getText(),  # type: ignore[union-attr]
             arguments=self._function_call_operands(ctx.function_call_args()),
         )
 
@@ -918,7 +941,7 @@ class ASTListener(ModelicaListener):
     # COMPONENTS ===========================================================
 
     def exitElement_list(self, ctx: ModelicaParser.Element_listContext):
-        self.ast[ctx] = [self.ast[e] for e in ctx.element()]
+        self.ast[ctx] = [self.ast[e] for e in ctx.element()]  # type: ignore[union-attr]
 
     def exitElement(self, ctx: ModelicaParser.ElementContext):
         self.ast[ctx] = self.ast[ctx.getChild(ctx.getAltNumber())]
@@ -948,16 +971,16 @@ class ASTListener(ModelicaListener):
         self.ast[ctx] = import_clause
         import_clause.components = [self.ast[ctx.component_reference()]]
         if ctx.IDENT() is not None:
-            import_clause.short_name = ctx.IDENT().getText()
+            import_clause.short_name = ctx.IDENT().getText()  # type: ignore[union-attr]
         else:
             import_list = ctx.import_list()
             if import_list is not None:
                 package_name = import_clause.components.pop()
                 # Append list of names to package_name to get fully qualified name(s)
                 # Skip the comma separators in import_list.children
-                for ident in import_list.children[::2]:
+                for ident in import_list.children[::2]:  # type: ignore[index]
                     qualified_name = package_name.concatenate(
-                        package_name.from_string(ident.getText())
+                        package_name.from_string(ident.getText())  # type: ignore[union-attr]
                     )
                     import_clause.components.append(qualified_name)
             elif ctx.getChildCount() > 3:
@@ -972,7 +995,9 @@ class ASTListener(ModelicaListener):
             if "*" not in self.class_node.imports:
                 self.class_node.imports["*"] = import_clause
             else:
-                self.class_node.imports["*"].components.append(import_clause.components[0])
+                existing = self.class_node.imports["*"]
+                assert isinstance(existing, ast.ImportClause)
+                existing.components.append(import_clause.components[0])
         else:
             # Simple case, fast lookup
             for comp in import_clause.components:
@@ -1031,7 +1056,7 @@ class ASTListener(ModelicaListener):
         self.ast[ctx].replaceable = True
 
     def enterComponent_clause(self, ctx: ModelicaParser.Component_clauseContext):
-        prefixes = ctx.type_prefix().getText().split(" ")
+        prefixes = ctx.type_prefix().getText().split(" ")  # type: ignore[union-attr]
         if prefixes[0] == "":
             prefixes = []
         self.ast[ctx] = ast.ComponentClause(
@@ -1040,7 +1065,7 @@ class ASTListener(ModelicaListener):
         self.comp_clause = self.ast[ctx]
 
     def enterComponent_clause1(self, ctx: ModelicaParser.Component_clause1Context):
-        prefixes = ctx.type_prefix().getText().split(" ")
+        prefixes = ctx.type_prefix().getText().split(" ")  # type: ignore[union-attr]
         if prefixes[0] == "":
             prefixes = []
         self.ast[ctx] = ast.ComponentClause(
@@ -1057,6 +1082,7 @@ class ASTListener(ModelicaListener):
         # type, and all its symbols' types, pointing at the same empty
         # (ComponentRef) object until we can fill it.
         clause.type.__dict__.update(self.ast[ctx.type_specifier()].__dict__)
+        assert self.comp_clause is not None
         if ctx.array_subscripts() is not None:
             clause.dimensions = [self.ast[ctx.array_subscripts()]]
             for sym in self.comp_clause.symbol_list:
@@ -1083,6 +1109,7 @@ class ASTListener(ModelicaListener):
         self.sym_count += 1
         self.ast[ctx] = sym
         self.symbol_nodes.append(sym)
+        assert self.comp_clause is not None
         self.comp_clause.symbol_list += [sym]
 
     def enterComponent_declaration1(self, ctx: ModelicaParser.Component_declaration1Context):
@@ -1090,6 +1117,7 @@ class ASTListener(ModelicaListener):
         self.sym_count += 1
         self.ast[ctx] = sym
         self.symbol_nodes.append(sym)
+        assert self.comp_clause1 is not None
         self.comp_clause1.symbol_list += [sym]
 
     def exitComponent_declaration(self, ctx: ModelicaParser.Component_declarationContext):
@@ -1104,11 +1132,13 @@ class ASTListener(ModelicaListener):
         sym = self.symbol_nodes[-1]
         dimensions = None
         comp_clause = self.comp_clause1 if self.comp_clause1 else self.comp_clause
+        assert comp_clause is not None
         if comp_clause.dimensions is not None:
             dimensions = comp_clause.dimensions
-        sym.name = ctx.IDENT().getText()
+        sym.name = ctx.IDENT().getText()  # type: ignore[union-attr]
         self._prevent_builtin_name(sym.name, ctx)
-        sym.dimensions = dimensions
+        if dimensions is not None:
+            sym.dimensions = dimensions
         sym.prefixes = comp_clause.prefixes
         sym.type = comp_clause.type
 
@@ -1130,9 +1160,10 @@ class ASTListener(ModelicaListener):
                 else:
                     # Assignment of value, which we turn into a modification here.
                     vmod_arg = ast.ClassModificationArgument(scope=self.class_node)
-                    vmod_arg.value = ast.ElementModification()
-                    vmod_arg.value.component = ast.ComponentRef(name="value")
-                    vmod_arg.value.modifications = [mod]
+                    em = ast.ElementModification()
+                    em.component = ast.ComponentRef(name="value")
+                    em.modifications = [mod]
+                    vmod_arg.value = em
 
                     if sym.class_modification is None:
                         sym_mod = ast.ClassModification()
@@ -1228,7 +1259,7 @@ def file_to_tree(f: ModelicaFile) -> ast.Tree:
 class ModelicaParserErrorListener(ErrorListener):
     """Raise a ModelicaSyntaxError when ANTLR finds a syntax error"""
 
-    def syntaxError(self, recognizer, offending_symbol, line, column, msg, e):
+    def syntaxError(self, recognizer, offending_symbol, line, column, msg, e):  # type: ignore[override]
         """Handle syntax errors from both the lexer and parser"""
         # There is probably a better way to get the text
         if isinstance(recognizer, antlr4.Lexer):
@@ -1242,7 +1273,7 @@ class ModelicaParserErrorListener(ErrorListener):
         # Set to same as start to get Python >= 3.10 stack trace point to the right place
         end_line = line
         end_column = column
-        info = "input", line, column, error_text, end_line, end_column
+        info: tuple = "input", line, column, error_text, end_line, end_column
         raise ModelicaSyntaxError(msg, info)
 
 
@@ -1263,6 +1294,7 @@ def _parse_text(text: str, trace: bool) -> ModelicaFile:
     ast_listener = ASTListener()
     parse_walker = antlr4.ParseTreeWalker()
     parse_walker.walk(ast_listener, parse_tree)
+    assert ast_listener.file_node is not None
     return ast_listener.file_node
 
 
@@ -1272,7 +1304,7 @@ def _parse(text: str, trace: bool) -> ast.Tree:
     return file_to_tree(modelica_file)
 
 
-def _microseconds_since_epoch(timedelta_: Optional[timedelta] = None) -> int:
+def _microseconds_since_epoch(timedelta_: timedelta | None = None) -> int:
     if timedelta_ is None:
         timedelta_ = timedelta()
     return time.time_ns() // 1000 + int(timedelta_.total_seconds() * 1e6)
@@ -1373,6 +1405,10 @@ def _check_database_structure(conn: sqlite3.Connection):
     conn.commit()
 
 
+# Tracks which database files have already been initialised in this process.
+_initialized_dbs: set[Path] = set()
+
+
 def _calculate_txt_hash(txt: str):
     hasher = hashlib.sha256()
     hasher.update(txt.encode("utf-8"))
@@ -1403,7 +1439,7 @@ def parse(
     txt: str,
     /,
     trace: bool = False,
-    model_cache_folder: Optional[Path] = None,
+    model_cache_folder: Path | None = None,
     cache_db: str = DEFAULT_MODEL_CACHE_DB,
     cache_expiration_days: int = 30,
     always_update_last_hit: bool = False,
@@ -1452,8 +1488,6 @@ def parse(
         always_update_last_hit=always_update_last_hit,
         bypass_cache=bypass_cache,
     )
-    if modelica_file is None:
-        return None
     return file_to_tree(modelica_file)
 
 
@@ -1461,7 +1495,7 @@ def parse_text(
     txt: str,
     /,
     trace: bool = False,
-    model_cache_folder: Optional[Path] = None,
+    model_cache_folder: Path | None = None,
     cache_db: str = DEFAULT_MODEL_CACHE_DB,
     cache_expiration_days: int = 30,
     always_update_last_hit: bool = False,
@@ -1490,7 +1524,7 @@ def parse_text(
 
     cursor = conn.cursor()
 
-    if not hasattr(parse, "initialized_dbs") or full_db_path not in parse.initialized_dbs:
+    if full_db_path not in _initialized_dbs:
         # Check if the database file is corrupt
         try:
             cursor.execute("PRAGMA integrity_check;")
@@ -1527,10 +1561,7 @@ def parse_text(
 
         conn.commit()
 
-        if hasattr(parse, "initialized_dbs"):
-            parse.initialized_dbs.add(full_db_path)
-        else:
-            parse.initialized_dbs = {full_db_path}
+        _initialized_dbs.add(full_db_path)
 
     # Check if the txt exists in the database
     txt_hash = _calculate_txt_hash(txt)
@@ -1594,7 +1625,7 @@ def parse_text(
     return file
 
 
-def parse_file(file_path: Union[str, Path], trace: bool = False) -> ast.Tree:
+def parse_file(file_path: str | Path, trace: bool = False) -> ast.Tree:
     """Parse given file path and return parsed ast.Tree
 
     Args:

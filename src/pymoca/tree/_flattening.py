@@ -7,14 +7,14 @@ Entry: flatten_class(root, class_name) → ast.InstanceClass (new pipeline, step
 Adapter: flatten_to_tree(root, class_name) → ast.Tree (for backend compatibility)
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
+from __future__ import annotations
 
 import copy
 import math
 import operator
 import sys
 from collections import OrderedDict
-from typing import Optional, Set, Union, cast
+from typing import cast
 
 import numpy as np
 
@@ -75,11 +75,11 @@ def _create_partial_flat_instance(instance: ast.InstanceClass) -> ast.InstanceCl
     # Populate classes and extends for name lookup
     for name, class_ in instance.classes.items():
         class_copy = copy.copy(class_)
-        class_copy.parent_instance = flat_class
+        class_copy.parent_instance = flat_class  # type: ignore[attr-defined]
         flat_class.classes[name] = class_copy
-    for extends in instance.extends:
+    for extends in instance.extends:  # type: ignore[attr-defined]
         extends_copy = copy.copy(extends)
-        extends_copy.parent_instance = flat_class
+        extends_copy.parent_instance = flat_class  # type: ignore[attr-defined]
         flat_class.extends.append(extends_copy)
 
     return flat_class
@@ -89,10 +89,10 @@ def _flatten_instance(
     instance: ast.InstanceClass,
     flat_class: ast.InstanceClass,
     *,
-    guard: Optional[RecursionGuard] = None,
-    opts: Optional[LookupOptions] = None,
+    guard: RecursionGuard | None = None,
+    opts: LookupOptions | None = None,
     prefix: str = "",
-    functions: Optional[OrderedDict] = None,
+    functions: OrderedDict | None = None,
 ) -> None:
     """Flatten an instance class
 
@@ -157,7 +157,7 @@ def _flatten_instance(
         opts = LookupOptions()
 
     # 1.1–1.6 Process local symbols per MLS 5.6.2
-    for name, symbol in list(instance.symbols.items()):
+    for name, symbol in list(cast(dict[str, ast.InstanceSymbol], instance.symbols).items()):
 
         assert isinstance(name, str)
         # Steps A-D
@@ -167,7 +167,7 @@ def _flatten_instance(
             flat_name = prefix + "." + name
         else:
             flat_name = name
-        flat_symbol = copy.copy(symbol)
+        flat_symbol: ast.InstanceSymbol = copy.copy(symbol)
         # dimensions inner lists are shared with the parsed AST via
         # _copy_symbol_contents; _resolve_dimensions mutates dim_list[i] in-place,
         # so make fresh inner lists to avoid corrupting the shared parsed AST.
@@ -199,7 +199,7 @@ def _flatten_instance(
                 opts=opts,
             )
             is_class = isinstance(resolved, ast.InstanceClass)
-            flat_symbol.type = resolved if is_class else resolved.parent
+            flat_symbol.type = resolved if is_class else resolved.parent  # type: ignore[assignment]
             # If the resolved type is an enumeration, add the symbol here now that
             # the type is known (covers the ComponentRef → InstanceClass resolution path).
             if ast.is_enumeration(flat_symbol.type) and flat_name not in flat_class.symbols:
@@ -236,6 +236,7 @@ def _flatten_instance(
         else:
             # 1.6 Recursively "handle" non-simple types
             symbols_before_recursive = set(flat_class.symbols.keys())
+            assert isinstance(flat_symbol.type, ast.InstanceClass)
             _flatten_instance(
                 flat_symbol.type,
                 flat_class,
@@ -271,7 +272,9 @@ def _flatten_instance(
     # 1.8 Recursively "handle" unnamed extends instances.
     # Extends must be processed before equations (step 1.7) so that inherited symbols
     # are present when equations of the current class are resolved.
-    for extends in instance.extends:
+    for extends in instance.extends:  # type: ignore[attr-defined]
+        if not isinstance(extends, ast.InstanceClass):
+            continue
         _flatten_instance(
             extends,
             flat_class,
@@ -344,7 +347,7 @@ def _resolve_modifications(
     *,
     guard: RecursionGuard,
     opts: LookupOptions,
-    functions: Optional[OrderedDict] = None,
+    functions: OrderedDict | None = None,
 ) -> None:
     """Resolve modifications of a symbol
     :param symbol: The symbol to resolve modifications for
@@ -358,12 +361,15 @@ def _resolve_modifications(
     # TODO: Instantiation should move type class modifications down to the builtin
     if isinstance(symbol.type, ast.ComponentRef):
         # type class, modifications at this level
-        modification_environment = symbol.modification_environment
+        modification_environment = symbol.modification_environment  # type: ignore[union-attr]
     elif ast.is_enumeration(symbol.type):
         # Enum types have no value-attribute modifications to inherit from the type class
-        modification_environment = symbol.modification_environment
+        modification_environment = symbol.modification_environment  # type: ignore[union-attr]
     else:
-        modification_environment = symbol.type.symbols[symbol.type.name].modification_environment
+        assert symbol.type.name is not None
+        modification_environment = cast(
+            ast.InstanceSymbol, symbol.type.symbols[symbol.type.name]
+        ).modification_environment
 
     for arg in modification_environment.arguments:
         assert isinstance(arg.value, ast.ElementModification)
@@ -387,7 +393,7 @@ def _resolve_modification_attribute(
     flat_class: ast.InstanceClass,
     guard: RecursionGuard,
     opts: LookupOptions,
-    functions: Optional[OrderedDict] = None,
+    functions: OrderedDict | None = None,
 ):
     # MLS 5.6.2 step 1.4 says value modifications on non-parameter/non-constant
     # simple-type variables become equations. We don't emit those equations here;
@@ -410,9 +416,10 @@ def _resolve_modification_attribute(
         if value.name == "time" and not value.child:
             pass
         else:
+            assert symbol.parent_instance is not None
             value = _resolve_name(
                 value,
-                arg.scope,
+                arg.scope,  # type: ignore[arg-type]  # may be raw Class; _resolve_name walks tree
                 symbol.parent_instance,
                 name_flat_class=flat_class,
                 guard=guard,
@@ -427,43 +434,51 @@ def _resolve_modification_attribute(
         # that the function flattening pass can include them in the output.
         # Without this, functions referenced only in modifications are lost.
         if functions is not None:
-            scope = (
+            _fn_scope = (
                 arg.scope if isinstance(arg.scope, ast.InstanceClass) else symbol.parent_instance
             )
-            func_resolver = _FunctionCallResolver(scope, functions)
-            walker = TreeWalker()
-            walker.walk(func_resolver, value)
+            if isinstance(_fn_scope, ast.InstanceClass):
+                func_resolver = _FunctionCallResolver(_fn_scope, functions)
+                walker = TreeWalker()
+                walker.walk(func_resolver, value)
     if isinstance(value, ast.Expression):
-        # Try to evaluate constant expressions (e.g. +1 → 1, -1.0 → -1.0);
-        # keep the original Expression if evaluation fails (e.g. references
-        # to non-constant variables or unsupported operators).
-        try:
-            result = _resolve_expression(
-                value,
-                arg.scope,
-                symbol.parent_instance,
-                guard=guard,
-                opts=opts,
-                name_flat_class=flat_class,
-            )
-            if result is not None:
-                value = result
-        except (NotImplementedError, ModelicaSemanticError, NameLookupError):
-            pass  # keep original ast.Expression
-        # When the expression cannot be folded to a scalar, rewrite any
-        # ComponentRef operands to their flat names so that the stored
-        # Expression is consistent with the rest of the flattened tree.
-        # This mirrors the name_flat_class treatment in the ComponentRef branch
-        # above (MLS §5.6.2 point B).
-        if isinstance(value, ast.Expression):
-            value = _flatten_expression_crefs(
-                value,
-                arg.scope,
-                symbol.parent_instance,
-                flat_class,
-                guard,
-                opts,
-            )
+        expr_scope = (
+            arg.scope if isinstance(arg.scope, ast.InstanceClass) else symbol.parent_instance
+        )
+        expr_flat_class = symbol.parent_instance
+        if isinstance(expr_scope, ast.InstanceClass) and isinstance(
+            expr_flat_class, ast.InstanceClass
+        ):
+            # Try to evaluate constant expressions (e.g. +1 → 1, -1.0 → -1.0);
+            # keep the original Expression if evaluation fails (e.g. references
+            # to non-constant variables or unsupported operators).
+            try:
+                result = _resolve_expression(
+                    value,
+                    expr_scope,
+                    expr_flat_class,
+                    guard=guard,
+                    opts=opts,
+                    name_flat_class=flat_class,
+                )
+                if result is not None:
+                    value = result
+            except (NotImplementedError, ModelicaSemanticError, NameLookupError):
+                pass  # keep original ast.Expression
+            # When the expression cannot be folded to a scalar, rewrite any
+            # ComponentRef operands to their flat names so that the stored
+            # Expression is consistent with the rest of the flattened tree.
+            # This mirrors the name_flat_class treatment in the ComponentRef branch
+            # above (MLS §5.6.2 point B).
+            if isinstance(value, ast.Expression):
+                value = _flatten_expression_crefs(
+                    value,
+                    expr_scope,
+                    expr_flat_class,
+                    flat_class,
+                    guard,
+                    opts,
+                )
 
     setattr(symbol, mod.component.name, value)
 
@@ -515,7 +530,7 @@ class ExpressionEvaluator(TreeListener):
         flat_class: ast.InstanceClass,
         guard: RecursionGuard,
         opts: LookupOptions,
-        name_flat_class: Optional[ast.InstanceClass] = None,
+        name_flat_class: ast.InstanceClass | None = None,
     ):
         self.scope = scope
         self.flat_class = flat_class
@@ -610,6 +625,7 @@ def _rewrite_expression_crefs(
                     guard=guard,
                     opts=opts,
                 )
+                assert resolved.name is not None
                 operand.name = resolved.name
                 operand.child = []
             except Exception:
@@ -625,8 +641,8 @@ def _resolve_expression(
     *,
     guard: RecursionGuard,
     opts: LookupOptions,
-    name_flat_class: Optional[ast.InstanceClass] = None,
-) -> Optional[Union[int, float, bool, str]]:
+    name_flat_class: ast.InstanceClass | None = None,
+) -> int | float | bool | str | None:
     """Calculate the given expression or return None if not possible"""
     assert isinstance(expr, ast.Expression)
     listener = ExpressionEvaluator(
@@ -759,7 +775,7 @@ def _collect_and_resolve_equations(
     instance: ast.InstanceClass,
     flat_class: ast.InstanceClass,
     prefix: str,
-    functions: Optional[OrderedDict] = None,
+    functions: OrderedDict | None = None,
 ) -> None:
     """Deep-copy equations from *instance*, resolve refs, append to *flat_class*."""
     walker = TreeWalker()
@@ -777,8 +793,9 @@ def _collect_and_resolve_equations(
         eq_copy = copy.deepcopy(eq)
         if isinstance(eq_copy, ast.ConnectClause):
             # Annotate inner/outer per MLS 9.2 (before flattening collapses children)
-            eq_copy.__left_inner = _is_inner_connector(eq.left, instance)
-            eq_copy.__right_inner = _is_inner_connector(eq.right, instance)
+            assert isinstance(eq, ast.ConnectClause)
+            eq_copy._left_inner = _is_inner_connector(cast(ast.ComponentRef, eq.left), instance)
+            eq_copy._right_inner = _is_inner_connector(cast(ast.ComponentRef, eq.right), instance)
             # Manually flatten connect refs (connector names aren't in flat_class.symbols)
             _flatten_connect_ref(eq_copy.left, prefix)
             _flatten_connect_ref(eq_copy.right, prefix)
@@ -831,11 +848,12 @@ def _flatten_discovered_functions(
                 not isinstance(func_class, ast.InstanceClass)
                 or func_class.instantiation_state < ast.InstantiationState.FULL
             ):
-                func_instance = _instantiate_element(
+                func_instance_raw = _instantiate_element(
                     func_class,
-                    func_class.parent,
+                    func_class.parent,  # type: ignore[arg-type]
                     ast.ClassModification(),
                 )
+                func_instance = cast(ast.InstanceClass, func_instance_raw)
             else:
                 func_instance = func_class
 
@@ -882,8 +900,8 @@ def _generate_connect_equations(flat_class: ast.InstanceClass):
             flat_class.equations.append(equation)
             continue
 
-        left_inner = getattr(equation, "__left_inner", False)
-        right_inner = getattr(equation, "__right_inner", False)
+        left_inner = getattr(equation, "_left_inner", False)
+        right_inner = getattr(equation, "_right_inner", False)
         left_name = equation.left.name
         right_name = equation.right.name
 
@@ -893,7 +911,7 @@ def _generate_connect_equations(flat_class: ast.InstanceClass):
         for sym_name, sym in flat_class.symbols.items():
             if sym_name.startswith(left_prefix):
                 suffix = sym_name[len(left_prefix) :]
-                type_indices = sym.type.indices if hasattr(sym.type, "indices") else []
+                type_indices = getattr(sym.type, "indices", [])
                 connector_vars.append((suffix, sym.prefixes, type_indices))
 
         if not connector_vars:
@@ -959,7 +977,7 @@ def _generate_connect_equations(flat_class: ast.InstanceClass):
                 )
 
     # Generate flow sum-to-zero equations
-    processed: Set[int] = set()
+    processed: set[int] = set()
     for connected_variables in flow_connections.values():
         if id(connected_variables) not in processed:
             processed.add(id(connected_variables))
@@ -1020,7 +1038,7 @@ def _flatten_value_ref_names(flat_class: ast.InstanceClass) -> None:
                 value.name = flat_name
 
 
-def _get_parameter_value_from_chain(isym: ast.InstanceSymbol) -> Optional[ast.Primary]:
+def _get_parameter_value_from_chain(isym: ast.InstanceSymbol) -> ast.Primary | None:
     """Walk an InstanceSymbol value chain to a literal, for inline parameter folding
 
     Returns None if literal value not found
@@ -1045,8 +1063,8 @@ def _get_parameter_value_from_chain(isym: ast.InstanceSymbol) -> Optional[ast.Pr
 
 
 def _resolve_param_ref(
-    name: str, flat_class: ast.InstanceClass, seen: Set[str]
-) -> Optional[ast.Primary]:
+    name: str, flat_class: ast.InstanceClass, seen: set[str]
+) -> ast.Primary | None:
     """Resolve a flat parameter/constant name to its literal value, following chains
 
     Returns None when the chain is unresolvable or cyclic
@@ -1157,14 +1175,14 @@ def _flatten_name(
 
 
 def _resolve_name(
-    name: Union[str, ast.ComponentRef],
+    name: str | ast.ComponentRef,
     scope: ast.InstanceClass,
     flat_class: ast.InstanceClass,
     *,
     guard: RecursionGuard,
     opts: LookupOptions,
-    name_flat_class: Optional[ast.InstanceClass] = None,
-) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
+    name_flat_class: ast.InstanceClass | None = None,
+) -> ast.InstanceClass | ast.InstanceSymbol:
     """Resolve a name reference and return a flat-named element.
 
     Two contexts govern resolution, which usually coincide but can differ for
@@ -1234,7 +1252,7 @@ def _resolve_name(
         scope = _instantiate_class(
             scope,
             ast.ClassModification(),
-            scope.parent_instance,
+            scope.parent_instance,  # type: ignore[arg-type]
             guard=guard,
             opts=opts,
             update_parent_instance=bool(scope.name),
@@ -1277,15 +1295,15 @@ def _resolve_name(
         element.name = flat_name
         element.parent_instance = name_flat_class
         element.parent = name_flat_class
-        return element
+        return cast(ast.InstanceClass | ast.InstanceSymbol, element)
 
     flat_name = _flatten_name(element, flat_class.full_instance_name)
 
     # Check to see if the name is already resolved
     if is_symbol and flat_name in flat_class.symbols:
-        return flat_class.symbols[flat_name]
+        return cast(ast.InstanceClass | ast.InstanceSymbol, flat_class.symbols[flat_name])
     elif flat_name in flat_class.classes:
-        return flat_class.classes[flat_name]
+        return cast(ast.InstanceClass | ast.InstanceSymbol, flat_class.classes[flat_name])
 
     # Make copy so we can flatten name without changing originals.
     # Reparent under flat_class so full_instance_name / full_name reflect
@@ -1295,23 +1313,23 @@ def _resolve_name(
     element.parent_instance = flat_class
     element.parent = flat_class
     if is_symbol:
-        flat_class.symbols[flat_name] = element
+        flat_class.symbols[flat_name] = cast(ast.InstanceSymbol, element)  # type: ignore[assignment]
     else:
-        flat_class.classes[flat_name] = element
+        flat_class.classes[flat_name] = cast(ast.InstanceClass, element)  # type: ignore[assignment]
 
-    return element
+    return cast(ast.InstanceClass | ast.InstanceSymbol, element)
 
 
 def _instantiate_element(
-    element: Union[ast.Class, ast.Symbol, ast.InstanceClass, ast.InstanceSymbol],
+    element: ast.Class | ast.Symbol | ast.InstanceClass | ast.InstanceSymbol,
     scope: ast.InstanceClass,
     modification_environment: ast.ClassModification,
     *,
-    guard: Optional[RecursionGuard] = None,
-    opts: Optional[LookupOptions] = None,
+    guard: RecursionGuard | None = None,
+    opts: LookupOptions | None = None,
     update_parent_instance: bool = True,
     target_state: ast.InstantiationState = ast.InstantiationState.FULL,
-) -> Union[ast.InstanceClass, ast.InstanceSymbol]:
+) -> ast.InstanceClass | ast.InstanceSymbol:
 
     if guard is None:
         guard = RecursionGuard()
@@ -1326,12 +1344,14 @@ def _instantiate_element(
             # containing class (element.parent).  Its parent in the instance
             # tree is element.parent_instance.parent_instance, NOT
             # element.parent_instance (which IS the containing class).
+            assert element.parent_instance is not None
             parent_instance = element.parent_instance.parent_instance
         else:
             parent_instance = element.parent_instance
         parent = element.parent
     else:
         element_class = element.parent if is_symbol else element
+        assert element_class is not None
         parent = _get_lexical_parent_instance(
             element_class,
             scope,
@@ -1341,6 +1361,8 @@ def _instantiate_element(
         parent_instance = parent
 
     class_to_instantiate = element.parent if is_symbol else element
+    assert class_to_instantiate is not None
+    assert parent_instance is not None
     instance = _instantiate_class(
         class_to_instantiate,
         ast.ClassModification(),
@@ -1352,7 +1374,7 @@ def _instantiate_element(
     )
 
     if is_symbol:
-        return instance.symbols[element.name]
+        return cast(ast.InstanceSymbol, instance.symbols[element.name])
     else:
         return instance
 
@@ -1386,7 +1408,7 @@ def _get_constant_value(isym: ast.InstanceSymbol):
     # Look in the type class's builtin symbol modification for the value
     if isinstance(isym.type, ast.InstanceClass) and isym.type.name in InstanceTree.BUILTIN_TYPES:
         builtin_sym = isym.type.symbols.get(isym.type.name)
-        if builtin_sym is not None:
+        if isinstance(builtin_sym, ast.InstanceSymbol):
             for arg in builtin_sym.modification_environment.arguments:
                 if (
                     isinstance(arg.value, ast.ElementModification)
@@ -1454,7 +1476,7 @@ def _instance_to_ast_class(flat_instance: ast.InstanceClass) -> ast.Class:
 
     # Convert symbols
     for name, isym in flat_instance.symbols.items():
-        sym = _instance_to_ast_symbol(isym)
+        sym = _instance_to_ast_symbol(cast(ast.InstanceSymbol, isym))
         sym.parent = flat_class
         flat_class.symbols[name] = sym
 
@@ -1500,18 +1522,19 @@ def _add_connector_symbols(
             stub.comment = sym.comment
             # Flatten the connector type to get its variables
             connector_flat = flatten_instance(sym.type)
-            stub.__connector_type = _instance_to_ast_class(connector_flat)
+            stub._connector_type = _instance_to_ast_class(connector_flat)
             flat_class.symbols[full_name] = stub
         # Recurse into composite types (models containing connectors)
         _add_connector_symbols(sym.type, flat_class, full_name)
     # Recurse into extends instances (connectors inherited from base classes)
     for extends in instance.extends:
-        _add_connector_symbols(extends, flat_class, prefix)
+        if isinstance(extends, ast.InstanceClass):
+            _add_connector_symbols(extends, flat_class, prefix)
 
 
 def flatten_class(
     root: ast.Tree,
-    class_name: Union[str, ast.ComponentRef],
+    class_name: str | ast.ComponentRef,
     *,
     keep_connectors: bool = False,
     evaluate_parameters: bool = False,
@@ -1561,7 +1584,7 @@ def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
     # be mutated.  Strip and restore around the walk.
     connector_types = {}
     for sym_name, sym in flat_class.symbols.items():
-        ct = sym.__dict__.pop("__connector_type", None)
+        ct = sym.__dict__.pop("_connector_type", None)
         if ct is not None:
             connector_types[sym_name] = ct
     w = TreeWalker()
@@ -1575,7 +1598,7 @@ def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
             sym.dimensions = copy.deepcopy(sym.dimensions)
         w.walk(ComponentRefFlattener(flat_class, prefix), sym)
     for sym_name, ct in connector_types.items():
-        flat_class.symbols[sym_name].__connector_type = ct
+        flat_class.symbols[sym_name]._connector_type = ct
 
     # 6. Post-processing (same order as legacy flatten)
     expand_connectors(flat_class)
@@ -1694,8 +1717,8 @@ def expand_connectors(node: ast.Class) -> None:
             sym_left = node.symbols[equation.left.name]
             sym_right = node.symbols[equation.right.name]
 
-            class_left = getattr(sym_left, "__connector_type", None)
-            class_right = getattr(sym_right, "__connector_type", None)
+            class_left = getattr(sym_left, "_connector_type", None)
+            class_right = getattr(sym_right, "_connector_type", None)
             if class_left is None or class_right is None:
                 # Elementary connect (no connector type — e.g. Real): emit equation directly.
                 primary_types = ["Real"]
@@ -1742,7 +1765,7 @@ def expand_connectors(node: ast.Class) -> None:
                                 for i in index_array
                                 if i is not None
                             ),
-                            equation.__left_inner,
+                            getattr(equation, "_left_inner", False),
                         )
                         right_key = (
                             right_name,
@@ -1752,7 +1775,7 @@ def expand_connectors(node: ast.Class) -> None:
                                 for i in index_array
                                 if i is not None
                             ),
-                            equation.__right_inner,
+                            getattr(equation, "_right_inner", False),
                         )
 
                         left_connected_variables = flow_connections.get(left_key, OrderedDict())
@@ -1760,8 +1783,14 @@ def expand_connectors(node: ast.Class) -> None:
 
                         left_connected_variables.update(right_connected_variables)
                         connected_variables = left_connected_variables
-                        connected_variables[left_key] = (left, equation.__left_inner)
-                        connected_variables[right_key] = (right, equation.__right_inner)
+                        connected_variables[left_key] = (
+                            left,
+                            getattr(equation, "_left_inner", False),
+                        )
+                        connected_variables[right_key] = (
+                            right,
+                            getattr(equation, "_right_inner", False),
+                        )
 
                         for connected_variable in connected_variables:
                             flow_connections[connected_variable] = connected_variables
@@ -1814,11 +1843,11 @@ def expand_connectors(node: ast.Class) -> None:
 
     # strip connector symbols
     for i, sym in list(node.symbols.items()):
-        if hasattr(sym, "__connector_type"):
+        if hasattr(sym, "_connector_type"):
             del node.symbols[i]
 
 
-def add_variable_value_statements(node: ast.Node) -> None:
+def add_variable_value_statements(node: ast.Class) -> None:
     for sym in node.symbols.values():
         if not (isinstance(sym.value, ast.Primary) and sym.value.value is None):
             node.statements.append(ast.AssignmentStatement(left=[sym], right=sym.value))
@@ -1830,7 +1859,7 @@ class StateAnnotator(TreeListener):
     Finds all variables that are differentiated and annotates them with the state prefix
     """
 
-    def __init__(self, node: ast.Node):
+    def __init__(self, node: ast.Class):
         self.node = node
         self.in_der = 0
         super().__init__()
@@ -1847,7 +1876,7 @@ class StateAnnotator(TreeListener):
         if tree.operator == "der":
             self.in_der -= 1
 
-    def exitComponentRef(self, tree: ast.Expression):
+    def exitComponentRef(self, tree: ast.ComponentRef):
         if self.in_der > 0:
             assert len(tree.child) == 0
 
@@ -1861,7 +1890,7 @@ class StateAnnotator(TreeListener):
                     s.prefixes.append("state")
 
 
-def annotate_states(node: ast.Node) -> None:
+def annotate_states(node: ast.Class) -> None:
     """
     Finds all derivative expressions and annotates all differentiated
     symbols as states by adding state the prefix list

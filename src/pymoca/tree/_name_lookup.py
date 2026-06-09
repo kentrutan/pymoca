@@ -90,8 +90,11 @@ def _find_name(
     if found is not None and rest_of_name:
         found = _find_rest_of_name(found, rest_of_name, guard, replace(opts, search_inherited=True))
 
-    # Maintaining backward compatibility by including InstanceTree (not strictly correct)
-    # TODO: Remove InstanceTree to make spec compliant and fix test/models
+    # Including InstanceTree below lets a missing top-level name fall back to the lexical
+    # class tree (ast_ref). The spec's lookup substrate is the instance tree (MLS 5.6.1.2-.3);
+    # kept as a backward-compat shortcut, normally equivalent for unmodified top-level classes.
+    # TODO: instantiate missing top-level classes on demand at root, then drop InstanceTree here
+
     # Late import to avoid circular dependency
     from ._instantiation import InstanceTree
 

@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 """Modelica translator/compiler tool using pymoca"""
 
+from __future__ import annotations
+
 import argparse
 import json
 import logging
@@ -9,7 +11,6 @@ import sys
 import time
 from enum import IntEnum
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
 
 import pymoca.ast
 from pymoca import __version__
@@ -37,7 +38,7 @@ class MyArgumentParser(argparse.ArgumentParser):
         return arg_line.split()
 
 
-def list_modelica_files(paths: List[Path]) -> List[Path]:
+def list_modelica_files(paths: list[Path]) -> list[Path]:
     """Find all Modelica files in given paths (can be files and directories)"""
     files = []
     for path in paths:
@@ -49,7 +50,7 @@ def list_modelica_files(paths: List[Path]) -> List[Path]:
     return files
 
 
-def parse_file(path: Path) -> Optional[pymoca.ast.Tree]:
+def parse_file(path: Path) -> pymoca.ast.Tree | None:
     """Parse a Modelica file and return AST or None on failure"""
     import pymoca.parser
 
@@ -77,7 +78,9 @@ def parse_file(path: Path) -> Optional[pymoca.ast.Tree]:
     return ast
 
 
-def parse_all(paths: List[Path], ast: pymoca.ast.Tree = None) -> Tuple[List[Path], List[Path]]:
+def parse_all(
+    paths: list[Path], ast: pymoca.ast.Tree | None = None
+) -> tuple[list[Path], list[Path]]:
     """Parse a list of files and directory trees and add to given AST
 
     Returns: tuple (list of all .mo files, list of files with parse errors)
@@ -106,7 +109,7 @@ def translate(
     model: str,
     translator: str,
     options: dict,
-    outdir: Optional[Path] = None,
+    outdir: Path | None = None,
 ) -> bool:
     """Generate code for model from library_ast into outdir
 
@@ -119,9 +122,9 @@ def translate(
     if translator == "sympy":
         import pymoca.backends.sympy.generator as sympy_gen
 
+        outfile = outdir / (model + ".py")
         try:
             result = sympy_gen.generate(library_ast, model, options)
-            outfile = outdir / (model + ".py")
             with outfile.open("w") as file:
                 file.write(result)
         except OSError:
@@ -153,7 +156,7 @@ def emit_stage_output(model: str, stage_name: str, result, args) -> None:
         print(text)
 
 
-def run_model(library_ast: pymoca.ast.Tree, model: str, stage: Stage, args, options: Dict) -> int:
+def run_model(library_ast: pymoca.ast.Tree, model: str, stage: Stage, args, options: dict) -> int:
     """Run the pipeline up to stage for model
 
     Returns: error count (0 or 1)
@@ -316,17 +319,17 @@ def validate_args(argp: MyArgumentParser, args, modelicapath_env: str) -> None:
             log.info("No translator specified (-t), flattening model only")
 
 
-def build_modelica_path(args, modelicapath_env: str) -> Tuple[List[Path], int]:
+def build_modelica_path(args, modelicapath_env: str) -> tuple[list[Path], int]:
     """Resolve MODELICAPATH from -p args and environment variable.
 
     Returns: (list of valid dirs, error count)
     """
-    raw_paths: List[Path] = []
+    raw_paths: list[Path] = []
     for mparg in args.path + [modelicapath_env]:
         for path_str in mparg.split(os.pathsep):
             if path_str:
                 raw_paths.append(Path(path_str))
-    modelica_path: List[Path] = []
+    modelica_path: list[Path] = []
     errors = 0
     for path in raw_paths:
         if not path.is_dir():
@@ -340,12 +343,12 @@ def build_modelica_path(args, modelicapath_env: str) -> Tuple[List[Path], int]:
     return modelica_path, errors
 
 
-def build_define_options(args) -> Tuple[Dict, int]:
+def build_define_options(args) -> tuple[dict, int]:
     """Parse -D NAME=VALUE args into a translator options dict.
 
     Returns: (options dict, error count)
     """
-    options: Dict = {}
+    options: dict = {}
     errors = 0
     if not args.define:
         return options, errors
@@ -355,7 +358,7 @@ def build_define_options(args) -> Tuple[Dict, int]:
             key, raw_value = parts
             value_lower = raw_value.lower()
             if value_lower == "true":
-                value: Union[str, bool] = True
+                value: str | bool = True
             elif value_lower == "false":
                 value = False
             else:
@@ -378,7 +381,7 @@ def infer_stage(args) -> Stage:
     return Stage.PARSE
 
 
-def _run_casadi_models(args, options: Dict) -> int:
+def _run_casadi_models(args, options: dict) -> int:
     """Run the CasADi backend's directory-based transfer_model for each model"""
     import pymoca.backends.casadi.api as casadi_api
 
@@ -416,11 +419,11 @@ def _run_casadi_models(args, options: Dict) -> int:
     return errors
 
 
-def _run_pipeline(args, modelica_path: List[Path], stage: Stage, options: Dict) -> int:
+def _run_pipeline(args, modelica_path: list[Path], stage: Stage, options: dict) -> int:
     """Parse files then run each model through the new pipeline up to stage"""
     import pymoca.parser
 
-    library_ast = pymoca.parser.modelicapath_to_tree(dirs=modelica_path)
+    library_ast = pymoca.parser.modelicapath_to_tree(dirs=modelica_path)  # type: ignore[arg-type]
     modelica_files, error_files = parse_all(args.PATHNAME, library_ast)
 
     errors = 0
@@ -440,7 +443,7 @@ def _run_pipeline(args, modelica_path: List[Path], stage: Stage, options: Dict) 
     return errors
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     """Parse command line options and run the pipeline.
 
     :param argv: command line arguments, not including program name (pass "-h" for help)

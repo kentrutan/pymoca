@@ -3,7 +3,7 @@
 Modelica AST definitions
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
+from __future__ import annotations
 
 import copy
 import json
@@ -13,12 +13,13 @@ from typing import Any
 from collections import OrderedDict
 from enum import Enum, IntEnum
 from pathlib import Path
-from typing import List, Optional, Type, Union  # noqa: F401
 
 
 class Visibility(Enum):
     PROTECTED = 1, "protected"
     PUBLIC = 2, "public"
+
+    fullname: str
 
     def __new__(cls, value, name):
         member = object.__new__(cls)
@@ -111,7 +112,7 @@ class Node:
 
 class Primary(Node):
     def __init__(self, **kwargs):
-        self.value = None  # type: Optional[Union[bool, float, int, str]]
+        self.value: bool | float | int | str | None = None
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -123,7 +124,7 @@ class Primary(Node):
 
 class Array(Node):
     def __init__(self, **kwargs):
-        self.values = []  # type: List[Union[Expression, Primary, ComponentRef, Array]]
+        self.values: list[Expression | Primary | ComponentRef | Array] = []
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -135,9 +136,9 @@ class Array(Node):
 
 class Slice(Node):
     def __init__(self, **kwargs):
-        self.start = Primary(value=None)  # type: Union[Expression, Primary, ComponentRef]
-        self.stop = Primary(value=None)  # type: Union[Expression, Primary, ComponentRef]
-        self.step = Primary(value=1)  # type: Union[Expression, Primary, ComponentRef]
+        self.start: Expression | Primary | ComponentRef = Primary(value=None)
+        self.stop: Expression | Primary | ComponentRef = Primary(value=None)
+        self.step: Expression | Primary | ComponentRef = Primary(value=1)
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -153,11 +154,9 @@ class Slice(Node):
 
 class ComponentRef(Node):
     def __init__(self, **kwargs):
-        self.name = ""  # type: str
-        self.indices = [
-            [None]
-        ]  # type: List[List[Optional[Union[Expression, Slice, Primary, ComponentRef]]]]
-        self.child = []  # type: List[ComponentRef]
+        self.name: str = ""
+        self.indices: list[list[Expression | Slice | Primary | ComponentRef | None]] = [[None]]
+        self.child: list[ComponentRef] = []
         super().__init__(**kwargs)
 
     def __repr__(self) -> str:
@@ -170,7 +169,7 @@ class ComponentRef(Node):
     def __str__(self) -> str:
         return ".".join(self.to_tuple())
 
-    def to_tuple(self) -> tuple:
+    def to_tuple(self) -> tuple[str, ...]:
         """
         Convert the nested component reference to flat tuple of names, which is
         hashable and can therefore be used as dictionary key. Note that this
@@ -184,7 +183,7 @@ class ComponentRef(Node):
             return (self.name,)
 
     @classmethod
-    def from_tuple(cls, components: Union[tuple, list]) -> "ComponentRef":
+    def from_tuple(cls, components: tuple | list) -> ComponentRef:
         """
         Convert the tuple pointing to a component to
         a component reference.
@@ -200,7 +199,7 @@ class ComponentRef(Node):
         return component_ref
 
     @classmethod
-    def from_string(cls, s: str) -> "ComponentRef":
+    def from_string(cls, s: str) -> ComponentRef:
         """
         Convert the string pointing to a component using dot notation to
         a component reference.
@@ -211,7 +210,7 @@ class ComponentRef(Node):
         components = s.split(".")
         return cls.from_tuple(components)
 
-    def concatenate(self, arg: "ComponentRef") -> "ComponentRef":
+    def concatenate(self, arg: ComponentRef) -> ComponentRef:
         """
         Helper function to append two component references to eachother, e.g.
         a "within" component ref and an "object type" component ref.
@@ -230,10 +229,8 @@ class ComponentRef(Node):
 
 class Expression(Node):
     def __init__(self, **kwargs):
-        self.operator = None  # type: Optional[Union[str, ComponentRef]]
-        self.operands = (
-            []
-        )  # type: List[Union[Expression, Primary, ComponentRef, Array, IfExpression]]
+        self.operator: str | ComponentRef | None = None
+        self.operands: list[Expression | Primary | ComponentRef | Array | IfExpression] = []
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -244,12 +241,8 @@ class Expression(Node):
 
 class IfExpression(Node):
     def __init__(self, **kwargs):
-        self.conditions = (
-            []
-        )  # type: List[Union[Expression, Primary, ComponentRef, Array, IfExpression]]
-        self.expressions = (
-            []
-        )  # type: List[Union[Expression, Primary, ComponentRef, Array, IfExpression]]
+        self.conditions: list[Expression | Primary | ComponentRef | Array | IfExpression] = []
+        self.expressions: list[Expression | Primary | ComponentRef | Array | IfExpression] = []
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -260,13 +253,13 @@ class IfExpression(Node):
 
 class Equation(Node):
     def __init__(self, **kwargs):
-        self.left = (
-            None
-        )  # type: Union[Expression, Primary, ComponentRef, List[Union[Expression, Primary, ComponentRef]]]
-        self.right = (
-            None
-        )  # type: Union[Expression, Primary, ComponentRef, List[Union[Expression, Primary, ComponentRef]]]
-        self.comment = ""  # type: str
+        self.left: (
+            Expression | Primary | ComponentRef | list[Expression | Primary | ComponentRef] | None
+        ) = None
+        self.right: (
+            Expression | Primary | ComponentRef | list[Expression | Primary | ComponentRef] | None
+        ) = None
+        self.comment: str = ""
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -275,11 +268,9 @@ class Equation(Node):
 
 class IfEquation(Node):
     def __init__(self, **kwargs):
-        self.conditions = []  # type: List[Union[Expression, Primary, ComponentRef]]
-        self.blocks = (
-            []
-        )  # type: List[List[Union[Expression, ForEquation, ConnectClause, IfEquation]]]
-        self.comment = ""  # type: str
+        self.conditions: list[Expression | Primary | ComponentRef] = []
+        self.blocks: list[list[Expression | ForEquation | ConnectClause | IfEquation]] = []
+        self.comment: str = ""
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -290,11 +281,9 @@ class IfEquation(Node):
 
 class WhenEquation(Node):
     def __init__(self, **kwargs):
-        self.conditions = []  # type: List[Union[Expression, Primary, ComponentRef]]
-        self.blocks = (
-            []
-        )  # type: List[List[Union[Expression, ForEquation, ConnectClause, IfEquation]]]
-        self.comment = ""  # type: str
+        self.conditions: list[Expression | Primary | ComponentRef] = []
+        self.blocks: list[list[Expression | ForEquation | ConnectClause | IfEquation]] = []
+        self.comment: str = ""
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -305,8 +294,8 @@ class WhenEquation(Node):
 
 class ForIndex(Node):
     def __init__(self, **kwargs):
-        self.name = ""  # type: str
-        self.expression = None  # type: Optional[Union[Expression, Primary, Slice]]
+        self.name: str = ""
+        self.expression: Expression | Primary | Slice | None = None
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -317,9 +306,9 @@ class ForIndex(Node):
 
 class ForEquation(Node):
     def __init__(self, **kwargs):
-        self.indices = []  # type: List[ForIndex]
-        self.equations = []  # type: List[Union[Equation, ForEquation, ConnectClause]]
-        self.comment = None  # type: Optional[str]
+        self.indices: list[ForIndex] = []
+        self.equations: list[Equation | ForEquation | ConnectClause] = []
+        self.comment: str | None = None
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -330,9 +319,12 @@ class ForEquation(Node):
 
 class ConnectClause(Node):
     def __init__(self, **kwargs):
-        self.left = ComponentRef()  # type: ComponentRef
-        self.right = ComponentRef()  # type: ComponentRef
-        self.comment = ""  # type: str
+        self.left: ComponentRef = ComponentRef()
+        self.right: ComponentRef = ComponentRef()
+        self.comment: str = ""
+        # Set by flattening (MLS 9.2 inner/outer connector annotation), not a parse-time arg.
+        self._left_inner: bool = False
+        self._right_inner: bool = False
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -341,9 +333,9 @@ class ConnectClause(Node):
 
 class AssignmentStatement(Node):
     def __init__(self, **kwargs):
-        self.left = []  # type: List[ComponentRef]
-        self.right = None  # type: Optional[Union[Expression, IfExpression, Primary, ComponentRef]]
-        self.comment = ""  # type: str
+        self.left: list[ComponentRef] = []
+        self.right: Expression | IfExpression | Primary | ComponentRef | None = None
+        self.comment: str = ""
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -352,9 +344,9 @@ class AssignmentStatement(Node):
 
 class IfStatement(Node):
     def __init__(self, **kwargs):
-        self.conditions = []  # type: List[Union[Expression, Primary, ComponentRef]]
-        self.blocks = []  # type: List[List[Union[AssignmentStatement, IfStatement, ForStatement]]]
-        self.comment = ""  # type: str
+        self.conditions: list[Expression | Primary | ComponentRef] = []
+        self.blocks: list[list[AssignmentStatement | IfStatement | ForStatement]] = []
+        self.comment: str = ""
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -365,9 +357,9 @@ class IfStatement(Node):
 
 class WhenStatement(Node):
     def __init__(self, **kwargs):
-        self.conditions = []  # type: List[Union[Expression, Primary, ComponentRef]]
-        self.blocks = []  # type: List[List[Union[AssignmentStatement, IfStatement, ForStatement]]]
-        self.comment = ""  # type: str
+        self.conditions: list[Expression | Primary | ComponentRef] = []
+        self.blocks: list[list[AssignmentStatement | IfStatement | ForStatement]] = []
+        self.comment: str = ""
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -378,9 +370,9 @@ class WhenStatement(Node):
 
 class ForStatement(Node):
     def __init__(self, **kwargs):
-        self.indices = []  # type: List[ForIndex]
-        self.statements = []  # type: List[Union[AssignmentStatement, IfStatement, ForStatement]]
-        self.comment = ""  # type: str
+        self.indices: list[ForIndex] = []
+        self.statements: list[AssignmentStatement | IfStatement | ForStatement] = []
+        self.comment: str = ""
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -391,9 +383,9 @@ class ForStatement(Node):
 
 class WhileStatement(Node):
     def __init__(self, **kwargs):
-        self.condition = None  # type: Optional[Union[Expression, Primary, ComponentRef]]
-        self.statements = []  # type: List[Union[AssignmentStatement, IfStatement, ForStatement]]
-        self.comment = ""  # type: str
+        self.condition: Expression | Primary | ComponentRef | None = None
+        self.statements: list[AssignmentStatement | IfStatement | ForStatement] = []
+        self.comment: str = ""
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -404,9 +396,9 @@ class WhileStatement(Node):
 
 class Function(Node):
     def __init__(self, **kwargs):
-        self.name = ""  # type: str
-        self.arguments = []  # type: List[Union[Expression, Primary, ComponentRef, Array]]
-        self.comment = ""  # type: str
+        self.name: str = ""
+        self.arguments: list[Expression | Primary | ComponentRef | Array] = []
+        self.comment: str = ""
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -434,31 +426,31 @@ class Symbol(Node):
 
     def __init__(self, **kwargs):
         # pylint: disable=invalid-name
-        self.name = ""  # type: str
-        self.type = ComponentRef()  # type: Union[ComponentRef, InstanceClass]
-        self.prefixes = []  # type: List[str]
-        self.replaceable = False  # type: bool
-        self.final = False  # type: bool
-        self.inner = False  # type: bool
-        self.outer = False  # type: bool
-        self.dimensions = [
-            [Primary(value=None)]
-        ]  # type: List[List[Union[Expression, Primary, ComponentRef]]]
-        self.comment = ""  # type: str
-        self.start = Primary(value=None)  # type: Union[Expression, Primary, ComponentRef, Array]
-        self.min = Primary(value=None)  # type: Union[Expression, Primary, ComponentRef, Array]
-        self.max = Primary(value=None)  # type: Union[Expression, Primary, ComponentRef, Array]
-        self.nominal = Primary(value=None)  # type: Union[Expression, Primary, ComponentRef, Array]
-        self.value = Primary(value=None)  # type: Union[Expression, Primary, ComponentRef, Array]
-        self.fixed = Primary(value=False)  # type: Primary
-        self.unit = Primary(value=None)  # type: Primary
-        self.quantity = Primary(value=None)  # type: Primary
-        self.displayUnit = Primary(value=None)  # type: Primary
-        self.id = 0  # type: int
-        self.order = 0  # type: int
-        self.visibility = Visibility.PUBLIC  # type: Visibility
-        self.class_modification = None  # type: Optional[ClassModification]
-        self.parent = None  # type: Optional[Class]
+        self.name: str = ""
+        self.type: ComponentRef | InstanceClass = ComponentRef()
+        self.prefixes: list[str] = []
+        self.replaceable: bool = False
+        self.final: bool = False
+        self.inner: bool = False
+        self.outer: bool = False
+        self.dimensions: list[list[Expression | Primary | ComponentRef]] = [[Primary(value=None)]]
+        self.comment: str = ""
+        self.start: Expression | Primary | ComponentRef | Array = Primary(value=None)
+        self.min: Expression | Primary | ComponentRef | Array = Primary(value=None)
+        self.max: Expression | Primary | ComponentRef | Array = Primary(value=None)
+        self.nominal: Expression | Primary | ComponentRef | Array = Primary(value=None)
+        self.value: Expression | Primary | ComponentRef | Array = Primary(value=None)
+        self.fixed: Primary = Primary(value=False)
+        self.unit: Primary = Primary(value=None)
+        self.quantity: Primary = Primary(value=None)
+        self.displayUnit: Primary = Primary(value=None)
+        self.id: int = 0
+        self.order: int = 0
+        self.visibility: Visibility = Visibility.PUBLIC
+        self.class_modification: ClassModification | None = None
+        self.parent: Class | None = None
+        # Set by flattening on connector stub symbols, not a parse-time arg.
+        self._connector_type: Class | None = None
         super().__init__(**kwargs)
 
     def full_reference(self) -> ComponentRef:
@@ -485,7 +477,7 @@ class EnumerationLiteral(Symbol):
     """
 
     def __init__(self, **kwargs):
-        self.ordinal = None  # type: Optional[int]  # 1-based position in the enum
+        self.ordinal: int | None = None  # 1-based position in the enum
         super().__init__(**kwargs)
         self.prefixes = ["constant"]
 
@@ -499,16 +491,15 @@ def is_enumeration(obj: Any) -> bool:
 
 
 
+
 class ComponentClause(Node):
     def __init__(self, **kwargs):
-        self.prefixes = []  # type: List[str]
-        self.type = ComponentRef()  # type: ComponentRef
-        self.replaceable = False  # type: bool
-        self.dimensions = [
-            [Primary(value=None)]
-        ]  # type: List[List[Union[Expression, Primary, ComponentRef]]]
-        self.comment = []  # type: List[str]
-        self.symbol_list = []  # type: List[Symbol]
+        self.prefixes: list[str] = []
+        self.type: ComponentRef = ComponentRef()
+        self.replaceable: bool = False
+        self.dimensions: list[list[Expression | Primary | ComponentRef]] = [[Primary(value=None)]]
+        self.comment: list[str] = []
+        self.symbol_list: list[Symbol] = []
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -523,8 +514,8 @@ class ComponentClause(Node):
 
 class EquationSection(Node):
     def __init__(self, **kwargs):
-        self.initial = False  # type: bool
-        self.equations = []  # type: List[Union[Equation, IfEquation, ForEquation, ConnectClause]]
+        self.initial: bool = False
+        self.equations: list[Equation | IfEquation | ForEquation | ConnectClause] = []
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -535,8 +526,8 @@ class EquationSection(Node):
 
 class AlgorithmSection(Node):
     def __init__(self, **kwargs):
-        self.initial = False  # type: bool
-        self.statements = []  # type: List[Union[AssignmentStatement, IfStatement, ForStatement]]
+        self.initial: bool = False
+        self.statements: list[AssignmentStatement | IfStatement | ForStatement] = []
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -547,9 +538,9 @@ class AlgorithmSection(Node):
 
 class ImportClause(Node):
     def __init__(self, **kwargs):
-        self.components = []  # type: List[ComponentRef]
-        self.short_name = ""  # type: str
-        self.unqualified = False  # type: bool
+        self.components: list[ComponentRef] = []
+        self.short_name: str = ""
+        self.unqualified: bool = False
         # Comments are rare, so ignore
         super().__init__(**kwargs)
 
@@ -567,10 +558,10 @@ class ImportClause(Node):
 
 class ElementModification(Node):
     def __init__(self, **kwargs):
-        self.component = ComponentRef()  # type: ComponentRef
-        self.modifications = (
-            []
-        )  # type: List[Union[Primary, Expression, ClassModification, Array, ComponentRef]]
+        self.component: ComponentRef = ComponentRef()
+        self.modifications: list[
+            Primary | Expression | ClassModification | Array | ComponentRef
+        ] = []
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -584,11 +575,11 @@ class ElementModification(Node):
 
 class ShortClassDefinition(Node):
     def __init__(self, **kwargs):
-        self.name = ""  # type: str
-        self.type = ""  # type: str
-        self.component = ComponentRef()  # type: ComponentRef
-        self.class_modification = ClassModification()  # type: ClassModification
-        self.replaceable = False  # type: bool
+        self.name: str = ""
+        self.type: str = ""
+        self.component: ComponentRef = ComponentRef()
+        self.class_modification: ClassModification = ClassModification()
+        self.replaceable: bool = False
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -611,7 +602,7 @@ class ElementReplaceable(Node):
 
 class ClassModification(Node):
     def __init__(self, **kwargs):
-        self.arguments = []  # type: List[ClassModificationArgument]
+        self.arguments: list[ClassModificationArgument] = []
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -620,37 +611,39 @@ class ClassModification(Node):
 
 class ClassModificationArgument(Node):
     def __init__(self, **kwargs):
-        self.value = (
-            []
-        )  # type: List[Union[ElementModification, ComponentClause, ShortClassDefinition]]
-        self.scope = None  # type: Optional[Union[Class, InstanceClass]]
+        # value holds a single modification item; the list default is a never-read sentinel
+        # that lets Node.set_args validate kwarg names before value is assigned by the parser.
+        self.value: (  # type: ignore[assignment]
+            ElementModification | ComponentClause | ShortClassDefinition
+        ) = []  # type: ignore[assignment]
+        self.scope: Class | InstanceClass | None = None
         self.redeclare = False
         super().__init__(**kwargs)
 
     def __repr__(self):
         return "{}(value={!r}, scope={!r}, redeclare={!r})".format(
-            type(self).__name__, self.value, self.scope, self.redeclare
+            type(self), self.value, self.scope, self.redeclare
         )
 
     def __deepcopy__(self, memo):
         _scope, _deepcp = self.scope, self.__deepcopy__
-        self.scope, self.__deepcopy__ = None, None
+        self.scope, self.__deepcopy__ = None, None  # type: ignore[method-assign]
         new = copy.deepcopy(self, memo)
-        self.scope, self.__deepcopy__ = _scope, _deepcp
-        new.scope, new.__deepcopy__ = _scope, _deepcp
+        self.scope, self.__deepcopy__ = _scope, _deepcp  # type: ignore[method-assign]
+        new.scope, new.__deepcopy__ = _scope, _deepcp  # type: ignore[method-assign]
         return new
 
 
 class ExtendsClause(Node):
     def __init__(self, **kwargs):
-        self.component = None  # type: Optional[ComponentRef]
-        self.class_modification = None  # type: Optional[ClassModification]
-        self.visibility = Visibility.PUBLIC  # type: Visibility
-        self.scope = None  # type: Optional[Union[Class, InstanceClass]]
+        self.component: ComponentRef | None = None
+        self.class_modification: ClassModification | None = None
+        self.visibility: Visibility = Visibility.PUBLIC
+        self.scope: Class | InstanceClass | None = None
         # True when created from `class extends X` syntax (MLS §7.3.1).
         # The base class X must be resolved in the inherited scope of the enclosing
         # class, not the local scope (which already contains the redeclaration).
-        self.is_class_extends = False  # type: bool
+        self.is_class_extends: bool = False
         super().__init__(**kwargs)
 
     def __repr__(self):
@@ -663,30 +656,27 @@ class Class(Node):
     BUILTIN = ("Real", "Integer", "String", "Boolean")
 
     def __init__(self, **kwargs):
-        self.name = None  # type: Optional[str]
-        self.imports = OrderedDict()  # type: OrderedDict[str, Union[ImportClause, ComponentRef]]
-        self.extends = []  # type: List[Union[ExtendsClause, InstanceClass]]
-        self.encapsulated = False  # type: bool
-        self.partial = False  # type: bool
-        self.final = False  # type: bool
-        self.replaceable = False  # type: bool
-        self.type = ""  # type: str
-        self.comment = ""  # type: str
-        self.classes = OrderedDict()  # type: dict[str, Class]
-        self.symbols = OrderedDict()  # type: OrderedDict[str, Symbol]
-        self.functions = OrderedDict()  # type: OrderedDict[str, Class]
-        self.initial_equations = []  # type: List[Union[Equation, ForEquation]]
-        self.equations = []  # type: List[Union[Equation, ForEquation, ConnectClause]]
-        self.initial_statements = (
-            []
-        )  # type: List[Union[AssignmentStatement, IfStatement, ForStatement]]
-        self.statements = []  # type: List[Union[AssignmentStatement, IfStatement, ForStatement]]
-        self.annotation = None  # type: Optional[ClassModification]
-        self.parent = None  # type: Optional[Class]
-        self.visibility = Visibility.PUBLIC  # type: Visibility
-        self.is_short_class_definition = False  # type: bool
-        self.enumeration = False  # type: bool  # True iff this is an enumeration type
-
+        self.name: str | None = None
+        self.imports: OrderedDict[str, ImportClause | ComponentRef] = OrderedDict()
+        self.extends: list[ExtendsClause | InstanceClass] = []
+        self.encapsulated: bool = False
+        self.partial: bool = False
+        self.final: bool = False
+        self.replaceable: bool = False
+        self.type: str = ""
+        self.comment: str = ""
+        self.classes: dict[str, Class] = OrderedDict()
+        self.symbols: OrderedDict[str, Symbol] = OrderedDict()
+        self.functions: OrderedDict[str, Class] = OrderedDict()
+        self.initial_equations: list[Equation | ForEquation] = []
+        self.equations: list[Equation | ForEquation | ConnectClause] = []
+        self.initial_statements: list[AssignmentStatement | IfStatement | ForStatement] = []
+        self.statements: list[AssignmentStatement | IfStatement | ForStatement] = []
+        self.annotation: ClassModification | None = None
+        self.parent: Class | None = None
+        self.visibility: Visibility = Visibility.PUBLIC
+        self.is_short_class_definition: bool = False
+        self.enumeration: bool = False  # True iff this is an enumeration type
         super().__init__(**kwargs)
 
     def full_reference(self) -> ComponentRef:
@@ -697,7 +687,7 @@ class Class(Node):
         """Return fully-qualified lexical name of this class"""
         return element_full_name(self)
 
-    def _extend(self, other: "Class") -> None:
+    def _extend(self, other: Class) -> None:
         for class_name in other.classes.keys():
             if class_name in self.classes.keys():
                 self.classes[class_name]._extend(other.classes[class_name])
@@ -709,7 +699,7 @@ class Class(Node):
             c.parent = self
             c._update_parent_refs()
 
-    def update_classes(self, other: dict[str, "Class"]) -> None:
+    def update_classes(self, other: dict[str, Class]) -> None:
         for class_ in other.values():
             self.add_class(class_)
 
@@ -720,7 +710,7 @@ class Class(Node):
         else:
             return self.parent.root
 
-    def ancestors(self) -> List["Class"]:
+    def ancestors(self) -> list[Class]:
         """Return a list of all ancestor classes, farthest first."""
         ancestors = []
         current = self.parent
@@ -733,21 +723,23 @@ class Class(Node):
     def copy_including_children(self):
         return copy.deepcopy(self)
 
-    def add_class(self, c: "Class") -> None:
+    def add_class(self, c: Class) -> None:
         """
         Add a (sub)class to this class.
 
         :param c: (Sub)class to add.
         """
+        assert c.name is not None
         self.classes[c.name] = c
         c.parent = self
 
-    def remove_class(self, c: "Class") -> None:
+    def remove_class(self, c: Class) -> None:
         """
         Removes a (sub)class from this class.
 
         :param c: (Sub)class to remove.
         """
+        assert c.name is not None
         del self.classes[c.name]
         c.parent = None
 
@@ -805,10 +797,10 @@ class Class(Node):
             memo[id(self.parent)] = self.parent
 
         _deepcp = self.__deepcopy__
-        self.__deepcopy__ = None
+        self.__deepcopy__ = None  # type: ignore[method-assign]
         new = copy.deepcopy(self, memo)
-        self.__deepcopy__ = _deepcp
-        new.__deepcopy__ = _deepcp
+        self.__deepcopy__ = _deepcp  # type: ignore[method-assign]
+        new.__deepcopy__ = _deepcp  # type: ignore[method-assign]
         return new
 
     def __repr__(self):
@@ -818,22 +810,22 @@ class Class(Node):
         return '{} {}, Type "{}"'.format(type(self).__name__, self.name, self.type)
 
 
-def element_name_tuple(element: Union[Class, Symbol]) -> tuple[str]:
+def element_name_tuple(element: Class | Symbol) -> tuple[str, ...]:
     """Return fully-qualified lexical name of an element as a tuple of names"""
     names = []
     current = element
     while current.parent is not None:
         names.append(current.name)
         current = current.parent
-    return tuple(reversed(names))
+    return tuple(reversed(names))  # type: ignore[arg-type]
 
 
-def element_full_name(element: Union[Class, Symbol]) -> str:
+def element_full_name(element: Class | Symbol) -> str:
     """Return fully-qualified lexical name of an element"""
     return ".".join(element_name_tuple(element))
 
 
-def element_full_reference(element: Union[Class, Symbol]) -> ComponentRef:
+def element_full_reference(element: Class | Symbol) -> ComponentRef:
     """Return fully-qualified component reference to element"""
     name_tuple = element_name_tuple(element)
     return ComponentRef.from_tuple(name_tuple) if name_tuple else ComponentRef()
@@ -852,9 +844,9 @@ class InstanceElement:
 
     def __init__(
         self,
-        ast_ref: Optional[Union[Class, Symbol]] = None,
-        modification_environment: Optional[ClassModification] = None,
-        parent_instance: Optional["InstanceClass"] = None,
+        ast_ref: Class | Symbol | None = None,
+        modification_environment: ClassModification | None = None,
+        parent_instance: InstanceClass | None = None,
         instantiation_state: InstantiationState = InstantiationState.NONE,
         **kwargs,
     ):
@@ -907,7 +899,7 @@ class InstanceElement:
         return f"name={self.name!r}, ast_ref={self.ast_ref!r}, modification_environment={self.modification_environment!r}"
 
 
-def element_instance_name_tuple(element: InstanceElement) -> tuple[str]:
+def element_instance_name_tuple(element: InstanceElement) -> tuple[str, ...]:
     """Return fully-qualified instance name of an element as a tuple of names"""
     names = []
     current = element
@@ -1041,7 +1033,7 @@ class Tree(Class):
             type_class = Class(name=name, type="type", parent=self)
             self.classes[name] = type_class
 
-    def extend(self, other: "Tree") -> None:
+    def extend(self, other: Tree) -> None:
         self._extend(other)
         self.update_parent_refs()
 

@@ -5,11 +5,11 @@ Modelica name lookup — MLS Chapter 5
 Entry: find_name(scope, name) → _find_name() → _find_simple_name() / _find_rest_of_name()
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
+from __future__ import annotations
 
 import copy
 from dataclasses import replace
-from typing import Optional, Tuple, Union
+from typing import cast
 
 from . import LookupOptions, NameLookupError, RecursionGuard
 from .. import ast
@@ -17,8 +17,8 @@ from .. import ast
 
 def find_name(
     scope: ast.Class,
-    name: Union[str, ast.ComponentRef],
-) -> Optional[Union[ast.Class, ast.Symbol]]:
+    name: str | ast.ComponentRef,
+) -> ast.Class | ast.Symbol | None:
     """Modelica name lookup on a tree of ast.Class and ast.InstanceClass starting at scope class
 
     :param scope: scope in which to start name lookup
@@ -37,10 +37,10 @@ def find_name(
 
 def _find_name(
     scope: ast.Class,
-    name: Union[str, ast.ComponentRef],
+    name: str | ast.ComponentRef,
     guard: RecursionGuard,
     opts: LookupOptions,
-) -> Optional[Union[ast.Class, ast.Symbol]]:
+) -> ast.Class | ast.Symbol | None:
     """Internal start point for name lookup with extra parameters to control the lookup"""
     # Look for ast.Class or ast.Symbol per the MLS v3.5:
     # 1. Simple Name Lookup (spec 5.3.1)
@@ -113,12 +113,14 @@ def _find_name(
         and isinstance(scope, (ast.InstanceClass, InstanceTree))
     ):
         # Not found in instance tree, look in class tree
-        found = _find_name(scope.ast_ref, name, guard, opts)
+        ast_ref = scope.ast_ref
+        assert isinstance(ast_ref, ast.Class), "InstanceClass/InstanceTree.ast_ref must be a Class"
+        found = _find_name(ast_ref, name, guard, opts)
 
     return found
 
 
-def _parse_str_or_ref(name: Union[str, ast.ComponentRef]) -> Tuple[str, str]:
+def _parse_str_or_ref(name: str | ast.ComponentRef) -> tuple[str, str]:
     """Return (left_name, rest_of_name) given composite name as a str or ComponentRef"""
     assert isinstance(name, (str, ast.ComponentRef))
     if isinstance(name, str):
@@ -131,10 +133,10 @@ def _parse_str_or_ref(name: Union[str, ast.ComponentRef]) -> Tuple[str, str]:
 
 
 def _instantiate_class_if_needed_for_lookup(
-    class_: Union[ast.Class, ast.InstanceClass],
+    class_: ast.Class | ast.InstanceClass,
     guard: RecursionGuard,
     opts: LookupOptions,
-) -> Union[ast.Class, ast.InstanceClass]:
+) -> ast.Class | ast.InstanceClass:
     """Instantiate class as needed for name lookup"""
     # If not an instance, then all names are already available for lookup
     if isinstance(class_, ast.Tree) or not isinstance(class_, ast.InstanceClass):
@@ -153,7 +155,7 @@ def _instantiate_class_if_needed_for_lookup(
     instance = _instantiate_class(
         class_,
         ast.ClassModification(),
-        class_.parent_instance,
+        class_.parent_instance,  # type: ignore[arg-type]
         guard=guard,
         opts=opts,
         target_state=ast.InstantiationState.PARTIAL,
@@ -172,7 +174,7 @@ def _find_simple_name(
     scope: ast.Class,
     guard: RecursionGuard,
     opts: LookupOptions,
-) -> Optional[Union[ast.Class, ast.Symbol]]:
+) -> ast.Class | ast.Symbol | None:
     """Lookup name per Modelica spec 3.5 section 5.3.1 Simple Name Lookup"""
 
     # 1. Iteration variables
@@ -239,7 +241,9 @@ def _find_simple_name(
         # For InstanceSymbol before full instantiation, prefixes may not have
         # been copied from ast_ref yet; check the authoritative source.
         prefixes = (
-            found.ast_ref.prefixes if isinstance(found, ast.InstanceSymbol) else found.prefixes
+            found.ast_ref.prefixes  # type: ignore[union-attr]
+            if isinstance(found, ast.InstanceSymbol)
+            else found.prefixes
         )
         if "constant" not in prefixes:
             raise NameLookupError("Non-constant Symbol found in enclosing class")
@@ -248,11 +252,11 @@ def _find_simple_name(
 
 
 def _find_rest_of_name(
-    first: Union[ast.Class, ast.Symbol],
+    first: ast.Class | ast.Symbol,
     rest_of_name: str,
     guard: RecursionGuard,
     opts: LookupOptions,
-) -> Optional[Union[ast.Class, ast.Symbol]]:
+) -> ast.Class | ast.Symbol | None:
     """Lookup the `B.C` part of Composite Name Lookup (`A.B.C`) (spec 5.3.2)"""
 
     # 1. `A` is looked up using Simple Name Lookup and passed as `first` argument
@@ -271,23 +275,25 @@ def _find_rest_of_name(
         if isinstance(first.type, ast.Class):
             type_class = first.type
         else:
+            assert first.parent is not None, "Symbol must have a parent class"
             type_class = _find_name(first.parent, first.type, guard, opts)
-            if type_class is None:
+            if type_class is None or isinstance(type_class, ast.Symbol):
                 raise NameLookupError(f"Lookup failed for type of symbol {first.full_name}")
-        found = _find_composite_name_in_symbols(rest_of_name, type_class, guard, opts)
+        type_class_c = cast(ast.Class, type_class)
+        found = _find_composite_name_in_symbols(rest_of_name, type_class_c, guard, opts)
         if not found:
             # Can only find in classes if the below rules apply:
             # 2b. if not found and if `A.B.C` is used as a function call
             # and `A` is a scalar or can be evaluated as a scalar from an array
             # and `B` and `C` are classes,
             # it is a non-operator function call.
-            found, _ = _find_composite_name_in_classes(rest_of_name, type_class, guard, opts)
+            found, _ = _find_composite_name_in_classes(rest_of_name, type_class_c, guard, opts)
             if isinstance(found, ast.Class):
                 if found.type != "function":
                     found = None
                 else:
                     # TODO: Fix for `test_function_lookup_via_array_element` + other possibilities
-                    if first.dimensions[0][0].value is not None:
+                    if first.dimensions[0][0].value is not None:  # type: ignore[union-attr]
                         raise NameLookupError(
                             f"Array {first.name} must have subscripts to lookup function {found.name}"
                         )
@@ -332,7 +338,7 @@ def _find_composite_name_in_symbols(
     scope: ast.Class,
     guard: RecursionGuard,
     opts: LookupOptions,
-) -> Optional[ast.Symbol]:
+) -> ast.Symbol | None:
     """Search for composite name (e.g. A.B.C) in local symbols, recursively"""
     if opts.instantiate_in_place:
         scope = _instantiate_class_if_needed_for_lookup(scope, guard, opts)
@@ -370,7 +376,7 @@ def _find_composite_name_in_classes(
     guard: RecursionGuard,
     opts: LookupOptions,
     return_last_found=False,
-) -> Tuple[Optional[ast.Class], str]:
+) -> tuple[ast.Class | None, str]:
     """Search for composite name (e.g. A.B.C) in local classes, recursively"""
     if opts.instantiate_in_place:
         scope = _instantiate_class_if_needed_for_lookup(scope, guard, opts)
@@ -395,7 +401,7 @@ def _find_composite_name(
     scope: ast.Class,
     guard: RecursionGuard,
     opts: LookupOptions,
-) -> Optional[Union[ast.Symbol, ast.Class]]:
+) -> ast.Symbol | ast.Class | None:
     """Composite name lookup using partial instantiation only"""
     opts_in_place = replace(opts, instantiate_in_place=True)
     # Recurse through children classes
@@ -414,7 +420,7 @@ def _flatten_first_and_find_rest(
     rest_of_name: str,
     guard: RecursionGuard,
     opts: LookupOptions,
-) -> Optional[Union[ast.Class, ast.Symbol]]:
+) -> ast.Class | ast.Symbol | None:
     """Lookup the `B.C` part of Composite Name Lookup (`A.B.C`) where`A` is a Class"""
 
     # 3. If `A` is a Class:
@@ -437,6 +443,7 @@ def _flatten_first_and_find_rest(
     ):
         parent_instance = getattr(first, "parent_instance", None)
         if parent_instance is None:
+            assert first.parent is not None, "Class must have a parent for name lookup"
             parent_instance = _get_lexical_parent_instance(
                 first,
                 first.parent,
@@ -461,6 +468,7 @@ def _flatten_first_and_find_rest(
         opts=replace(opts, instantiate_in_place=True),
     )
     # Need non-flat name for name lookup
+    assert flat_class.name is not None, "flat_class must have a name"
     flat_class.name = flat_class.name.split(".")[-1]
     first = flat_class
 
@@ -493,7 +501,7 @@ def _first_name(name: str) -> str:
 def _find_local(
     name: str,
     scope: ast.Class,
-) -> Optional[Union[ast.Class, ast.Symbol]]:
+) -> ast.Class | ast.Symbol | None:
     """Name lookup for predefined classes and contained elements"""
 
     # 1. Iteration variables
@@ -516,7 +524,7 @@ def _find_local(
     return None
 
 
-def _find_iteration_variable(name: str, scope: ast.Class) -> Optional[ast.Symbol]:
+def _find_iteration_variable(name: str, scope: ast.Class) -> ast.Symbol | None:
     """Currently a pass"""
     # TODO: Implement find name in iteration variables
     return None
@@ -530,14 +538,18 @@ def _find_inherited(
     scope: ast.Class,
     guard: RecursionGuard,
     opts: LookupOptions,
-) -> Optional[Union[ast.Class, ast.Symbol]]:
+) -> ast.Class | ast.Symbol | None:
     """Find simple name in inherited classes"""
     # Normally .extends is populated at PARTIAL instantiation. But an enclosing
     # InstanceClass reached as a parent scope can be FULL-but-empty-extends while its
     # ast_ref still carries the original extends clauses. Fall back to those so
     # transitively-inherited nested types remain visible during name lookup.
     extends_list = scope.extends
-    if not extends_list and isinstance(scope, ast.InstanceClass) and scope.ast_ref is not None:
+    if (
+        not extends_list
+        and isinstance(scope, ast.InstanceClass)
+        and isinstance(scope.ast_ref, ast.Class)
+    ):
         extends_list = scope.ast_ref.extends
     if not extends_list:
         return None
@@ -551,8 +563,8 @@ def _find_inherited(
         not isinstance(scope, ast.InstanceClass)
         or scope.instantiation_state >= ast.InstantiationState.PARTIAL
     )
+    cache_key = (name, id(scope))
     if cacheable:
-        cache_key = (name, id(scope))
         cached = guard._find_inherited_cache.get(cache_key, _SENTINEL)
         if cached is not _SENTINEL:
             return cached
@@ -564,6 +576,7 @@ def _find_inherited(
     if opts._searched_extends is None:
         opts = replace(opts, _searched_extends=set())
     searched = opts._searched_extends
+    assert searched is not None
 
     result = None
     for extends in extends_list:
@@ -595,6 +608,9 @@ def _find_inherited(
         # base class names always resolve lexically up to enclosing packages — callers
         # may pass search_parent=False for the target-name search itself, but that
         # restriction must not bleed into base-class-name resolution.
+        if extends.component is None:
+            guard.current_extends.discard(extends)
+            continue
         extends_scope = _find_name(
             scope,
             extends.component,
@@ -633,13 +649,13 @@ def _find_imported(
     scope: ast.Class,
     guard: RecursionGuard,
     opts: LookupOptions,
-) -> Optional[Union[ast.Class, ast.Symbol]]:
+) -> ast.Class | ast.Symbol | None:
     """Find simple name in imports per MLS v3.5 section 13.2.1"""
     # TODO: Rewrite this to work with parser rewrite of import_clause handler.
 
     def _lookup_via_import(
         import_ref: ast.ComponentRef, search_imports: bool = True
-    ) -> Tuple[Optional[Union[ast.Class, ast.Symbol]], bool]:
+    ) -> tuple[ast.Class | ast.Symbol | None, bool]:
         """Resolve a single import ref to a class or symbol"""
         # Detect self-referential imports to prevent infinite recursion during instantiation
         common_parent, children = _get_common_parent(scope, str(import_ref))
@@ -659,7 +675,7 @@ def _find_imported(
 
     # Search qualified imports (most common case)
     if name in scope.imports:
-        import_: Union[ast.ImportClause, ast.ComponentRef] = scope.imports[name]
+        import_: ast.ImportClause | ast.ComponentRef = scope.imports[name]
         if isinstance(import_, ast.ImportClause):
             # TODO: Handle import of multiple classes (now only does `A.B.C` for `A.B.{C,D,E}`)
             import_ = import_.components[0]
@@ -669,7 +685,9 @@ def _find_imported(
         return found
     # Unqualified imports
     if "*" in scope.imports:
-        for package_ref in scope.imports["*"].components:
+        wildcard_import = scope.imports["*"]
+        assert isinstance(wildcard_import, ast.ImportClause)
+        for package_ref in wildcard_import.components:
             imported_comp_ref = package_ref.concatenate(ast.ComponentRef(name=name))
             found, stop_search = _lookup_via_import(imported_comp_ref, search_imports=False)
             if stop_search:
@@ -682,7 +700,7 @@ def _find_imported(
     return None
 
 
-def _get_common_parent(class_: ast.Class, name: str) -> Tuple[Optional[ast.Class], str]:
+def _get_common_parent(class_: ast.Class, name: str) -> tuple[ast.Class | None, str]:
     class_parts = class_.full_name.split(".")
     name_parts = name.split(".")
     common_count = 0
@@ -694,13 +712,14 @@ def _get_common_parent(class_: ast.Class, name: str) -> Tuple[Optional[ast.Class
         return (None, "")
     parent = class_
     for _ in range(len(class_parts) - common_count):
+        assert parent.parent is not None, "Class tree does not have enough parent levels"
         parent = parent.parent
     child_names = name_parts[common_count:]
     return parent, ".".join(child_names)
 
 
 def _check_import_rules(
-    element: Optional[Union[ast.Class, ast.Symbol]],
+    element: ast.Class | ast.Symbol | None,
     scope: ast.Class,
 ) -> None:
     """Check import rules per the Modelica spec"""

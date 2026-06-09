@@ -3,10 +3,10 @@
 TreeListener and TreeWalker for the pymoca.tree package.
 """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
+from __future__ import annotations
 
 import logging
-from typing import Iterable, Union
+from typing import Iterable
 
 from .. import ast
 
@@ -230,7 +230,7 @@ class TreeWalker:
         if hasattr(listener, "exit" + name):
             getattr(listener, "exit" + name)(tree)
 
-    def handle_walk(self, listener: TreeListener, tree: Union[ast.Node, dict, list]) -> None:
+    def handle_walk(self, listener: TreeListener, tree: ast.Node | dict | list) -> None:
         """
         Handles tree walking, has to account for dictionaries and lists
         :param listener: listener that reacts to walked events

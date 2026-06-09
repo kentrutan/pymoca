@@ -26,3 +26,9 @@ repos:
             test/generated/.*|
             test/libraries/.*
           )$
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: v1.1.408
+    hooks:
+      - id: pyright
+        additional_dependencies: [pytest, numpy]
+        files: '^(src/pymoca/.*|test/msl_examples_test)\.py$'

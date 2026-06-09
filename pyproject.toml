@@ -68,6 +68,20 @@ versionfile_build = "pymoca/_version.py"
 tag_prefix = ""
 parentdir_prefix = "pymoca-"
 
+[tool.pytest.ini_options]
+xfail_strict = true
+addopts = "-m 'not msl'"
+
+[tool.pyright]
+pythonVersion = "3.9"
+pythonPlatform = "All"
+include = ["src/pymoca"]
+ignore = ["src/pymoca/generated", "src/pymoca/_version.py", "src/pymoca/backends"]
+useLibraryCodeForTypes = true
+reportMissingImports = true
+reportMissingTypeStubs = false
+typeCheckingMode = "standard"
+
 [tool.black]
 line-length = 100
 target-version = ['py39', 'py310', 'py311', 'py312', 'py313']
@@ -79,7 +93,3 @@ force-exclude = '''
         | test/libraries
     )
 '''
-
-[tool.pytest.ini_options]
-xfail_strict = true
-addopts = "-m 'not msl'"

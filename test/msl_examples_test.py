@@ -4,6 +4,8 @@ By default each model is run through the new flatten pipeline (tree.flatten_clas
 Pass -t/--translator casadi to instead translate each model with the CasADi backend.
 """
 
+from __future__ import annotations
+
 import gc
 import os
 import subprocess
@@ -16,7 +18,7 @@ from pathlib import Path
 from pymoca import parser
 from pymoca import tree
 
-import pytest
+import pytest  # type: ignore[import-untyped]
 
 MY_DIR = os.path.dirname(os.path.realpath(__file__))
 MSL4_BASE_DIR = os.path.join(MY_DIR, "libraries", "MSL-4.0.x")
@@ -87,8 +89,8 @@ _casadi_api = None
 def _worker_init(
     msl4_base_dir: str,
     reuse_tree: bool = False,
-    translator: str = None,
-    options: dict = None,
+    translator: str | None = None,
+    options: dict | None = None,
 ) -> None:
     global _worker_tree, _msl4_base_dir, _translator, _options
     global _casadi_generator, _casadi_api
@@ -124,7 +126,7 @@ def _process_one(model_name: str) -> tuple:
     verb = "translating" if _translator == "casadi" else "flattening"
     worker_tree = _worker_tree
     if worker_tree is None:
-        worker_tree = parser.modelicapath_to_tree([_msl4_base_dir])
+        worker_tree = parser.modelicapath_to_tree([_msl4_base_dir])  # type: ignore[list-item]
     gc.collect()
     vsz_before = _vsz_mb()
     t0 = time.perf_counter()
@@ -133,6 +135,7 @@ def _process_one(model_name: str) -> tuple:
             # Replicate the compile tail of casadi.api._compile_model against the
             # shared/fresh tree so that --reuse-tree is honored (transfer_model
             # reparses a folder on every call and cannot reuse a tree).
+            assert _casadi_api is not None and _casadi_generator is not None
             opts = _casadi_api._merge_default_options(_options)
             model = _casadi_generator.generate(worker_tree, model_name, opts)
             if opts["check_balanced"]:
@@ -187,10 +190,10 @@ def _default_jobs() -> int:
 
 def process_every_MSL_example(
     jobs: int = 1,
-    filters: list = None,
+    filters: list | None = None,
     reuse_tree: bool = False,
-    translator: str = None,
-    options: dict = None,
+    translator: str | None = None,
+    options: dict | None = None,
 ):
     model_names = _discover_model_names()
     if filters:
@@ -200,6 +203,7 @@ def process_every_MSL_example(
     num_error = 0
     wall_t0 = time.perf_counter()
 
+    pool = None
     if jobs == 1:
         # Serial: initialize worker state in-process so ordering bugs remain reproducible.
         _worker_init(MSL4_BASE_DIR, reuse_tree, translator, options)
@@ -225,7 +229,7 @@ def process_every_MSL_example(
             else:
                 num_error += 1
     finally:
-        if jobs > 1:
+        if pool is not None:
             pool.close()
             pool.join()
 

@@ -11,7 +11,6 @@ XFAIL_IN_PROGRESS = {
     "test/name_lookup_test.py::ImportedNameLookupTest::test_encapsulated",
     "test/name_lookup_test.py::ImportedNameLookupTest::test_qualified_import",
     "test/name_lookup_test.py::ImportedNameLookupTest::test_qualified_import_non_package",
-    "test/name_lookup_test.py::ImportedNameLookupTest::test_recursive",
     "test/name_lookup_test.py::ImportedNameLookupTest::test_renaming_import",
     "test/name_lookup_test.py::ImportedNameLookupTest::test_renaming_import_non_package",
     "test/name_lookup_test.py::ImportedNameLookupTest::test_renaming_single_definition_import",

@@ -81,7 +81,7 @@ def _find_name(
     left_name, rest_of_name = _parse_str_or_ref(name)
 
     # Lookup simple name first (the `A` part)
-    found = _find_simple_name(left_name, scope, guard, opts)
+    found = _find_simple_name(scope, left_name, guard, opts)
 
     # Lookup rest of name (e.g. `B.C`) to complete composite name lookup
     # Per MLS 5.6.1, search_inherited=False only restricts the first (simple) name
@@ -173,8 +173,8 @@ def _instantiate_class_if_needed_for_lookup(
 
 
 def _find_simple_name(
-    name: str,
     scope: ast.Class,
+    name: str,
     guard: RecursionGuard,
     opts: LookupOptions,
 ) -> ast.Class | ast.Symbol | None:
@@ -202,17 +202,17 @@ def _find_simple_name(
             current_scope = _instantiate_class_if_needed_for_lookup(current_scope, guard, opts)
 
         # Steps 1-3: Try local lookup first (iteration vars, classes, symbols)
-        if found := _find_local(name, current_scope):
+        if found := _find_local(current_scope, name):
             break
 
         # Step 4: Look in inherited classes if enabled
         if opts.search_inherited:
-            if found := _find_inherited(name, current_scope, guard, opts):
+            if found := _find_inherited(current_scope, name, guard, opts):
                 break
 
         # Steps 5-6: Look in imports if enabled
         if opts.search_imports:
-            if found := _find_imported(name, current_scope, guard, opts):
+            if found := _find_imported(current_scope, name, guard, opts):
                 break
 
         # Step 7b: Continue unless we should stop
@@ -229,7 +229,7 @@ def _find_simple_name(
     # whose first component is a root-level package (MLS §13.2.3).
     # TODO: Add predefined functions and operators to global scope before this
     if found is None and current_scope.encapsulated:
-        found = _find_local(name, scope.root)
+        found = _find_local(scope.root, name)
         if not isinstance(found, ast.Class) or found.type not in (
             "type",
             "function",
@@ -283,14 +283,14 @@ def _find_rest_of_name(
             if type_class is None or isinstance(type_class, ast.Symbol):
                 raise NameLookupError(f"Lookup failed for type of symbol {first.full_name}")
         type_class_c = cast(ast.Class, type_class)
-        found = _find_composite_name_in_symbols(rest_of_name, type_class_c, guard, opts)
+        found = _find_composite_name_in_symbols(type_class_c, rest_of_name, guard, opts)
         if not found:
             # Can only find in classes if the below rules apply:
             # 2b. if not found and if `A.B.C` is used as a function call
             # and `A` is a scalar or can be evaluated as a scalar from an array
             # and `B` and `C` are classes,
             # it is a non-operator function call.
-            found, _ = _find_composite_name_in_classes(rest_of_name, type_class_c, guard, opts)
+            found, _ = _find_composite_name_in_classes(type_class_c, rest_of_name, guard, opts)
             if isinstance(found, ast.Class):
                 if found.type != "function":
                     found = None
@@ -337,8 +337,8 @@ def _find_rest_of_name(
 
 
 def _find_composite_name_in_symbols(
-    name: str,
     scope: ast.Class,
+    name: str,
     guard: RecursionGuard,
     opts: LookupOptions,
 ) -> ast.Symbol | None:
@@ -367,15 +367,15 @@ def _find_composite_name_in_symbols(
                 # type is already an InstanceClass
                 found_type_class = found.type
             # Look in symbols of the type
-            found = _find_composite_name_in_symbols(next_names, found_type_class, guard, opts)
+            found = _find_composite_name_in_symbols(found_type_class, next_names, guard, opts)
     else:
         found = None
     return found
 
 
 def _find_composite_name_in_classes(
-    name: str,
     scope: ast.Class,
+    name: str,
     guard: RecursionGuard,
     opts: LookupOptions,
     return_last_found=False,
@@ -391,7 +391,7 @@ def _find_composite_name_in_classes(
     else:
         next_names = name
     if found and next_names:
-        next_found, next_names = _find_composite_name_in_classes(next_names, found, guard, opts)
+        next_found, next_names = _find_composite_name_in_classes(found, next_names, guard, opts)
         if next_found:
             found = next_found
         elif not return_last_found:
@@ -400,8 +400,8 @@ def _find_composite_name_in_classes(
 
 
 def _find_composite_name(
-    name: str,
     scope: ast.Class,
+    name: str,
     guard: RecursionGuard,
     opts: LookupOptions,
 ) -> ast.Symbol | ast.Class | None:
@@ -409,11 +409,11 @@ def _find_composite_name(
     opts_in_place = replace(opts, instantiate_in_place=True)
     # Recurse through children classes
     found, next_names = _find_composite_name_in_classes(
-        name, scope, guard, opts_in_place, return_last_found=True
+        scope, name, guard, opts_in_place, return_last_found=True
     )
     # Recurse through children symbols, if any
     if found and next_names:
-        found = _find_composite_name_in_symbols(next_names, found, guard, opts_in_place)
+        found = _find_composite_name_in_symbols(found, next_names, guard, opts_in_place)
 
     return found
 
@@ -502,8 +502,8 @@ def _first_name(name: str) -> str:
 
 
 def _find_local(
-    name: str,
     scope: ast.Class,
+    name: str,
 ) -> ast.Class | ast.Symbol | None:
     """Name lookup for predefined classes and contained elements"""
 
@@ -513,7 +513,7 @@ def _find_local(
 
     # 1. Iteration variables
     # TODO: Refactor when handling iteration variables (it will move up one level)
-    if found := _find_iteration_variable(name, scope):
+    if found := _find_iteration_variable(scope, name):
         return found
 
     # 2. Classes
@@ -527,7 +527,7 @@ def _find_local(
     return None
 
 
-def _find_iteration_variable(name: str, scope: ast.Class) -> ast.Symbol | None:
+def _find_iteration_variable(scope: ast.Class, name: str) -> ast.Symbol | None:
     """Currently a pass"""
     # TODO: Implement find name in iteration variables
     return None
@@ -537,8 +537,8 @@ _SENTINEL = object()
 
 
 def _find_inherited(
-    name: str,
     scope: ast.Class,
+    name: str,
     guard: RecursionGuard,
     opts: LookupOptions,
 ) -> ast.Class | ast.Symbol | None:
@@ -648,8 +648,8 @@ def _find_inherited(
 
 
 def _find_imported(
-    name: str,
     scope: ast.Class,
+    name: str,
     guard: RecursionGuard,
     opts: LookupOptions,
 ) -> ast.Class | ast.Symbol | None:
@@ -667,13 +667,13 @@ def _find_imported(
                 # Import target IS common_parent (e.g. importing an enclosing package).
                 # _find_composite_name("", ...) returns None, so return the package directly.
                 return common_parent, True
-            found = _find_composite_name(children, common_parent, guard, opts)
-            _check_import_rules(found, scope)
+            found = _find_composite_name(common_parent, children, guard, opts)
+            _check_import_rules(scope, found)
             return found, True
         fallback_opts = replace(opts, search_parent=False, search_imports=search_imports)
         found = _find_name(scope.root, import_ref, guard, fallback_opts)
         # TODO: Should _check_import_rules be inside `if found is not None` check? (fix in rewrite)
-        _check_import_rules(found, scope)
+        _check_import_rules(scope, found)
         return found, False
 
     # Search qualified imports (most common case)
@@ -722,8 +722,8 @@ def _get_common_parent(class_: ast.Class, name: str) -> tuple[ast.Class | None, 
 
 
 def _check_import_rules(
-    element: ast.Class | ast.Symbol | None,
     scope: ast.Class,
+    element: ast.Class | ast.Symbol | None,
 ) -> None:
     """Check import rules per the Modelica spec"""
     if element is None:

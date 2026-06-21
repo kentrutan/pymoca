@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import gc
 import os
-import subprocess
+import resource
 import sys
 import time
 import traceback
+import warnings
 from multiprocessing import Pool
 from pathlib import Path
 
@@ -56,13 +57,38 @@ def _build_params():
 # Pytest tests
 # ---------------------------------------------------------------------------
 
-pytestmark = pytest.mark.skipif(not MSL4_AVAILABLE, reason="MSL-4.0.x submodule not initialized")
+# forked: run each model in its own subprocess that exits afterward, returning all
+# memory to the OS. Flattening builds large cyclic InstanceClass graphs; even with
+# gc.collect() CPython's allocator never shrinks the process, so without forking
+# consecutive models accumulate multiple GB of resident memory. pytest-forked is
+# fork-only, so on Windows the suite runs in-process (see _warn_if_unforked); the
+# bounded cross-platform path is the CLI's per-task workers. Harmless either way when
+# MSL tests are deselected, which is the default (-m 'not msl').
+_FORK_AVAILABLE = hasattr(os, "fork")
+pytestmark = [pytest.mark.skipif(not MSL4_AVAILABLE, reason="MSL-4.0.x submodule not initialized")]
+if _FORK_AVAILABLE:
+    pytestmark.append(pytest.mark.forked)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _warn_if_unforked():
+    """Point users at the bounded CLI when fork (hence per-test isolation) is absent."""
+    if not _FORK_AVAILABLE:
+        warnings.warn(
+            "MSL tests run in-process without fork: memory grows across models. "
+            "For bounded memory, run: python test/msl_examples_test.py -j N",
+            stacklevel=2,
+        )
 
 
 # Use scope="session" to reuse one tree (should be faster, but currently too memory-hungry)
 @pytest.fixture(scope="function")
 def msl_tree():
-    return parser.modelicapath_to_tree([MSL4_BASE_DIR])
+    yield parser.modelicapath_to_tree([MSL4_BASE_DIR])
+    # Flattening builds large cyclic InstanceClass graphs that reference counting
+    # alone can't reclaim. Force a collection between models so xdist workers don't
+    # accumulate multiple GB of cyclic garbage (mirrors gc.collect() in _process_one).
+    gc.collect()
 
 
 @pytest.mark.msl
@@ -108,27 +134,30 @@ def _worker_init(
         _worker_tree = parser.modelicapath_to_tree([msl4_base_dir])
 
 
-def _vsz_mb() -> float:
-    """Current virtual memory size in MB."""
-    if sys.platform == "linux":
-        with open("/proc/self/status") as f:
-            for line in f:
-                if line.startswith("VmSize:"):
-                    return int(line.split()[1]) / 1024.0
-        return 0.0
-    # macOS/BSD: ps -o vsz gives current VSZ in kB
-    out = subprocess.check_output(["ps", "-o", "vsz=", "-p", str(os.getpid())])
-    return int(out.strip()) / 1024.0
+def _peak_rss_mb() -> float:
+    """Process peak resident set size in MB.
+
+    ru_maxrss is a process-lifetime high-water mark, so this is per-model only
+    when the process is short-lived: the parallel non-reuse-tree path recycles
+    each worker after one model (maxtasksperchild=1). In serial mode or with
+    --reuse-tree the process is long-lived and the peak spans many models.
+    """
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    # Linux reports ru_maxrss in kB; macOS/BSD reports bytes.
+    return peak / 1024.0 if sys.platform == "linux" else peak / 1024.0 / 1024.0
 
 
 def _process_one(model_name: str) -> tuple:
-    """Process one model; return (status, message, elapsed_s, delta_vsz_mb)."""
+    """Process one model; return (status, message, elapsed_s, peak_rss_mb).
+
+    peak_rss_mb is the whole process's peak RSS. With maxtasksperchild=1 each
+    worker handles one model, so the peak reflects the tree parse plus that
+    model; heavy models read above the ~constant tree baseline.
+    """
     verb = "translating" if _translator == "casadi" else "flattening"
     worker_tree = _worker_tree
     if worker_tree is None:
         worker_tree = parser.modelicapath_to_tree([_msl4_base_dir])  # type: ignore[list-item]
-    gc.collect()
-    vsz_before = _vsz_mb()
     t0 = time.perf_counter()
     try:
         if _translator == "casadi":
@@ -142,16 +171,16 @@ def _process_one(model_name: str) -> tuple:
                 model.check_balanced()
             model.simplify(opts)
             model._post_checks()
-            name = model_name
         else:
-            flat_instance = tree.flatten_class(worker_tree, model_name)
-            name = flat_instance.name
+            tree.flatten_class(worker_tree, model_name)
         elapsed = time.perf_counter() - t0
-        delta_vsz = _vsz_mb() - vsz_before
-        return ("success", f"Success {verb} {name}", elapsed, delta_vsz)
+        peak_rss = _peak_rss_mb()
+        # Report the fully qualified model path (model_name) rather than the
+        # flattened instance's short name (e.g. "PID_Controller").
+        return ("success", f"Success {verb} {model_name}", elapsed, peak_rss)
     except parser.ModelicaSyntaxError as exc:
         elapsed = time.perf_counter() - t0
-        delta_vsz = _vsz_mb() - vsz_before
+        peak_rss = _peak_rss_mb()
         import io
 
         buf = io.StringIO()
@@ -160,32 +189,34 @@ def _process_one(model_name: str) -> tuple:
             "error",
             f"Error parsing (syntax error) {model_name}:\n{buf.getvalue()}",
             elapsed,
-            delta_vsz,
+            peak_rss,
         )
     except NotImplementedError as exc:
         elapsed = time.perf_counter() - t0
-        delta_vsz = _vsz_mb() - vsz_before
+        peak_rss = _peak_rss_mb()
         return (
             "error",
             f"Error parsing (parser error) {model_name}: {exc}",
             elapsed,
-            delta_vsz,
+            peak_rss,
         )
     except tree.ModelicaError as exc:
         elapsed = time.perf_counter() - t0
-        delta_vsz = _vsz_mb() - vsz_before
-        return ("error", f"Error {verb} {model_name}: {exc}", elapsed, delta_vsz)
+        peak_rss = _peak_rss_mb()
+        return ("error", f"Error {verb} {model_name}: {exc}", elapsed, peak_rss)
     except Exception:
         elapsed = time.perf_counter() - t0
-        delta_vsz = _vsz_mb() - vsz_before
+        peak_rss = _peak_rss_mb()
         tb = traceback.format_exc()
-        return ("error", f"Error {verb} {model_name}:\n{tb}", elapsed, delta_vsz)
+        return ("error", f"Error {verb} {model_name}:\n{tb}", elapsed, peak_rss)
 
 
 def _default_jobs() -> int:
-    # multiprocessing not helpful currently due to excessive virtual memory used
-    # return max(1, (os.cpu_count() or 1) * 3 // 4)
-    return 1
+    # Parallel by default now that per-worker recycling bounds memory; peak scales
+    # with the worker count (one model per worker). Leave a quarter of the CPUs free
+    # for other work, matching the xdist policy in conftest. Pass -j 1 for a serial
+    # in-process run when reproducing ordering-dependent bugs.
+    return max(1, (os.cpu_count() or 1) * 3 // 4)
 
 
 def process_every_MSL_example(
@@ -209,19 +240,24 @@ def process_every_MSL_example(
         _worker_init(MSL4_BASE_DIR, reuse_tree, translator, options)
         results = map(_process_one, model_names)
     else:
+        # maxtasksperchild=1 recycles each worker after one model, returning its
+        # memory to the OS — the cross-platform (spawn or fork) equivalent of the
+        # pytest --forked path. --reuse-tree opts out of recycling to keep the parsed
+        # tree warm across models, trading memory for speed as documented.
         pool = Pool(
             processes=jobs,
             initializer=_worker_init,
             initargs=[MSL4_BASE_DIR, reuse_tree, translator, options],
+            maxtasksperchild=None if reuse_tree else 1,
         )
         results = pool.imap_unordered(_process_one, model_names)
 
     total_models = len(model_names)
     done = 0
     try:
-        for status, message, elapsed, delta_vsz in results:
+        for status, message, elapsed, peak_rss in results:
             done += 1
-            suffix = f"  [{elapsed:.2f}s {delta_vsz:+.0f}MB]"
+            suffix = f"  [{elapsed:.2f}s {peak_rss:.0f}MB]"
             print(message + suffix, flush=True)
             print(f"[{done}/{total_models}]", end="\r", file=sys.stderr, flush=True)
             if status == "success":

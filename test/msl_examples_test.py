@@ -33,14 +33,53 @@ KNOWN_FAILURES = {}
 # ---------------------------------------------------------------------------
 
 
+def _inline_example_models(pkg_mo: Path, root_index: int) -> list[str]:
+    """Return qualified names of model/block definitions that are direct children
+    of any ``package Examples`` block defined inline inside *pkg_mo*, at any
+    nesting depth.  Modelica string literals are stripped first so that
+    documentation that mentions ``package Examples`` is not mistaken for code."""
+    import re
+
+    content = re.sub(r'"(?:[^"\\]|\\.)*"', '""', pkg_mo.read_text(), flags=re.DOTALL)
+
+    stack: list[tuple[str, str]] = []  # (kind, name)
+    results: list[str] = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        m = re.match(
+            r"^(package|model|block|class|record|connector|function|type)\s+(\w+)", stripped
+        )
+        if m:
+            kind, name = m.group(1), m.group(2)
+            depth = len(stack)
+            stack.append((kind, name))
+            if kind in ("model", "block"):
+                # Walk upward for the nearest enclosing 'package Examples'.
+                for i in range(depth - 1, -1, -1):
+                    if stack[i] == ("package", "Examples"):
+                        if depth == i + 1:  # direct child only
+                            # depth-0 entry mirrors the file-path package; skip it.
+                            mid = [stack[j][1] for j in range(1, i)]
+                            prefix = list(pkg_mo.parts[root_index:-1])
+                            results.append(".".join(prefix + mid + ["Examples", name]))
+                        break
+        m_end = re.match(r"^end\s+(\w+)\s*;", stripped)
+        if m_end and stack and stack[-1][1] == m_end.group(1):
+            stack.pop()
+    return results
+
+
 def _discover_model_names():
     msl_path = Path(MSL4_BASE_DIR) / "Modelica"
     root_index = len(msl_path.parts) - 1
-    return sorted(
+    names: set[str] = {
         ".".join(p.parts[root_index:-1] + (p.stem,))
         for p in msl_path.glob("**/Examples/**/*.mo")
         if p.name != "package.mo"
-    )
+    }
+    for pkg_mo in msl_path.rglob("package.mo"):
+        names.update(_inline_example_models(pkg_mo, root_index))
+    return sorted(names)
 
 
 def _build_params():

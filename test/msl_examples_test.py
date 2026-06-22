@@ -222,6 +222,7 @@ def _default_jobs() -> int:
 def process_every_MSL_example(
     jobs: int = 1,
     filters: list | None = None,
+    omits: list | None = None,
     reuse_tree: bool = False,
     translator: str | None = None,
     options: dict | None = None,
@@ -229,6 +230,8 @@ def process_every_MSL_example(
     model_names = _discover_model_names()
     if filters:
         model_names = [n for n in model_names if any(f in n for f in filters)]
+    if omits:
+        model_names = [n for n in model_names if not any(o in n for o in omits)]
 
     num_success = 0
     num_error = 0
@@ -298,6 +301,14 @@ if __name__ == "__main__":
         help="only run models whose name contains PATTERN (repeatable, OR logic)",
     )
     ap.add_argument(
+        "-o",
+        "--omit",
+        dest="omits",
+        action="append",
+        metavar="PATTERN",
+        help="skip models whose name contains PATTERN (repeatable, OR logic; applied after --filter)",
+    )
+    ap.add_argument(
         "--reuse-tree",
         action="store_true",
         default=False,
@@ -333,6 +344,7 @@ if __name__ == "__main__":
     process_every_MSL_example(
         jobs=args.jobs,
         filters=args.filters,
+        omits=args.omits,
         reuse_tree=args.reuse_tree,
         translator=args.translator,
         options=cli_options,

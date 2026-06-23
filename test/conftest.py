@@ -3,7 +3,13 @@
 import os
 import sys
 
-import pytest
+import pytest  # type: ignore[import-untyped]
+
+# Exclude the MSL test file from normal collection: it parses the entire MSL
+# library at import time to build parametrize params, which adds several seconds
+# to every pytest run even when MSL tests are deselected.  Run them explicitly:
+#   pytest test/msl_examples_test.py
+collect_ignore = [os.path.join(os.path.dirname(__file__), "msl_examples_test.py")]
 
 # Ratio of the total os.cpu_count() to use for testing
 XDIST_CPU_RATIO = 3 / 4

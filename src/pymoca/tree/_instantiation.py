@@ -441,7 +441,7 @@ def _check_extends_rules(
 
     extends_builtin = set()
     extends_other = set()
-    for ref_tuple, _partial in zip(extends_refs, extends_list):
+    for i, (ref_tuple, _partial) in enumerate(zip(extends_refs, extends_list)):
         composite_name = ".".join(ref_tuple)
         if len(ref_tuple) == 1 and ref_tuple[0] in InstanceTree.BUILTIN_TYPES:
             extends_builtin.add(ref_tuple[0])
@@ -454,7 +454,11 @@ def _check_extends_rules(
         # subsequent components are resolved relative to the preceding component,
         # so inherited symbols cannot shadow them (MLS §5.3.2).
         first_ident = ref_tuple[0]
-        for other_class in extends_list:
+        for j, other_class in enumerate(extends_list):
+            if j == i:
+                # Don't check the first identifier against the class it names — only
+                # against names inherited from the OTHER extends clauses (MLS §7.1.4).
+                continue
             other_ast_ref = other_class.ast_ref
             assert isinstance(other_ast_ref, ast.Class)
             other_names = {

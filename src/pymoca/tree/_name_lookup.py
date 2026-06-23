@@ -717,6 +717,16 @@ def _get_common_parent(class_: ast.Class, name: str) -> tuple[ast.Class | None, 
     for _ in range(len(class_parts) - common_count):
         assert parent.parent is not None, "Class tree does not have enough parent levels"
         parent = parent.parent
+    # If the common ancestor is an instance-tree stub (e.g. a branch created with
+    # update_parent_instance=False whose state was synced via _instantiate_class but
+    # whose classes dict was never fully populated), substitute the authoritative
+    # instance stored in parent_instance.classes so that sub-package lookups succeed.
+    if isinstance(parent, ast.InstanceClass) and parent.name is not None:
+        pi = parent.parent_instance
+        if pi is not None:
+            real = pi.classes.get(parent.name)
+            if real is not None and real is not parent:
+                parent = real
     child_names = name_parts[common_count:]
     return parent, ".".join(child_names)
 

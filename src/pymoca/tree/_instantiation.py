@@ -976,6 +976,8 @@ def _instantiate_partially(
             final=element.final,
             enumeration=element.enumeration,
         )
+        # Imports available immediately so enclosing-scope lookup resolves imported types.
+        instance.imports.update(ast_ref.imports)
         if update_parent_instance:
             parent_instance.classes[element.name] = instance
     else:
@@ -1376,7 +1378,6 @@ def _copy_class_contents(
     """Shallow copy of references from original to new class (excluding equations)"""
     from_class = to_class.ast_ref
     assert isinstance(from_class, ast.Class)
-    to_class.imports.update(from_class.imports)
     if copy_extends:
         to_class.extends += from_class.extends  # type: ignore[attr-defined]
     # Equations/statements already copied by _copy_equations_contents

@@ -398,10 +398,12 @@ def test_error_extends_class_also_extended_name_simple():
             instance = tree.instantiate(ast_tree, "C")  # noqa: F841
 
 
-def test_error_extends_class_also_extended_name_of_self():
+def test_extends_class_name_matches_own_member():
     """
-    Check that we are not allowed to inherit from `model A`, because a
-    symbol with the same name is inherited from `model A`.
+    Extending `model A` where A has a member named `A` is valid: the
+    extends-name lookup uses search_inherited=False, so the inherited symbol
+    cannot shadow the class name during resolution.  Only cross-contamination
+    between *different* extends clauses is prohibited (MLS §5.6.1).
     """
     txt = """
     model A
@@ -415,12 +417,8 @@ def test_error_extends_class_also_extended_name_of_self():
     """
 
     ast_tree = parser.parse(txt)
-
-    with pytest.raises(
-        tree.ModelicaSemanticError,
-        match="Cannot extend 'C' with 'A'; 'A' also exists in names inherited from 'A'",
-    ):
-        instance = tree.instantiate(ast_tree, "C")  # noqa: F841
+    instance = tree.instantiate(ast_tree, "C")
+    assert instance is not None
 
 
 def test_error_extends_class_also_extended_name_nested():

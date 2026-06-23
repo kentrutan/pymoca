@@ -3,9 +3,11 @@
 Tests for tree.flatten_instance() / tree.flatten().
 """
 
+import os
 import pickle
 
 from conftest_parse import (
+    MSL4_DIR,
     _flush,
     parse_and_flatten_model,
     parse_and_instantiate_model,
@@ -1134,6 +1136,27 @@ def test_div_builtin_in_dimension():
     flat = tree.flatten_instance(instance)
     # buf is a 2-element array: div(2,2)+1 = 2; flattened as b.buf[1] and b.buf[2]
     assert "b.buf[1]" in flat.symbols or "b.buf" in flat.symbols
+
+
+@pytest.mark.msl
+@pytest.mark.skipif(
+    not os.path.isfile(os.path.join(MSL4_DIR, "Modelica", "package.mo")),
+    reason="MSL-4.0.x submodule not present",
+)
+def test_idealgash2o_stale_stub_import():
+    """Flatten Modelica.Media.Examples.IdealGasH2O through a stale root stub (MLS 5.3).
+
+    Guards this commit's fix: Media.Common is fully instantiated while the root
+    Modelica package is still a partial stub, so the enclosing
+    ``import Modelica.Units.SI`` must resolve via the authoritative root instance
+    (else ``Type SI.Area of symbol AMIN not found``).  Not minimally reproducible
+    — it needs the real MSL Media hierarchy — so this is an ``msl``-marked test,
+    deselected from the default fast run.  Run it with ``pytest -m msl``.
+    """
+    root = parser.modelicapath_to_tree([MSL4_DIR])
+    flat = tree.flatten_class(root, "Modelica.Media.Examples.IdealGasH2O")
+    assert "state.p" in flat.symbols
+    assert "smoothState.T" in flat.symbols
 
 
 if __name__ == "__main__":

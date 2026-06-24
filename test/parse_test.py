@@ -335,7 +335,7 @@ def test_syntax_error():
     # Syntax error in a file
     with pytest.raises(
         parser.ModelicaSyntaxError,
-        match=r"mismatched input '.' expecting '=' \(RedeclareNestedClass.mo.fail_parse, line 21\)",
+        match=r"missing '=' at '\.' \(RedeclareNestedClass.mo.fail_parse, line 21\)",
     ) as exc_info:
         _ = parse_model_files("RedeclareNestedClass.mo.fail_parse")
 
@@ -345,7 +345,7 @@ def test_syntax_error():
     expected_regex = (
         r".*RedeclareNestedClass\.mo\.fail_parse:21:48:",
         r"  extends D\(c.z.x\(nominal=2\), redeclare model C\.B=F\);",
-        r"ModelicaSyntaxError: mismatched input '\.' expecting '='",
+        r"ModelicaSyntaxError: missing '=' at '\.'",
     )
     expected_regex = "\n".join(expected_regex)
     assert re.search(expected_regex, error_text.getvalue())

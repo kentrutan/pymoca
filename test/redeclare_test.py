@@ -272,7 +272,7 @@ def test_redeclare_nonreplaceable():
 
 
 def test_redeclare_nested():
-    with pytest.raises(parser.ModelicaSyntaxError, match="mismatched input '.' expecting '='"):
+    with pytest.raises(parser.ModelicaSyntaxError, match="missing '=' at '.'"):
         _ = parse_model_files("RedeclareNestedClass.mo.fail_parse")
 
 

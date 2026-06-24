@@ -468,7 +468,7 @@ function_call_args :
 
 // B.2.7.8 ------------------------------------------------
 function_arguments :
-    function_argument (',' function_argument | 'for' for_indices)*
+    function_argument (',' function_argument | 'for' for_indices)* (',' named_arguments)?
     | named_arguments
     ;
 

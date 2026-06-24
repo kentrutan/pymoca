@@ -165,7 +165,7 @@ type_specifier_element :
     ;
 
 type_specifier :
-    type_specifier_element ('.' type_specifier_element)*
+    '.'? type_specifier_element ('.' type_specifier_element)*
     ;
 
 // B.2.4.4 ------------------------------------------------
@@ -458,7 +458,7 @@ component_reference_element :
     ;
 
 component_reference :
-    component_reference_element ('.' component_reference_element)*
+    '.'? component_reference_element ('.' component_reference_element)*
     ;
 
 // B.2.7.7 ------------------------------------------------

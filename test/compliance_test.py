@@ -107,22 +107,16 @@ def discover_compliance_files(subdirectory):
 
 # Known failures: model_name -> xfail reason
 #
-# Global name syntax (leading dot .A.B.C) not yet in grammar
+# Global name lookup: leading-dot syntax is now in grammar but these still fail
 _GLOBAL_MODELS = [
     "ModelicaCompliance.Scoping.NameLookup.Global." + n
     for n in [
         "EncapsulatedGlobalLookup",
-        "EncapsulatedLookupClass",
-        "GlobalLookupEncapsulatedElement",
-        "GlobalLookupNonEncapsulatedElement",
         "GlobalPartialClass",
-        "LocalNameGlobalLookup",
-        "NonExistingGlobalName",
-        "NonPackageLikeClassLookup",
         "PackageLikeClassLookup",
     ]
 ]
-_GLOBAL_REASON = "Global name syntax (leading dot) not in grammar"
+_GLOBAL_REASON = "Global name lookup: semantic handling not yet implemented"
 
 # QualifiedImportConflict triggers parser duplicate-import error
 _IMPORT_CONFLICT = "ModelicaCompliance.Scoping.NameLookup.Imports.QualifiedImportConflict"

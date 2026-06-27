@@ -4,12 +4,13 @@ Test against Modelica name lookup rules
 """
 
 import os
+import pickle
 
 import pymoca.ast
 import pymoca.parser
 from pymoca.tree import NameLookupError, find_name, flatten, flatten_instance, instantiate
 
-import pytest
+import pytest  # type: ignore[import-untyped]
 
 MY_DIR = os.path.dirname(os.path.realpath(__file__))
 COMPLIANCE_DIR = os.path.join(MY_DIR, "libraries", "Modelica-Compliance", "ModelicaCompliance")
@@ -777,6 +778,40 @@ def test_unqualified_import():
         ast, "ModelicaCompliance.Scoping.NameLookup.Imports.UnqualifiedImport"
     )
     assert get_flat_symbol_value(flat, "b.a.x") == 1.0
+
+
+def test_unqualified_import_does_not_mutate_parsed_ast():
+    """Verify star-import lookup must not mutate the shared parsed AST.
+
+    The cache write only fires when the imported package is reached via the scope.root
+    fallback encountered when importing across two unrelated top-level packages.
+    """
+    txt = """
+    package Lib
+      package P
+        package Q
+          model A
+            Real x = 1.0;
+          end A;
+        end Q;
+      end P;
+    end Lib;
+
+    package Client
+      model B
+        import Lib.P.Q.*;
+        A a;
+      end B;
+    end Client;
+    """
+    ast_tree = pymoca.parser.parse(txt)
+    pickled_before = pickle.dumps(ast_tree)
+    found = lookup_composite_using_simple_only("Client.B.A", ast_tree)
+    assert found is not None
+    assert found.full_name == "Lib.P.Q.A"
+    assert (
+        pickle.dumps(ast_tree) == pickled_before
+    ), "star-import lookup mutated the shared parsed AST"
 
 
 @pytest.mark.skip("Unqualified import name lookup conflicts not implemented")

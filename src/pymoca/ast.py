@@ -9,10 +9,10 @@ import copy
 import json
 import math
 import sys
-from typing import Any
 from collections import OrderedDict
-from enum import Enum, IntEnum
+from enum import Enum
 from pathlib import Path
+from typing import Any
 
 
 class Visibility(Enum):
@@ -35,12 +35,6 @@ class Visibility(Enum):
 
     def __lt__(self, other):
         return self.value < other.value
-
-
-class InstantiationState(IntEnum):
-    NONE = 0  # Not yet instantiated
-    PARTIAL = 1  # Local classes/symbols/extends instantiated (step 2.1)
-    FULL = 2  # All steps done, symbols recursively instantiated
 
 
 nan = float("nan")
@@ -427,7 +421,7 @@ class Symbol(Node):
     def __init__(self, **kwargs):
         # pylint: disable=invalid-name
         self.name: str = ""
-        self.type: ComponentRef | InstanceClass = ComponentRef()
+        self.type: ComponentRef = ComponentRef()
         self.prefixes: list[str] = []
         self.replaceable: bool = False
         self.final: bool = False
@@ -488,8 +482,6 @@ class EnumerationLiteral(Symbol):
 def is_enumeration(obj: Any) -> bool:
     """Return True if *obj* is a Modelica enumeration type class (or instance)."""
     return getattr(obj, "enumeration", False)
-
-
 
 
 class ComponentClause(Node):
@@ -616,7 +608,7 @@ class ClassModificationArgument(Node):
         self.value: (  # type: ignore[assignment]
             ElementModification | ComponentClause | ShortClassDefinition
         ) = []  # type: ignore[assignment]
-        self.scope: Class | InstanceClass | None = None
+        self.scope: Class | None = None
         self.redeclare = False
         super().__init__(**kwargs)
 
@@ -639,7 +631,7 @@ class ExtendsClause(Node):
         self.component: ComponentRef | None = None
         self.class_modification: ClassModification | None = None
         self.visibility: Visibility = Visibility.PUBLIC
-        self.scope: Class | InstanceClass | None = None
+        self.scope: Class | None = None
         # True when created from `class extends X` syntax (MLS §7.3.1).
         # The base class X must be resolved in the inherited scope of the enclosing
         # class, not the local scope (which already contains the redeclaration).
@@ -658,7 +650,8 @@ class Class(Node):
     def __init__(self, **kwargs):
         self.name: str | None = None
         self.imports: OrderedDict[str, ImportClause | ComponentRef] = OrderedDict()
-        self.extends: list[ExtendsClause | InstanceClass] = []
+        # Name-only here; instantiation resolves each to a class later.
+        self.extends: list[ExtendsClause] = []
         self.encapsulated: bool = False
         self.partial: bool = False
         self.final: bool = False
@@ -829,121 +822,6 @@ def element_full_reference(element: Class | Symbol) -> ComponentRef:
     """Return fully-qualified component reference to element"""
     name_tuple = element_name_tuple(element)
     return ComponentRef.from_tuple(name_tuple) if name_tuple else ComponentRef()
-
-
-class InstanceElement:
-    """
-    Base class for instance elements (symbols, classes, and "unnamed" extends classes)
-
-    This is the "partially instantiated element" in spec 3.5 section 5.6.1.4.
-    Includes name for lookup and type for redeclares during instantiation.
-    We include the latter two items that are also in sub-classes because we
-    want to allow use of this stand-alone as a "partial instance" for memory
-    efficiency and speed.
-    """
-
-    def __init__(
-        self,
-        ast_ref: Class | Symbol | None = None,
-        modification_environment: ClassModification | None = None,
-        parent_instance: InstanceClass | None = None,
-        instantiation_state: InstantiationState = InstantiationState.NONE,
-        **kwargs,
-    ):
-        """ast_ref is a reference to the AST node where this instance is defined.
-        All named keyword arguments optional for backward compatibility."""
-
-        # super().__init__() is only needed if 1st in method resolution order
-        super().__init__(**kwargs)
-
-        self.ast_ref = ast_ref
-
-        if modification_environment is not None:
-            self.modification_environment = modification_environment
-        else:
-            self.modification_environment = ClassModification()
-
-        if "name" in kwargs:
-            self.name = kwargs["name"]
-        elif ast_ref is not None:
-            self.name = ast_ref.name
-        else:
-            self.name = ""  # The default in Symbol
-
-        if "type" in kwargs:
-            self.type = kwargs["type"]
-        elif ast_ref is not None:
-            self.type = ast_ref.type
-        else:
-            self.type = ComponentRef()  # The default in Symbol
-
-        self.instantiation_state = instantiation_state
-        self.parent_instance = parent_instance
-
-    @property
-    def full_instance_name(self) -> str:
-        """Return fully-qualified instance name of this element"""
-        return element_instance_full_name(self)
-
-    def clone(self):
-        """Make a copy of self with copy.copy of lists, dicts, and ClassModifications"""
-        new_self = copy.copy(self)
-        for key, value in new_self.__dict__.items():
-            if isinstance(value, (list, dict, ClassModification)):
-                new_self.__dict__[key] = copy.copy(value)
-            if isinstance(value, ClassModification):
-                new_self.__dict__[key].arguments = copy.copy(value.arguments)
-        return new_self
-
-    def __repr__(self):
-        return f"name={self.name!r}, ast_ref={self.ast_ref!r}, modification_environment={self.modification_environment!r}"
-
-
-def element_instance_name_tuple(element: InstanceElement) -> tuple[str, ...]:
-    """Return fully-qualified instance name of an element as a tuple of names"""
-    names = []
-    current = element
-    while hasattr(current, "parent_instance"):
-        assert current.parent_instance is not None
-        # Skip unnamed extends instances AND type class instances
-        # (type classes are InstanceClass nodes whose parent is an InstanceSymbol;
-        # per MLS 5.6.2 the symbol's component name is used, not the class name)
-        if current.name and not (
-            isinstance(current, InstanceClass)
-            and isinstance(current.parent_instance, InstanceSymbol)
-        ):
-            names.append(current.name)
-        current = current.parent_instance
-    return tuple(reversed(names))
-
-
-def element_instance_full_name(element: InstanceElement) -> str:
-    """Return fully-qualified instance name of an element"""
-    return ".".join(element_instance_name_tuple(element))
-
-
-class InstanceClass(InstanceElement, Class):
-    """
-    Class used during instantiation and flattening of the model.
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def __repr__(self):
-        return f"{type(self).__name__}({super().__repr__()!s})"
-
-
-class InstanceSymbol(InstanceElement, Symbol):
-    """
-    Symbol used during instantiation and flattening of the model.
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def __repr__(self):
-        return f"{type(self).__name__}({super().__repr__()!s})"
 
 
 class Tree(Class):

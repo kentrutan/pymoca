@@ -5,17 +5,16 @@ Tools for tree walking and visiting etc.
 This package re-exports all public symbols for backward compatibility.
 The implementation is split across submodules:
 
+  instance.py        — InstantiationState, Instance{Element,Class,Symbol,Tree} (MLS 5.6.1)
   _listener.py       — TreeListener, TreeWalker
   _name_lookup.py    — find_name and helpers (MLS 5.3, other details throughout Chapter 5)
-  _instantiation.py  — instantiate, InstanceTree (MLS 5.6.1)
+  _instantiation.py  — instantiate (MLS 5.6.1)
   _flattening.py     — flatten_instance and helpers (MLS 5.6.2)
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-
-from .. import ast
 
 
 class ModelicaError(Exception):
@@ -57,7 +56,7 @@ class RecursionGuard:
     Mutable and shared across a single instantiation/lookup operation.
     """
 
-    current_instances: set[ast.InstanceClass] = field(default_factory=set)
+    current_instances: set[InstanceClass] = field(default_factory=set)
     current_extends: set = field(default_factory=set)
     # Memoization cache for _find_inherited results.
     # Key: (name_str, id(scope)) — stable within a single flatten() call because
@@ -90,6 +89,13 @@ class LookupOptions:
     _searched_extends: set | None = field(default=None, compare=False, hash=False, repr=False)
 
 
+from .instance import (  # noqa: E402,F401,I100
+    InstanceClass,
+    InstanceElement,
+    InstanceSymbol,
+    InstanceTree,
+    InstantiationState,
+)
 from ._listener import (  # noqa: E402,F401,I100,I202
     TreeListener,
     TreeWalker,
@@ -100,7 +106,6 @@ from ._flattening import (  # noqa: E402,F401,I100
     flatten_to_tree,
 )
 from ._instantiation import (  # noqa: E402,F401,I100
-    InstanceTree,
     instantiate,
 )
 from ._name_lookup import (  # noqa: E402,F401,I100

@@ -44,7 +44,7 @@ def test_instantiation_modification_scope_instance_class():
     assert "t" in instance.extends[0].symbols, "t not found in instance"
     t = instance.extends[0].symbols["t"]
     for mod in t.type.symbols["Integer"].modification_environment.arguments:
-        assert isinstance(mod.scope, ast.InstanceClass), "scope not InstanceClass"
+        assert isinstance(mod.scope, tree.InstanceClass), "scope not InstanceClass"
 
 
 def test_instantiation_modification_scope_spec_example():
@@ -64,14 +64,14 @@ def test_instantiation_modification_scope_spec_example():
     # b, e, g have no instance override; Load's original R=R is preserved through the redeclare
     # so they resolve to the outer R from B (per OMC 1.25.0 reference output)
     for name in ("b.R", "e.R", "g.R"):
-        assert isinstance(flat.symbols[name].value, ast.InstanceSymbol), f"{name} should be ref"
+        assert isinstance(flat.symbols[name].value, tree.InstanceSymbol), f"{name} should be ref"
 
     # d.R: LoadError has extends Resistor(R=R) — self-referencing in Resistor scope
-    assert isinstance(flat.symbols["d.R"].value, ast.InstanceSymbol)
+    assert isinstance(flat.symbols["d.R"].value, tree.InstanceSymbol)
 
     # f.R, h.R, i.R: InstanceSymbol references (parameter refs)
     for name in ("f.R", "h.R", "i.R"):
-        assert isinstance(flat.symbols[name].value, ast.InstanceSymbol), f"{name} should be ref"
+        assert isinstance(flat.symbols[name].value, tree.InstanceSymbol), f"{name} should be ref"
 
 
 def test_instantiation_tree():
@@ -283,7 +283,7 @@ def test_inheritance_instantiation():
     assert "p" in a_extends_D.symbols
     p = a_extends_D.symbols["p"]
     assert "parameter" in p.prefixes
-    assert isinstance(p.type, ast.InstanceClass), "b.a.p not properly instantiated"
+    assert isinstance(p.type, tree.InstanceClass), "b.a.p not properly instantiated"
     assert p.type.name == "E"
     assert len(p.type.extends) == 1, "b.a.p extends not properly instantiated"
     assert "Integer" in p.type.extends[0].symbols, "b.a.p incorrect type E scope"

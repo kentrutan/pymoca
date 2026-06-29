@@ -50,7 +50,7 @@ def check_instance_tree_is_all_instances(instance):
     class InstanceTreeWalker(tree.TreeWalker):
         def skip_child(self, node: ast.Node, child_name: str) -> bool:
             if (
-                isinstance(node, (ast.InstanceElement, tree.InstanceTree))
+                isinstance(node, (tree.InstanceElement, tree.InstanceTree))
                 and child_name == "ast_ref"
             ):
                 return True
@@ -65,7 +65,7 @@ def check_instance_tree_is_all_instances(instance):
 
 def get_modifiers_by_name(symbol, name):
     """Get the modifiers given attribute name of given symbol instance"""
-    assert isinstance(symbol, ast.InstanceSymbol), "Requires a symbol instance"
+    assert isinstance(symbol, tree.InstanceSymbol), "Requires a symbol instance"
     arguments = []
     if symbol.type.name in ast.Tree.BUILTIN_TYPES:
         if isinstance(symbol.type, ast.ComponentRef):

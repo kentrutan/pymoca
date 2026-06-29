@@ -395,7 +395,7 @@ def test_nested_modification_arg_scope_resolves_param():
     flat = parse_and_flatten_model("NestedModificationArgScope.mo", "NestedModificationArgScope")
     assert flat.symbols["m.k"].value == 2.0
     assert isinstance(
-        flat.symbols["m.k"].unit, ast.InstanceSymbol
+        flat.symbols["m.k"].unit, tree.InstanceSymbol
     ), "unit sub-attr must resolve to InstanceSymbol for p_unit, not stay as raw ComponentRef"
 
 
@@ -411,12 +411,12 @@ def test_flatten_to_tree_bouncing_ball():
     # Model class is ast.Class, not InstanceClass
     model = result.classes["BouncingBall"]
     assert isinstance(model, ast.Class)
-    assert not isinstance(model, ast.InstanceClass)
+    assert not isinstance(model, tree.InstanceClass)
 
     # All symbols are ast.Symbol, not InstanceSymbol
     for name, sym in model.symbols.items():
         assert isinstance(sym, ast.Symbol), f"{name} is {type(sym)}"
-        assert not isinstance(sym, ast.InstanceSymbol), f"{name} is InstanceSymbol"
+        assert not isinstance(sym, tree.InstanceSymbol), f"{name} is InstanceSymbol"
         # All .type fields are ComponentRef, not InstanceClass
         assert isinstance(sym.type, ast.ComponentRef), f"{name}.type is {type(sym.type)}"
 
@@ -436,14 +436,14 @@ def test_flatten_to_tree_spring_system():
 
     model = result.classes["Example.SpringSystem"]
     assert isinstance(model, ast.Class)
-    assert not isinstance(model, ast.InstanceClass)
+    assert not isinstance(model, tree.InstanceClass)
 
     # Nested component symbols present
     for name in ("spring.x", "spring.f", "damper.v", "damper.f", "damper.c"):
         assert name in model.symbols, f"Missing nested symbol: {name}"
         sym = model.symbols[name]
         assert isinstance(sym, ast.Symbol)
-        assert not isinstance(sym, ast.InstanceSymbol)
+        assert not isinstance(sym, tree.InstanceSymbol)
 
     # Equations collected
     assert len(model.equations) > 0

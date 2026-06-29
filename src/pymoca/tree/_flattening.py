@@ -2,7 +2,7 @@
 """
 Modelica flattening — MLS 5.6.2
 
-Entry: flatten_class(root, class_name) → ast.InstanceClass (new pipeline, steps 1+2)
+Entry: flatten_class(root, class_name) → InstanceClass (new pipeline, steps 1+2)
        flatten_instance(instance) → _flatten_instance()
 Adapter: flatten_to_tree(root, class_name) → ast.Tree (for backend compatibility)
 """
@@ -20,21 +20,28 @@ import numpy as np
 
 from . import LookupOptions, ModelicaSemanticError, NameLookupError, RecursionGuard
 from ._instantiation import (
-    InstanceTree,
     _get_lexical_parent_instance,
     _instantiate_class,
     instantiate,
 )
 from ._listener import TreeListener, TreeWalker, logger
 from ._name_lookup import _find_name
+from .instance import (
+    InstanceClass,
+    InstanceElement,
+    InstanceSymbol,
+    InstanceTree,
+    InstantiationState,
+    element_instance_name_tuple,
+)
 from .. import ast
 
 
 def flatten_instance(
-    instance: ast.InstanceClass,
+    instance: InstanceClass,
     keep_connectors: bool = False,
     evaluate_parameters: bool = False,
-) -> ast.InstanceClass:
+) -> InstanceClass:
     """Flatten an instance class
 
     :param instance: The instance class to flatten
@@ -42,7 +49,7 @@ def flatten_instance(
     :param evaluate_parameters: When True, fold parameter values to ast.Primary literals
     :return: The flattened class
     """
-    if not isinstance(instance, ast.InstanceClass):
+    if not isinstance(instance, InstanceClass):
         raise TypeError(f"Expected InstanceClass, got {type(instance)}")
 
     opts = LookupOptions(evaluate_parameters=evaluate_parameters)
@@ -61,8 +68,8 @@ def flatten_instance(
     return flat_class
 
 
-def _create_partial_flat_instance(instance: ast.InstanceClass) -> ast.InstanceClass:
-    flat_class = ast.InstanceClass(
+def _create_partial_flat_instance(instance: InstanceClass) -> InstanceClass:
+    flat_class = InstanceClass(
         name=_flatten_name(instance),
         comment=instance.comment,
         type=instance.type,
@@ -86,8 +93,8 @@ def _create_partial_flat_instance(instance: ast.InstanceClass) -> ast.InstanceCl
 
 
 def _flatten_instance(
-    instance: ast.InstanceClass,
-    flat_class: ast.InstanceClass,
+    instance: InstanceClass,
+    flat_class: InstanceClass,
     *,
     guard: RecursionGuard | None = None,
     opts: LookupOptions | None = None,
@@ -157,7 +164,7 @@ def _flatten_instance(
         opts = LookupOptions()
 
     # 1.1–1.6 Process local symbols per MLS 5.6.2
-    for name, symbol in list(cast(dict[str, ast.InstanceSymbol], instance.symbols).items()):
+    for name, symbol in list(cast(dict[str, InstanceSymbol], instance.symbols).items()):
 
         assert isinstance(name, str)
         # Steps A-D
@@ -167,7 +174,7 @@ def _flatten_instance(
             flat_name = prefix + "." + name
         else:
             flat_name = name
-        flat_symbol: ast.InstanceSymbol = copy.copy(symbol)
+        flat_symbol: InstanceSymbol = copy.copy(symbol)
         # dimensions inner lists are shared with the parsed AST via
         # _copy_symbol_contents; _resolve_dimensions mutates dim_list[i] in-place,
         # so make fresh inner lists to avoid corrupting the shared parsed AST.
@@ -181,14 +188,12 @@ def _flatten_instance(
         if symbol.type.name in InstanceTree.BUILTIN_TYPES:
             flat_symbol.name = flat_name
             flat_class.symbols[flat_name] = flat_symbol
-        elif isinstance(flat_symbol.type, ast.InstanceClass) and ast.is_enumeration(
-            flat_symbol.type
-        ):
+        elif isinstance(flat_symbol.type, InstanceClass) and ast.is_enumeration(flat_symbol.type):
             # Enumeration-typed symbols are simple leaf types (MLS 4.8.5), treated
             # symmetrically with builtin types: place directly in the flat namespace.
             flat_symbol.name = flat_name
             flat_class.symbols[flat_name] = flat_symbol
-        elif not isinstance(flat_symbol.type, ast.InstanceClass):
+        elif not isinstance(flat_symbol.type, InstanceClass):
             # scope==instance (declaring class) already differs from flat_class (root); no
             # derived-vs-base asymmetry here, so name_flat_class is not needed.
             resolved = _resolve_name(
@@ -198,7 +203,7 @@ def _flatten_instance(
                 guard=guard,
                 opts=opts,
             )
-            is_class = isinstance(resolved, ast.InstanceClass)
+            is_class = isinstance(resolved, InstanceClass)
             flat_symbol.type = resolved if is_class else resolved.parent  # type: ignore[assignment]
             # If the resolved type is an enumeration, add the symbol here now that
             # the type is known (covers the ComponentRef → InstanceClass resolution path).
@@ -236,7 +241,7 @@ def _flatten_instance(
         else:
             # 1.6 Recursively "handle" non-simple types
             symbols_before_recursive = set(flat_class.symbols.keys())
-            assert isinstance(flat_symbol.type, ast.InstanceClass)
+            assert isinstance(flat_symbol.type, InstanceClass)
             _flatten_instance(
                 flat_symbol.type,
                 flat_class,
@@ -273,7 +278,7 @@ def _flatten_instance(
     # Extends must be processed before equations (step 1.7) so that inherited symbols
     # are present when equations of the current class are resolved.
     for extends in instance.extends:  # type: ignore[attr-defined]
-        if not isinstance(extends, ast.InstanceClass):
+        if not isinstance(extends, InstanceClass):
             continue
         _flatten_instance(
             extends,
@@ -290,15 +295,15 @@ def _flatten_instance(
     # Steps 1.9, 2, and 3 are done outside the recursion in the caller
 
 
-def _evaluate_conditional_declarations(symbol: ast.InstanceSymbol, parent: ast.Class):
+def _evaluate_conditional_declarations(symbol: InstanceSymbol, parent: ast.Class):
     # TODO: 1.2 Evaluate the conditional declaration expression
     pass
 
 
 def _resolve_dimensions(
-    symbol: ast.InstanceSymbol,
-    instance: ast.InstanceClass,
-    flat_class: ast.InstanceClass,
+    symbol: InstanceSymbol,
+    instance: InstanceClass,
+    flat_class: InstanceClass,
     *,
     guard: RecursionGuard,
     opts: LookupOptions,
@@ -322,7 +327,7 @@ def _resolve_dimensions(
                     guard=guard,
                     opts=opts,
                 )
-                if isinstance(resolved, ast.InstanceSymbol) and isinstance(
+                if isinstance(resolved, InstanceSymbol) and isinstance(
                     resolved.value, (int, float)
                 ):
                     dim_list[i] = ast.Primary(value=int(resolved.value))
@@ -342,8 +347,8 @@ def _resolve_dimensions(
 
 
 def _resolve_modifications(
-    symbol: ast.InstanceSymbol,
-    flat_class: ast.InstanceClass,
+    symbol: InstanceSymbol,
+    flat_class: InstanceClass,
     *,
     guard: RecursionGuard,
     opts: LookupOptions,
@@ -368,7 +373,7 @@ def _resolve_modifications(
     else:
         assert symbol.type.name is not None
         modification_environment = cast(
-            ast.InstanceSymbol, symbol.type.symbols[symbol.type.name]
+            InstanceSymbol, symbol.type.symbols[symbol.type.name]
         ).modification_environment
 
     for arg in modification_environment.arguments:
@@ -387,10 +392,10 @@ def _resolve_modifications(
 
 
 def _resolve_modification_attribute(
-    symbol: ast.InstanceSymbol,
+    symbol: InstanceSymbol,
     arg: ast.ClassModificationArgument,
     *,
-    flat_class: ast.InstanceClass,
+    flat_class: InstanceClass,
     guard: RecursionGuard,
     opts: LookupOptions,
     functions: OrderedDict | None = None,
@@ -411,7 +416,7 @@ def _resolve_modification_attribute(
     if isinstance(value, ast.Primary):
         value = value.value
     elif isinstance(value, ast.ComponentRef):
-        assert isinstance(symbol.parent, ast.InstanceClass)
+        assert isinstance(symbol.parent, InstanceClass)
         # 'time' is a Modelica built-in variable (MLS §2.7); leave it as-is.
         if value.name == "time" and not value.child:
             pass
@@ -425,7 +430,7 @@ def _resolve_modification_attribute(
                 guard=guard,
                 opts=opts,
             )
-            value = cast(ast.InstanceSymbol, value)
+            value = cast(InstanceSymbol, value)
             const_val = _get_constant_value(value)
             if const_val is not None and isinstance(const_val, ast.Primary):
                 value = const_val.value
@@ -435,20 +440,16 @@ def _resolve_modification_attribute(
         # Without this, functions referenced only in modifications are lost.
         if functions is not None:
             _fn_scope = (
-                arg.scope if isinstance(arg.scope, ast.InstanceClass) else symbol.parent_instance
+                arg.scope if isinstance(arg.scope, InstanceClass) else symbol.parent_instance
             )
-            if isinstance(_fn_scope, ast.InstanceClass):
+            if isinstance(_fn_scope, InstanceClass):
                 func_resolver = _FunctionCallResolver(_fn_scope, functions)
                 walker = TreeWalker()
                 walker.walk(func_resolver, value)
     if isinstance(value, ast.Expression):
-        expr_scope = (
-            arg.scope if isinstance(arg.scope, ast.InstanceClass) else symbol.parent_instance
-        )
+        expr_scope = arg.scope if isinstance(arg.scope, InstanceClass) else symbol.parent_instance
         expr_flat_class = symbol.parent_instance
-        if isinstance(expr_scope, ast.InstanceClass) and isinstance(
-            expr_flat_class, ast.InstanceClass
-        ):
+        if isinstance(expr_scope, InstanceClass) and isinstance(expr_flat_class, InstanceClass):
             # Try to evaluate constant expressions (e.g. +1 → 1, -1.0 → -1.0);
             # keep the original Expression if evaluation fails (e.g. references
             # to non-constant variables or unsupported operators).
@@ -526,11 +527,11 @@ class ExpressionEvaluator(TreeListener):
 
     def __init__(
         self,
-        scope: ast.InstanceClass,
-        flat_class: ast.InstanceClass,
+        scope: InstanceClass,
+        flat_class: InstanceClass,
         guard: RecursionGuard,
         opts: LookupOptions,
-        name_flat_class: ast.InstanceClass | None = None,
+        name_flat_class: InstanceClass | None = None,
     ):
         self.scope = scope
         self.flat_class = flat_class
@@ -554,7 +555,7 @@ class ExpressionEvaluator(TreeListener):
                     opts=self.opts,
                     name_flat_class=self.name_flat_class,
                 )
-            if isinstance(operand, ast.InstanceSymbol):
+            if isinstance(operand, InstanceSymbol):
                 const_val = _get_constant_value(operand)
                 if const_val is not None and isinstance(const_val, ast.Primary):
                     operand = const_val
@@ -589,9 +590,9 @@ class ExpressionEvaluator(TreeListener):
 
 def _flatten_expression_crefs(
     expr: ast.Expression,
-    scope: ast.InstanceClass,
-    flat_class: ast.InstanceClass,
-    name_flat_class: ast.InstanceClass,
+    scope: InstanceClass,
+    flat_class: InstanceClass,
+    name_flat_class: InstanceClass,
     guard: RecursionGuard,
     opts: LookupOptions,
 ) -> ast.Expression:
@@ -608,9 +609,9 @@ def _flatten_expression_crefs(
 
 def _rewrite_expression_crefs(
     expr: ast.Expression,
-    scope: ast.InstanceClass,
-    flat_class: ast.InstanceClass,
-    name_flat_class: ast.InstanceClass,
+    scope: InstanceClass,
+    flat_class: InstanceClass,
+    name_flat_class: InstanceClass,
     guard: RecursionGuard,
     opts: LookupOptions,
 ) -> None:
@@ -636,12 +637,12 @@ def _rewrite_expression_crefs(
 
 def _resolve_expression(
     expr: ast.Expression,
-    scope: ast.InstanceClass,
-    flat_class: ast.InstanceClass,
+    scope: InstanceClass,
+    flat_class: InstanceClass,
     *,
     guard: RecursionGuard,
     opts: LookupOptions,
-    name_flat_class: ast.InstanceClass | None = None,
+    name_flat_class: InstanceClass | None = None,
 ) -> int | float | bool | str | None:
     """Calculate the given expression or return None if not possible"""
     assert isinstance(expr, ast.Expression)
@@ -666,7 +667,7 @@ class _EquationRefResolver(TreeListener):
     skip it and all its children.
     """
 
-    def __init__(self, flat_class: ast.InstanceClass, prefix: str):
+    def __init__(self, flat_class: InstanceClass, prefix: str):
         self.flat_class = flat_class
         self.prefix = prefix
         self.depth = 0
@@ -715,7 +716,7 @@ class _EquationRefResolver(TreeListener):
 class _FunctionCallResolver(TreeListener):
     """Discover function calls in equations/statements, resolve to fully-scoped names."""
 
-    def __init__(self, instance: ast.InstanceClass, functions: OrderedDict):
+    def __init__(self, instance: InstanceClass, functions: OrderedDict):
         self.instance = instance
         self.functions = functions
         super().__init__()
@@ -749,7 +750,7 @@ def _flatten_connect_ref(ref: ast.ComponentRef, prefix: str) -> None:
     ref.child = []
 
 
-def _is_inner_connector(ref: ast.ComponentRef, instance: ast.InstanceClass) -> bool:
+def _is_inner_connector(ref: ast.ComponentRef, instance: InstanceClass) -> bool:
     """Determine if a connect ref is 'inner' (belongs to a sub-component) per MLS 9.2.
 
     A connector is 'inner' if the first name in the ref resolves to a non-connector
@@ -760,11 +761,7 @@ def _is_inner_connector(ref: ast.ComponentRef, instance: ast.InstanceClass) -> b
     sym = instance.symbols.get(first_name)
     if sym is None:
         return False
-    if (
-        isinstance(sym.type, ast.InstanceClass)
-        and sym.type.type == "connector"
-        and len(ref.child) == 0
-    ):
+    if isinstance(sym.type, InstanceClass) and sym.type.type == "connector" and len(ref.child) == 0:
         # Bare connector name in this scope → outer
         return False
     # Component with sub-connector (or deeper path) → inner
@@ -772,8 +769,8 @@ def _is_inner_connector(ref: ast.ComponentRef, instance: ast.InstanceClass) -> b
 
 
 def _collect_and_resolve_equations(
-    instance: ast.InstanceClass,
-    flat_class: ast.InstanceClass,
+    instance: InstanceClass,
+    flat_class: InstanceClass,
     prefix: str,
     functions: OrderedDict | None = None,
 ) -> None:
@@ -833,7 +830,7 @@ def _collect_and_resolve_equations(
 
 def _flatten_discovered_functions(
     functions: OrderedDict,
-    flat_class: ast.InstanceClass,
+    flat_class: InstanceClass,
 ) -> None:
     """Flatten discovered function classes and add to flat_class.functions."""
     processed = set()
@@ -845,15 +842,15 @@ def _flatten_discovered_functions(
 
             # Instantiate if needed
             if (
-                not isinstance(func_class, ast.InstanceClass)
-                or func_class.instantiation_state < ast.InstantiationState.FULL
+                not isinstance(func_class, InstanceClass)
+                or func_class.instantiation_state < InstantiationState.FULL
             ):
                 func_instance_raw = _instantiate_element(
                     func_class,
                     func_class.parent,  # type: ignore[arg-type]
                     ast.ClassModification(),
                 )
-                func_instance = cast(ast.InstanceClass, func_instance_raw)
+                func_instance = cast(InstanceClass, func_instance_raw)
             else:
                 func_instance = func_class
 
@@ -871,12 +868,12 @@ def _flatten_discovered_functions(
             processed.add(full_name)
 
 
-def _check_all_references_valid(flat_class: ast.InstanceClass):
+def _check_all_references_valid(flat_class: InstanceClass):
     # TODO: 1.9 Check that all references now point to a valid instance (not conditionally false)
     pass
 
 
-def _generate_connect_equations(flat_class: ast.InstanceClass):
+def _generate_connect_equations(flat_class: InstanceClass):
     """Generate equations from connect clauses (MLS 9.2).
 
     For each ConnectClause, expand into variable-level equations:
@@ -1006,7 +1003,7 @@ def _generate_connect_equations(flat_class: ast.InstanceClass):
         )
 
 
-def _flatten_value_ref_names(flat_class: ast.InstanceClass) -> None:
+def _flatten_value_ref_names(flat_class: InstanceClass) -> None:
     """Rewrite InstanceSymbol references in symbol value attributes to flat names.
 
     Per MLS 5.6.2, value modifications are resolved (in source scope) before the
@@ -1030,7 +1027,7 @@ def _flatten_value_ref_names(flat_class: ast.InstanceClass) -> None:
     for sym in flat_class.symbols.values():
         for attr in _VALUE_ATTRS:
             value = getattr(sym, attr, None)
-            if not isinstance(value, ast.InstanceSymbol):
+            if not isinstance(value, InstanceSymbol):
                 continue
             ref_name = getattr(getattr(value, "ast_ref", None), "full_name", None)
             flat_name = flat_name_by_ref.get(ref_name)
@@ -1038,7 +1035,7 @@ def _flatten_value_ref_names(flat_class: ast.InstanceClass) -> None:
                 value.name = flat_name
 
 
-def _get_parameter_value_from_chain(isym: ast.InstanceSymbol) -> ast.Primary | None:
+def _get_parameter_value_from_chain(isym: InstanceSymbol) -> ast.Primary | None:
     """Walk an InstanceSymbol value chain to a literal, for inline parameter folding
 
     Returns None if literal value not found
@@ -1052,7 +1049,7 @@ def _get_parameter_value_from_chain(isym: ast.InstanceSymbol) -> ast.Primary | N
             return val
         if isinstance(val, (int, float, bool, str)):
             return ast.Primary(value=val)
-        if isinstance(val, ast.InstanceSymbol):
+        if isinstance(val, InstanceSymbol):
             vid = id(val)
             if vid in seen:
                 return None
@@ -1062,9 +1059,7 @@ def _get_parameter_value_from_chain(isym: ast.InstanceSymbol) -> ast.Primary | N
         return None
 
 
-def _resolve_param_ref(
-    name: str, flat_class: ast.InstanceClass, seen: set[str]
-) -> ast.Primary | None:
+def _resolve_param_ref(name: str, flat_class: InstanceClass, seen: set[str]) -> ast.Primary | None:
     """Resolve a flat parameter/constant name to its literal value, following chains
 
     Returns None when the chain is unresolvable or cyclic
@@ -1082,12 +1077,12 @@ def _resolve_param_ref(
         return val
     if isinstance(val, (int, float, bool, str)):
         return ast.Primary(value=val)
-    if isinstance(val, ast.InstanceSymbol):
+    if isinstance(val, InstanceSymbol):
         return _resolve_param_ref(val.name, flat_class, seen)
     return None
 
 
-def _evaluate_parameter_values(flat_class: ast.InstanceClass) -> None:
+def _evaluate_parameter_values(flat_class: InstanceClass) -> None:
     """Fold parameter and constant symbol values to ast.Primary (evaluate_parameters pass)
 
     Unresolvable or cyclic references remain as InstanceSymbol
@@ -1103,13 +1098,13 @@ def _evaluate_parameter_values(flat_class: ast.InstanceClass) -> None:
             sym.value = ast.Primary(value=val)
         elif isinstance(val, ast.Primary):
             pass  # already wrapped
-        elif isinstance(val, ast.InstanceSymbol):
+        elif isinstance(val, InstanceSymbol):
             primary = _resolve_param_ref(val.name, flat_class, set())
             if primary is not None:
                 sym.value = primary
 
 
-def _generate_value_equations(flat_class: ast.InstanceClass) -> None:
+def _generate_value_equations(flat_class: InstanceClass) -> None:
     """Convert resolved value modifications to equations (MLS 5.6.2 step 1.4).
 
     For each non-parameter/non-constant flat symbol with a resolved .value,
@@ -1150,13 +1145,13 @@ def _generate_value_equations(flat_class: ast.InstanceClass) -> None:
         sym.value = ast.Primary(value=None)
 
 
-def _process_transitions(flat_class: ast.InstanceClass):
+def _process_transitions(flat_class: InstanceClass):
     # TODO: 3. Process transitions in the flattened tree
     pass
 
 
 def _flatten_name(
-    element: ast.InstanceElement,
+    element: InstanceElement,
     remove_prefix: str = "",
 ) -> str:
     """Flatten the instance path into a name str
@@ -1165,8 +1160,8 @@ def _flatten_name(
     :param remove_prefix: The prefix to remove from the name
     :return: The flattened name
     """
-    assert isinstance(element, ast.InstanceElement)
-    element_full_name = ast.element_instance_name_tuple(element)
+    assert isinstance(element, InstanceElement)
+    element_full_name = element_instance_name_tuple(element)
     flat_name_start = 0
     for names in zip(element_full_name, remove_prefix.split(".")):
         if names[0] == names[1]:
@@ -1176,13 +1171,13 @@ def _flatten_name(
 
 def _resolve_name(
     name: str | ast.ComponentRef,
-    scope: ast.InstanceClass,
-    flat_class: ast.InstanceClass,
+    scope: InstanceClass,
+    flat_class: InstanceClass,
     *,
     guard: RecursionGuard,
     opts: LookupOptions,
-    name_flat_class: ast.InstanceClass | None = None,
-) -> ast.InstanceClass | ast.InstanceSymbol:
+    name_flat_class: InstanceClass | None = None,
+) -> InstanceClass | InstanceSymbol:
     """Resolve a name reference and return a flat-named element.
 
     Two contexts govern resolution, which usually coincide but can differ for
@@ -1230,16 +1225,16 @@ def _resolve_name(
     # corresponding InstanceClass by walking up the instance tree from
     # flat_class.  This happens for deeply-nested modifications whose scope
     # wasn't resolved to an InstanceClass during instantiation.
-    if not isinstance(scope, ast.InstanceClass):
+    if not isinstance(scope, InstanceClass):
         current = flat_class
         while current is not None:
-            if isinstance(current, ast.InstanceClass) and (
+            if isinstance(current, InstanceClass) and (
                 current.ast_ref is scope or current.ast_ref.full_name == scope.full_name
             ):
                 scope = current
                 break
             current = getattr(current, "parent_instance", None)
-        if not isinstance(scope, ast.InstanceClass):
+        if not isinstance(scope, InstanceClass):
             raise NameLookupError(
                 f"Unable to find instance for scope {scope.full_name} from {flat_class.full_name}"
             )
@@ -1248,7 +1243,7 @@ def _resolve_name(
     # Unnamed extends (name='') must NOT be cached to avoid collision when a class
     # has multiple unnamed extends — two different extends would share the same key.
     # Named scopes are cached (update_parent_instance=True) for performance.
-    if scope.instantiation_state < ast.InstantiationState.FULL:
+    if scope.instantiation_state < InstantiationState.FULL:
         scope = _instantiate_class(
             scope,
             ast.ClassModification(),
@@ -1270,8 +1265,8 @@ def _resolve_name(
     is_symbol = isinstance(found, ast.Symbol)
 
     if (
-        not isinstance(found, ast.InstanceElement)
-        or found.instantiation_state < ast.InstantiationState.FULL
+        not isinstance(found, InstanceElement)
+        or found.instantiation_state < InstantiationState.FULL
     ):
         element = _instantiate_element(
             found,
@@ -1295,15 +1290,15 @@ def _resolve_name(
         element.name = flat_name
         element.parent_instance = name_flat_class
         element.parent = name_flat_class
-        return cast(ast.InstanceClass | ast.InstanceSymbol, element)
+        return cast(InstanceClass | InstanceSymbol, element)
 
     flat_name = _flatten_name(element, flat_class.full_instance_name)
 
     # Check to see if the name is already resolved
     if is_symbol and flat_name in flat_class.symbols:
-        return cast(ast.InstanceClass | ast.InstanceSymbol, flat_class.symbols[flat_name])
+        return cast(InstanceClass | InstanceSymbol, flat_class.symbols[flat_name])
     elif flat_name in flat_class.classes:
-        return cast(ast.InstanceClass | ast.InstanceSymbol, flat_class.classes[flat_name])
+        return cast(InstanceClass | InstanceSymbol, flat_class.classes[flat_name])
 
     # Make copy so we can flatten name without changing originals.
     # Reparent under flat_class so full_instance_name / full_name reflect
@@ -1313,23 +1308,23 @@ def _resolve_name(
     element.parent_instance = flat_class
     element.parent = flat_class
     if is_symbol:
-        flat_class.symbols[flat_name] = cast(ast.InstanceSymbol, element)  # type: ignore[assignment]
+        flat_class.symbols[flat_name] = cast(InstanceSymbol, element)  # type: ignore[assignment]
     else:
-        flat_class.classes[flat_name] = cast(ast.InstanceClass, element)  # type: ignore[assignment]
+        flat_class.classes[flat_name] = cast(InstanceClass, element)  # type: ignore[assignment]
 
-    return cast(ast.InstanceClass | ast.InstanceSymbol, element)
+    return cast(InstanceClass | InstanceSymbol, element)
 
 
 def _instantiate_element(
-    element: ast.Class | ast.Symbol | ast.InstanceClass | ast.InstanceSymbol,
-    scope: ast.InstanceClass,
+    element: ast.Class | ast.Symbol | InstanceClass | InstanceSymbol,
+    scope: InstanceClass,
     modification_environment: ast.ClassModification,
     *,
     guard: RecursionGuard | None = None,
     opts: LookupOptions | None = None,
     update_parent_instance: bool = True,
-    target_state: ast.InstantiationState = ast.InstantiationState.FULL,
-) -> ast.InstanceClass | ast.InstanceSymbol:
+    target_state: InstantiationState = InstantiationState.FULL,
+) -> InstanceClass | InstanceSymbol:
 
     if guard is None:
         guard = RecursionGuard()
@@ -1338,7 +1333,7 @@ def _instantiate_element(
 
     is_symbol = isinstance(element, ast.Symbol)
 
-    if isinstance(element, ast.InstanceElement):
+    if isinstance(element, InstanceElement):
         if is_symbol:
             # For symbols, class_to_instantiate (below) will be the
             # containing class (element.parent).  Its parent in the instance
@@ -1374,7 +1369,7 @@ def _instantiate_element(
     )
 
     if is_symbol:
-        return cast(ast.InstanceSymbol, instance.symbols[element.name])
+        return cast(InstanceSymbol, instance.symbols[element.name])
     else:
         return instance
 
@@ -1396,7 +1391,7 @@ _VALUE_ATTRS = (
 )
 
 
-def _get_constant_value(isym: ast.InstanceSymbol):
+def _get_constant_value(isym: InstanceSymbol):
     """Extract the resolved constant value from an InstanceSymbol, or None if unavailable."""
     if "constant" not in isym.prefixes:
         return None
@@ -1406,9 +1401,9 @@ def _get_constant_value(isym: ast.InstanceSymbol):
     ):
         return isym.value
     # Look in the type class's builtin symbol modification for the value
-    if isinstance(isym.type, ast.InstanceClass) and isym.type.name in InstanceTree.BUILTIN_TYPES:
+    if isinstance(isym.type, InstanceClass) and isym.type.name in InstanceTree.BUILTIN_TYPES:
         builtin_sym = isym.type.symbols.get(isym.type.name)
-        if isinstance(builtin_sym, ast.InstanceSymbol):
+        if isinstance(builtin_sym, InstanceSymbol):
             for arg in builtin_sym.modification_environment.arguments:
                 if (
                     isinstance(arg.value, ast.ElementModification)
@@ -1427,7 +1422,7 @@ def _to_ast_value(val):
         return val
     if isinstance(val, (ast.Expression, ast.Array, ast.ComponentRef)):
         return val
-    if isinstance(val, ast.InstanceSymbol):
+    if isinstance(val, InstanceSymbol):
         # For constants, substitute the actual value (MLS 5.6.2)
         const_val = _get_constant_value(val)
         if const_val is not None:
@@ -1438,7 +1433,7 @@ def _to_ast_value(val):
     return val
 
 
-def _instance_to_ast_symbol(isym: ast.InstanceSymbol) -> ast.Symbol:
+def _instance_to_ast_symbol(isym: InstanceSymbol) -> ast.Symbol:
     """Convert an InstanceSymbol to a plain ast.Symbol for TreeWalker compatibility."""
     sym = ast.Symbol()
     for attr in (
@@ -1461,12 +1456,12 @@ def _instance_to_ast_symbol(isym: ast.InstanceSymbol) -> ast.Symbol:
     for attr in _VALUE_ATTRS:
         setattr(sym, attr, _to_ast_value(getattr(isym, attr)))
     # Normalize type to ComponentRef for TreeWalker compatibility
-    if isinstance(sym.type, ast.InstanceClass):
+    if isinstance(sym.type, InstanceClass):
         sym.type = ast.ComponentRef(name=sym.type.name)
     return sym
 
 
-def _instance_to_ast_class(flat_instance: ast.InstanceClass) -> ast.Class:
+def _instance_to_ast_class(flat_instance: InstanceClass) -> ast.Class:
     """Convert a flat InstanceClass to a plain ast.Class for backend consumption."""
     flat_class = ast.Class()
     flat_class.name = flat_instance.name
@@ -1476,7 +1471,7 @@ def _instance_to_ast_class(flat_instance: ast.InstanceClass) -> ast.Class:
 
     # Convert symbols
     for name, isym in flat_instance.symbols.items():
-        sym = _instance_to_ast_symbol(cast(ast.InstanceSymbol, isym))
+        sym = _instance_to_ast_symbol(cast(InstanceSymbol, isym))
         sym.parent = flat_class
         flat_class.symbols[name] = sym
 
@@ -1488,7 +1483,7 @@ def _instance_to_ast_class(flat_instance: ast.InstanceClass) -> ast.Class:
 
     # Functions
     for fname, func in flat_instance.functions.items():
-        if isinstance(func, ast.InstanceClass):
+        if isinstance(func, InstanceClass):
             flat_class.functions[fname] = _instance_to_ast_class(func)
         else:
             flat_class.functions[fname] = func
@@ -1497,7 +1492,7 @@ def _instance_to_ast_class(flat_instance: ast.InstanceClass) -> ast.Class:
 
 
 def _add_connector_symbols(
-    instance: ast.InstanceClass,
+    instance: InstanceClass,
     flat_class: ast.Class,
     prefix: str,
 ) -> None:
@@ -1510,7 +1505,7 @@ def _add_connector_symbols(
     intermediate entries here.
     """
     for name, sym in instance.symbols.items():
-        if not isinstance(sym.type, ast.InstanceClass):
+        if not isinstance(sym.type, InstanceClass):
             continue
         full_name = prefix + "." + name if prefix else name
         if sym.type.type in ("connector", "expandableconnector"):
@@ -1528,7 +1523,7 @@ def _add_connector_symbols(
         _add_connector_symbols(sym.type, flat_class, full_name)
     # Recurse into extends instances (connectors inherited from base classes)
     for extends in instance.extends:
-        if isinstance(extends, ast.InstanceClass):
+        if isinstance(extends, InstanceClass):
             _add_connector_symbols(extends, flat_class, prefix)
 
 
@@ -1538,7 +1533,7 @@ def flatten_class(
     *,
     keep_connectors: bool = False,
     evaluate_parameters: bool = False,
-) -> ast.InstanceClass:
+) -> InstanceClass:
     """Instantiate and flatten class_name, returning the flat InstanceClass."""
     instance = instantiate(root, str(class_name))
     return flatten_instance(

@@ -12,6 +12,12 @@ from dataclasses import replace
 from typing import cast
 
 from . import LookupOptions, NameLookupError, RecursionGuard
+from .instance import (
+    InstanceClass,
+    InstanceSymbol,
+    InstanceTree,
+    InstantiationState,
+)
 from .. import ast
 
 
@@ -19,7 +25,7 @@ def find_name(
     scope: ast.Class,
     name: str | ast.ComponentRef,
 ) -> ast.Class | ast.Symbol | None:
-    """Modelica name lookup on a tree of ast.Class and ast.InstanceClass starting at scope class
+    """Modelica name lookup on a tree of ast.Class and InstanceClass starting at scope class
 
     :param scope: scope in which to start name lookup
     :param name: name to look up (can be a Class or Symbol name)
@@ -109,11 +115,11 @@ def _find_name(
             # Falling back to ast_ref is safe: ast.Class is not an InstanceClass, so
             # this recursive call cannot re-trigger the fallback.
             or (
-                isinstance(scope, ast.InstanceClass)
-                and scope.instantiation_state < ast.InstantiationState.PARTIAL
+                isinstance(scope, InstanceClass)
+                and scope.instantiation_state < InstantiationState.PARTIAL
             )
         )
-        and isinstance(scope, (ast.InstanceClass, InstanceTree))
+        and isinstance(scope, (InstanceClass, InstanceTree))
     ):
         # Not found in instance tree, look in class tree
         ast_ref = scope.ast_ref
@@ -136,16 +142,16 @@ def _parse_str_or_ref(name: str | ast.ComponentRef) -> tuple[str, str]:
 
 
 def _instantiate_class_if_needed_for_lookup(
-    class_: ast.Class | ast.InstanceClass,
+    class_: ast.Class | InstanceClass,
     guard: RecursionGuard,
     opts: LookupOptions,
-) -> ast.Class | ast.InstanceClass:
+) -> ast.Class | InstanceClass:
     """Instantiate class as needed for name lookup"""
     # If not an instance, then all names are already available for lookup
-    if isinstance(class_, ast.Tree) or not isinstance(class_, ast.InstanceClass):
+    if isinstance(class_, ast.Tree) or not isinstance(class_, InstanceClass):
         return class_
     # Same if already at least partially instantiated
-    if class_.instantiation_state >= ast.InstantiationState.PARTIAL:
+    if class_.instantiation_state >= InstantiationState.PARTIAL:
         return class_
     # Only instantiate if we are not already instantiating this class
     # If a name is not available yet in class_ in process of being instantiated,
@@ -161,7 +167,7 @@ def _instantiate_class_if_needed_for_lookup(
         class_.parent_instance,  # type: ignore[arg-type]
         guard=guard,
         opts=opts,
-        target_state=ast.InstantiationState.PARTIAL,
+        target_state=InstantiationState.PARTIAL,
     )
     return instance
     # TODO: Full instantiation in place for flattening
@@ -245,7 +251,7 @@ def _find_simple_name(
         # been copied from ast_ref yet; check the authoritative source.
         prefixes = (
             found.ast_ref.prefixes  # type: ignore[union-attr]
-            if isinstance(found, ast.InstanceSymbol)
+            if isinstance(found, InstanceSymbol)
             else found.prefixes
         )
         if "constant" not in prefixes:
@@ -441,8 +447,8 @@ def _flatten_first_and_find_rest(
 
     # Per spec v3.5 section 5.3.2 bullet 4, class is temporarily flattened
     if (
-        not isinstance(first, ast.InstanceClass)
-        or first.instantiation_state < ast.InstantiationState.PARTIAL
+        not isinstance(first, InstanceClass)
+        or first.instantiation_state < InstantiationState.PARTIAL
     ):
         parent_instance = getattr(first, "parent_instance", None)
         if parent_instance is None:
@@ -459,7 +465,7 @@ def _flatten_first_and_find_rest(
             parent_instance,
             guard=guard,
             opts=opts,
-            target_state=ast.InstantiationState.PARTIAL,
+            target_state=InstantiationState.PARTIAL,
         )
     else:
         first_instance = first
@@ -550,7 +556,7 @@ def _find_inherited(
     extends_list = scope.extends
     if (
         not extends_list
-        and isinstance(scope, ast.InstanceClass)
+        and isinstance(scope, InstanceClass)
         and isinstance(scope.ast_ref, ast.Class)
     ):
         extends_list = scope.ast_ref.extends
@@ -563,8 +569,8 @@ def _find_inherited(
     # This prevents O(N_lookups × N_extends_depth) work when the same scope appears
     # in the enclosing chain of many different symbol-type lookups.
     cacheable = (
-        not isinstance(scope, ast.InstanceClass)
-        or scope.instantiation_state >= ast.InstantiationState.PARTIAL
+        not isinstance(scope, InstanceClass)
+        or scope.instantiation_state >= InstantiationState.PARTIAL
     )
     cache_key = (name, id(scope))
     if cacheable:
@@ -590,7 +596,7 @@ def _find_inherited(
             continue
         guard.current_extends.add(extends)
 
-        if isinstance(extends, ast.InstanceClass):
+        if isinstance(extends, InstanceClass):
             key = (name, id(extends))
             if key in searched:
                 guard.current_extends.discard(extends)
@@ -697,7 +703,7 @@ def _find_imported(
                 return found
             if found is not None:
                 # Cache only on InstanceClass; raw ast.Class is shared across flatten calls.
-                if isinstance(scope, ast.InstanceClass):
+                if isinstance(scope, InstanceClass):
                     scope.imports[name] = imported_comp_ref
                 return found
     return None
@@ -721,7 +727,7 @@ def _get_common_parent(class_: ast.Class, name: str) -> tuple[ast.Class | None, 
     # update_parent_instance=False whose state was synced via _instantiate_class but
     # whose classes dict was never fully populated), substitute the authoritative
     # instance stored in parent_instance.classes so that sub-package lookups succeed.
-    if isinstance(parent, ast.InstanceClass) and parent.name is not None:
+    if isinstance(parent, InstanceClass) and parent.name is not None:
         pi = parent.parent_instance
         if pi is not None:
             real = pi.classes.get(parent.name)

@@ -7,6 +7,7 @@ import re
 import pymoca.ast as ast
 import pymoca.parser
 from pymoca.tree import (
+    InstanceSymbol,
     InstantiationError,
     ModelicaError,
     NameLookupError,
@@ -354,7 +355,7 @@ def _find_composite_binding(sym):
     # Walk up: sym → InstanceClass (type) → InstanceSymbol (parent component)
     current = getattr(sym, "parent_instance", None)
     while current is not None:
-        if isinstance(current, ast.InstanceSymbol):
+        if isinstance(current, InstanceSymbol):
             for arg in current.modification_environment.arguments:
                 em = arg.value
                 if hasattr(em, "component") and str(em.component) == "value":
@@ -407,7 +408,7 @@ def _resolve_symbol_value(flat, var_name, _visited=None):
     v = sym.value
     if isinstance(v, (int, float)):
         return v, ""
-    if not isinstance(v, ast.InstanceSymbol):
+    if not isinstance(v, InstanceSymbol):
         # Value may have been moved to an equation by _generate_value_equations.
         # Search flat.equations for  ComponentRef(var_name) = rhs.
         if hasattr(v, "value") and v.value is None:

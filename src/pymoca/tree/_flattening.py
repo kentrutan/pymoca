@@ -54,9 +54,8 @@ def flatten_instance(
 
     opts = LookupOptions(evaluate_parameters=evaluate_parameters)
     flat_class = _create_partial_flat_instance(instance)
-    functions = OrderedDict()
-    _flatten_instance(instance, flat_class, functions=functions, opts=opts)
-    _flatten_discovered_functions(functions, flat_class)
+    _flatten_instance(instance, flat_class, opts=opts)
+    _flatten_discovered_functions(flat_class)
     _flatten_value_ref_names(flat_class)
     if evaluate_parameters:
         _evaluate_parameter_values(flat_class)
@@ -99,16 +98,15 @@ def _flatten_instance(
     guard: RecursionGuard | None = None,
     opts: LookupOptions | None = None,
     prefix: str = "",
-    functions: OrderedDict | None = None,
 ) -> None:
     """Flatten an instance class
 
     :param instance: The instance class to flatten
-    :param flat_class: The flattened class
+    :param flat_class: The flattened class; function calls discovered while flattening
+        are accumulated directly into ``flat_class.functions``
     :param guard: Cycle detection state shared across a single operation
     :param opts: Name lookup options (instantiate_in_place, search flags, etc.)
     :param prefix: The prefix for the current instance
-    :param functions: Accumulated function definitions discovered during flattening
     :return: None
 
     The passed instance may be updated by fully instantiating elements as needed.
@@ -236,7 +234,6 @@ def _flatten_instance(
                 flat_class,
                 guard=guard,
                 opts=opts,
-                functions=functions,
             )
         else:
             # 1.6 Recursively "handle" non-simple types
@@ -248,7 +245,6 @@ def _flatten_instance(
                 guard=guard,
                 opts=opts,
                 prefix=flat_name,
-                functions=functions,
             )
 
             # Propagate outer symbol dimensions to inner symbols (MLS 5.6.2 step 1.3)
@@ -286,11 +282,10 @@ def _flatten_instance(
             guard=guard,
             opts=opts,
             prefix=prefix,
-            functions=functions,
         )
 
     # 1.7 Resolve references in equations and algorithms
-    _collect_and_resolve_equations(instance, flat_class, prefix, functions=functions)
+    _collect_and_resolve_equations(instance, flat_class, prefix)
 
     # Steps 1.9, 2, and 3 are done outside the recursion in the caller
 
@@ -352,7 +347,6 @@ def _resolve_modifications(
     *,
     guard: RecursionGuard,
     opts: LookupOptions,
-    functions: OrderedDict | None = None,
 ) -> None:
     """Resolve modifications of a symbol
     :param symbol: The symbol to resolve modifications for
@@ -387,7 +381,6 @@ def _resolve_modifications(
             flat_class=flat_class,
             guard=guard,
             opts=opts,
-            functions=functions,
         )
 
 
@@ -398,7 +391,6 @@ def _resolve_modification_attribute(
     flat_class: InstanceClass,
     guard: RecursionGuard,
     opts: LookupOptions,
-    functions: OrderedDict | None = None,
 ):
     # MLS 5.6.2 step 1.4 says value modifications on non-parameter/non-constant
     # simple-type variables become equations. We don't emit those equations here;
@@ -438,14 +430,11 @@ def _resolve_modification_attribute(
         # Discover function calls inside Array elements and Expressions so
         # that the function flattening pass can include them in the output.
         # Without this, functions referenced only in modifications are lost.
-        if functions is not None:
-            _fn_scope = (
-                arg.scope if isinstance(arg.scope, InstanceClass) else symbol.parent_instance
-            )
-            if isinstance(_fn_scope, InstanceClass):
-                func_resolver = _FunctionCallResolver(_fn_scope, functions)
-                walker = TreeWalker()
-                walker.walk(func_resolver, value)
+        _fn_scope = arg.scope if isinstance(arg.scope, InstanceClass) else symbol.parent_instance
+        if isinstance(_fn_scope, InstanceClass):
+            func_resolver = _FunctionCallResolver(_fn_scope, flat_class.functions)
+            walker = TreeWalker()
+            walker.walk(func_resolver, value)
     if isinstance(value, ast.Expression):
         expr_scope = arg.scope if isinstance(arg.scope, InstanceClass) else symbol.parent_instance
         expr_flat_class = symbol.parent_instance
@@ -772,12 +761,11 @@ def _collect_and_resolve_equations(
     instance: InstanceClass,
     flat_class: InstanceClass,
     prefix: str,
-    functions: OrderedDict | None = None,
 ) -> None:
     """Deep-copy equations from *instance*, resolve refs, append to *flat_class*."""
     walker = TreeWalker()
     resolver = _EquationRefResolver(flat_class, prefix)
-    func_resolver = _FunctionCallResolver(instance, functions) if functions is not None else None
+    func_resolver = _FunctionCallResolver(instance, flat_class.functions)
 
     # Snapshot lists before iteration to avoid mutation issues if the
     # instance's lists are modified during extends processing.
@@ -797,42 +785,36 @@ def _collect_and_resolve_equations(
             _flatten_connect_ref(eq_copy.left, prefix)
             _flatten_connect_ref(eq_copy.right, prefix)
         else:
-            if func_resolver is not None:
-                walker.walk(func_resolver, eq_copy)
+            walker.walk(func_resolver, eq_copy)
             resolver.reset()
             walker.walk(resolver, eq_copy)
         flat_class.equations.append(eq_copy)
 
     for eq in initial_equations:
         eq_copy = copy.deepcopy(eq)
-        if func_resolver is not None:
-            walker.walk(func_resolver, eq_copy)
+        walker.walk(func_resolver, eq_copy)
         resolver.reset()
         walker.walk(resolver, eq_copy)
         flat_class.initial_equations.append(eq_copy)
 
     for stmt in statements:
         stmt_copy = copy.deepcopy(stmt)
-        if func_resolver is not None:
-            walker.walk(func_resolver, stmt_copy)
+        walker.walk(func_resolver, stmt_copy)
         resolver.reset()
         walker.walk(resolver, stmt_copy)
         flat_class.statements.append(stmt_copy)
 
     for stmt in initial_statements:
         stmt_copy = copy.deepcopy(stmt)
-        if func_resolver is not None:
-            walker.walk(func_resolver, stmt_copy)
+        walker.walk(func_resolver, stmt_copy)
         resolver.reset()
         walker.walk(resolver, stmt_copy)
         flat_class.initial_statements.append(stmt_copy)
 
 
-def _flatten_discovered_functions(
-    functions: OrderedDict,
-    flat_class: InstanceClass,
-) -> None:
+def _flatten_discovered_functions(flat_class: InstanceClass) -> None:
     """Flatten discovered function classes and add to flat_class.functions."""
+    functions = flat_class.functions
     processed = set()
     while set(functions.keys()) - processed:
         for full_name in list(functions.keys()):
@@ -855,12 +837,11 @@ def _flatten_discovered_functions(
                 func_instance = func_class
 
             # Flatten using new pipeline — discovers nested function calls
-            nested_functions = OrderedDict()
             flat_func = _create_partial_flat_instance(func_instance)
-            _flatten_instance(func_instance, flat_func, functions=nested_functions)
+            _flatten_instance(func_instance, flat_func)
 
             # Merge nested discoveries back
-            for nested_name, nested_class in nested_functions.items():
+            for nested_name, nested_class in flat_func.functions.items():
                 if nested_name not in functions:
                     functions[nested_name] = nested_class
 

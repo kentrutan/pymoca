@@ -46,6 +46,12 @@ def test_duplicate_state():
     _flush()
 
 
+def test_flatten_tree_contains_only_model_and_functions():
+    ast_tree = parse_model_files("Spring.mo")
+    flat_tree = tree.flatten(ast_tree, ast.ComponentRef(name="Spring"))
+    assert list(flat_tree.classes) == ["Spring"]
+
+
 def test_function_pull():
     ast_tree = parse_model_files("FunctionPull.mo")
 
@@ -53,6 +59,9 @@ def test_function_pull():
     comp_ref = ast.ComponentRef.from_string(class_name)
 
     flat_tree = tree.flatten(ast_tree, comp_ref)
+
+    # Flat output holds only the model and its pulled functions, no builtin stubs
+    assert all(c.startswith("Level1.") for c in flat_tree.classes)
 
     # Check if all referenced functions are pulled in
     assert "Level1.Level2.Level3.f" in flat_tree.classes

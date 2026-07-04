@@ -1584,6 +1584,9 @@ def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
 
     # 6. Build ast.Tree
     out = ast.Tree()
+    # Drop the builtin stub classes ast.Tree pre-populates for name lookup: the flat
+    # output needs only the flat class and its functions, like the legacy flatten output
+    out.classes.clear()
     flat_name = class_name_str
     flat_class.name = flat_name
     out.classes[flat_name] = flat_class

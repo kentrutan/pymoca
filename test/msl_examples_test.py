@@ -121,8 +121,7 @@ _worker_tree = None
 _msl4_base_dir = None
 _translator = None
 _options = None
-# CasADi modules, imported lazily by _worker_init only when translating.
-_casadi_generator = None
+# CasADi API module, imported lazily by _worker_init only when translating.
 _casadi_api = None
 
 
@@ -133,17 +132,15 @@ def _worker_init(
     options: dict | None = None,
 ) -> None:
     global _worker_tree, _msl4_base_dir, _translator, _options
-    global _casadi_generator, _casadi_api
+    global _casadi_api
     _msl4_base_dir = msl4_base_dir
     _translator = translator
     _options = options or {}
     if translator == "casadi":
         # Importing CasADi (and the generator) is slow; only do it when needed.
         from pymoca.backends.casadi import api as _api
-        from pymoca.backends.casadi import generator as _gen
 
         _casadi_api = _api
-        _casadi_generator = _gen
     if reuse_tree:
         _worker_tree = parser.modelicapath_to_tree([msl4_base_dir])
 
@@ -175,16 +172,11 @@ def _process_one(model_name: str) -> tuple:
     t0 = time.perf_counter()
     try:
         if _translator == "casadi":
-            # Replicate the compile tail of casadi.api._compile_model against the
-            # shared/fresh tree so that --reuse-tree is honored (transfer_model
-            # reparses a folder on every call and cannot reuse a tree).
-            assert _casadi_api is not None and _casadi_generator is not None
-            opts = _casadi_api._merge_default_options(_options)
-            model = _casadi_generator.generate(worker_tree, model_name, opts)
-            if opts["check_balanced"]:
-                model.check_balanced()
-            model.simplify(opts)
-            model._post_checks()
+            # generate_model() operates on an already-parsed tree so that
+            # --reuse-tree is honored (transfer_model reparses a folder on
+            # every call and cannot reuse a tree).
+            assert _casadi_api is not None
+            _casadi_api.generate_model(worker_tree, model_name, _options)
         else:
             tree.flatten_class(worker_tree, model_name)
         elapsed = time.perf_counter() - t0

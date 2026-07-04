@@ -189,6 +189,20 @@ def test_casadi_options_bad():
         assert errors == expected_errors
 
 
+def test_casadi_modelicapath():
+    "-t casadi with -p routes through the pipeline and honors -o"
+    run_compiler("-p " + MODEL_DIR + " -m Spring -t casadi -o " + GENERATED_DIR)
+    outfile = os.path.join(GENERATED_DIR, "Spring.pymoca_cache")
+    assert os.path.exists(outfile)
+
+
+def test_casadi_modelicapath_qualified_name():
+    "-t casadi with -p resolves the whole library tree, unlike stem matching"
+    run_compiler("-p " + MODEL_DIR + " -m Package.Spring -t casadi -o " + GENERATED_DIR)
+    outfile = os.path.join(GENERATED_DIR, "Package.Spring.pymoca_cache")
+    assert os.path.exists(outfile)
+
+
 def test_sympy_options_good():
     "SymPy options that should produce good output"
     # Run examples on default Spring model

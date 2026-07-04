@@ -14,6 +14,47 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+__all__ = [
+    "AlgorithmSection",
+    "Array",
+    "AssignmentStatement",
+    "Class",
+    "ClassModification",
+    "ClassModificationArgument",
+    "ComponentClause",
+    "ComponentRef",
+    "ConnectClause",
+    "ElementModification",
+    "ElementReplaceable",
+    "EnumerationLiteral",
+    "Equation",
+    "EquationSection",
+    "Expression",
+    "ExtendsClause",
+    "ForEquation",
+    "ForIndex",
+    "ForStatement",
+    "Function",
+    "IfEquation",
+    "IfExpression",
+    "IfStatement",
+    "ImportClause",
+    "Node",
+    "Primary",
+    "ShortClassDefinition",
+    "Slice",
+    "Symbol",
+    "Tree",
+    "Visibility",
+    "WhenEquation",
+    "WhenStatement",
+    "WhileStatement",
+    "element_full_name",
+    "element_full_reference",
+    "element_name_tuple",
+    "is_enumeration",
+]
+
 
 class Visibility(Enum):
     PROTECTED = 1, "protected"

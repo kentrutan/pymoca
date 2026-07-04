@@ -68,3 +68,11 @@ def test_component_ref():
     cref_cat = cref.from_tuple(cref_tuple + cref_d3.to_tuple())
     assert str(cref_cat) == "A0.B1.C2.D3"
     assert repr(cref_cat) == "'A0'['B1'['C2'['D3']]]"
+
+
+def test_public_api_all_names_resolve():
+    import pymoca.tree
+
+    for module in (ast, pymoca.tree):
+        for name in module.__all__:
+            assert hasattr(module, name), f"{module.__name__}.__all__ lists missing {name}"

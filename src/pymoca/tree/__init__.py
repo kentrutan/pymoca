@@ -16,6 +16,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+__all__ = [
+    "InstanceClass",
+    "InstanceElement",
+    "InstanceSymbol",
+    "InstanceTree",
+    "InstantiationError",
+    "InstantiationState",
+    "LookupOptions",
+    "ModelicaError",
+    "ModelicaSemanticError",
+    "NameLookupError",
+    "RecursionGuard",
+    "TreeListener",
+    "TreeWalker",
+    "find_name",
+    "flatten",
+    "flatten_class",
+    "flatten_instance",
+    "flatten_to_tree",
+    "instantiate",
+]
+
 
 class ModelicaError(Exception):
     """Common base class for all Modelica language errors"""

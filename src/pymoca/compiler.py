@@ -460,10 +460,11 @@ def _run_pipeline(args, modelica_path: list[Path], stage: Stage, options: dict) 
     return errors
 
 
-def main(argv: list[str]) -> int:
+def main(argv: list[str] | None = None) -> int:
     """Parse command line options and run the pipeline.
 
-    :param argv: command line arguments, not including program name (pass "-h" for help)
+    :param argv: command line arguments, not including program name (pass "-h" for help);
+        None reads sys.argv, as when invoked via the installed ``pymoca`` script
     :return: number of errors
     """
     argp = build_arg_parser()

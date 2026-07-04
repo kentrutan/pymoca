@@ -136,6 +136,25 @@ def translate(
         except KeyError:
             log.exception("Problem translating %s to SymPy", model)
             return False
+    elif translator == "casadi":
+        import pymoca.backends.casadi.api as casadi_api
+
+        try:
+            casadi_model = casadi_api.generate_model(library_ast, model, options)
+        except Exception:  # pylint: disable=broad-except
+            if log.level == logging.DEBUG:
+                log.exception("Problem generating CasADi model %s", model)
+            else:
+                log.error("Problem generating CasADi model %s", model)
+            return False
+        try:
+            casadi_api.save_model(str(outdir), model, casadi_model, options)
+        except OSError:
+            if log.level == logging.DEBUG:
+                log.exception('Error writing CasADi cache for "%s" to "%s"', model, outdir)
+            else:
+                log.error('Error writing CasADi cache for "%s" to "%s"', model, outdir)
+            return False
     else:
         raise NotImplementedError("Translator for {} not implemented".format(translator))
     return True
@@ -308,8 +327,6 @@ def validate_args(argp: MyArgumentParser, args, modelicapath_env: str) -> None:
     if args.stage == "translate" and not args.translator:
         argp.error("--stage translate requires -t/--translator")
     if args.translator == "casadi":
-        if not args.PATHNAME:
-            argp.error("--translator casadi requires at least one PATHNAME")
         if args.stage and args.stage != "translate":
             argp.error("CasADi backend only supports --stage translate")
     if not args.translator:
@@ -488,7 +505,7 @@ def main(argv: list[str]) -> int:
     stage = infer_stage(args)
     tic = time.perf_counter()
 
-    if args.translator == "casadi":
+    if args.translator == "casadi" and not (args.path or modelicapath_env):
         errors = _run_casadi_models(args, options)
     else:
         errors = _run_pipeline(args, modelica_path, stage, options)

@@ -5,7 +5,7 @@ import logging
 import os
 import pickle
 from enum import IntEnum
-from typing import Dict
+from typing import Dict, Optional
 
 import casadi as ca
 
@@ -123,7 +123,21 @@ def _compile_model(model_folder: str, model_name: str, compiler_options: Dict[st
                     else:
                         tree.extend(parsed)
 
-    # Compile
+    return generate_model(tree, model_name, compiler_options)
+
+
+def generate_model(
+    tree, model_name: str, compiler_options: Optional[Dict[str, str]] = None
+) -> Model:
+    """
+    Generates a CasADi model from an already-parsed/merged AST tree.
+
+    :param tree: Parsed (and merged) Modelica AST tree containing model_name.
+    :param model_name: Name of the model.
+    :param compiler_options: Dictionary of compiler options.
+    """
+    compiler_options = _merge_default_options(compiler_options)
+
     logger.info("Generating CasADi model")
 
     model = generator.generate(tree, model_name, compiler_options)

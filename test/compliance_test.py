@@ -108,14 +108,15 @@ def discover_compliance_files(subdirectory):
 
 # Known failures: model_name -> xfail reason
 #
-# Global name lookup: leading-dot syntax is now in grammar but some still fail
+# Global name lookup (MLS 5.3.3) is implemented; this shouldPass=false model needs
+# the not-yet-implemented "class used during lookup may not be partial" rejection
 _GLOBAL_MODELS = [
     "ModelicaCompliance.Scoping.NameLookup.Global." + n
     for n in [
         "GlobalPartialClass",
     ]
 ]
-_GLOBAL_REASON = "Global name lookup: semantic handling not yet implemented"
+_GLOBAL_REASON = "Global name lookup: partial-class rejection not implemented"
 
 # QualifiedImportConflict triggers parser duplicate-import error
 _IMPORT_CONFLICT = "ModelicaCompliance.Scoping.NameLookup.Imports.QualifiedImportConflict"

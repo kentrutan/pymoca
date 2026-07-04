@@ -82,9 +82,15 @@ def _find_name(
     #    13.2.1)
     #     1. `A` is looked up in global scope
     #     2. `B.C` (and `B.D`) or `B.*` is looked up. `A.B` must be a package.
-    # TODO: Global name lookup
-
     left_name, rest_of_name = _parse_str_or_ref(name)
+
+    # Global name lookup (MLS 5.3.3): a leading dot (empty-name head element) means
+    # the first identifier is looked up in the global scope, so restart the lookup
+    # from the root with the enclosing-scope search disabled.
+    if left_name == "":
+        if not rest_of_name:
+            raise NameLookupError(f'Invalid global name "{name}" in scope {scope.full_name}')
+        return _find_name(scope.root, rest_of_name, guard, replace(opts, search_parent=False))
 
     # Lookup simple name first (the `A` part)
     found = _find_simple_name(scope, left_name, guard, opts)

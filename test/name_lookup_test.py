@@ -529,7 +529,6 @@ def test_need_for_temporary_flattening():
 # Global name lookup tests from ModelicaCompliance
 
 
-@pytest.mark.skip("TODO: Do these after global name syntax is implemented")
 def test_encapsulated_global_lookup():
     """Checks that it's possible to look up a global name, even if
     the current scope is encapsulated"""
@@ -541,6 +540,49 @@ def test_encapsulated_global_lookup():
     found = find_name(scope, "a.y")
     assert found is not None
     assert isinstance(found, pymoca.ast.Symbol)
+
+
+def test_global_name_shadowed_by_local():
+    """Checks that global name lookup starts from the global scope even when a
+    local class shadows the first identifier (MLS 5.3.3)"""
+    ast = pymoca.parser.parse(
+        """
+        package Top
+          constant Real c = 111;
+        end Top;
+        package Q
+          package Top
+            constant Real c = 222;
+          end Top;
+          model M
+            Real x = .Top.c;
+            Real y = Top.c;
+          end M;
+        end Q;
+        """
+    )
+    flat = flatten_compliance_model(ast, "Q.M")
+    assert get_flat_symbol_value(flat, "x") == 111
+    assert get_flat_symbol_value(flat, "y") == 222
+
+
+def test_global_name_find_name():
+    """Checks that find_name resolves a leading-dot name from the root scope"""
+    ast = pymoca.parser.parse(
+        """
+        package Top
+          constant Real c = 111;
+        end Top;
+        package Q
+          package Top
+            constant Real c = 222;
+          end Top;
+        end Q;
+        """
+    )
+    found = find_name(ast.classes["Q"], ".Top.c")
+    assert isinstance(found, pymoca.ast.Symbol)
+    assert found.parent is ast.classes["Top"]
 
 
 # Imported name lookup tests from ModelicaCompliance

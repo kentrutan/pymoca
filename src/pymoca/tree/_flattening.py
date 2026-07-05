@@ -39,13 +39,15 @@ from .. import ast
 
 def flatten_instance(
     instance: InstanceClass,
-    keep_connectors: bool = False,
+    expand_connect: bool = True,
     evaluate_parameters: bool = False,
 ) -> InstanceClass:
     """Flatten an instance class
 
     :param instance: The instance class to flatten
-    :param keep_connectors: Whether to keep connectors in the top-level flattened class
+    :param expand_connect: Whether to expand ``ConnectClause``s into equations. When
+        False, they are left in ``flat.equations`` unexpanded. Connector member
+        symbols are present in the flattened class either way.
     :param evaluate_parameters: When True, fold parameter values to ast.Primary literals
     :return: The flattened class
     """
@@ -62,7 +64,7 @@ def flatten_instance(
     _generate_value_equations(flat_class)  # MLS 5.6.2 step 1.4
     _check_all_references_valid(flat_class)
     _process_transitions(flat_class)
-    if not keep_connectors:
+    if expand_connect:
         _generate_connect_equations(flat_class)
     return flat_class
 
@@ -1512,14 +1514,14 @@ def flatten_class(
     root: ast.Tree,
     class_name: str | ast.ComponentRef,
     *,
-    keep_connectors: bool = False,
+    expand_connect: bool = True,
     evaluate_parameters: bool = False,
 ) -> InstanceClass:
     """Instantiate and flatten class_name, returning the flat InstanceClass."""
     instance = instantiate(root, str(class_name))
     return flatten_instance(
         instance,
-        keep_connectors=keep_connectors,
+        expand_connect=expand_connect,
         evaluate_parameters=evaluate_parameters,
     )
 
@@ -1534,8 +1536,8 @@ def flatten_to_tree(root: ast.Tree, class_name: ast.ComponentRef) -> ast.Tree:
     class_name_str = str(class_name)
     instance = instantiate(root, class_name_str)
 
-    # 2. Flatten (keep connectors for expand_connectors)
-    flat_instance = flatten_instance(instance, keep_connectors=True)
+    # 2. Flatten (defer connect expansion to expand_connectors below)
+    flat_instance = flatten_instance(instance, expand_connect=False)
 
     # 3. Convert InstanceClass → ast.Class
     flat_class = _instance_to_ast_class(flat_instance)

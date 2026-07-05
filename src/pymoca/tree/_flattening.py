@@ -48,7 +48,7 @@ def flatten_instance(
     :param expand_connect: Whether to expand ``ConnectClause``s into equations. When
         False, they are left in ``flat.equations`` unexpanded. Connector member
         symbols are present in the flattened class either way.
-    :param evaluate_parameters: When True, fold parameter values to ast.Primary literals
+    :param evaluate_parameters: When True, fold parameter and constant values to literals
     :return: The flattened class
     """
     if not isinstance(instance, InstanceClass):
@@ -1053,38 +1053,61 @@ def _resolve_param_ref(name: str, flat_class: InstanceClass, seen: set[str]) -> 
     flat_sym = flat_class.symbols.get(name)
     if flat_sym is None:
         return None
-    val = flat_sym.value
-    if val is None or (isinstance(val, ast.Primary) and val.value is None):
+    return _fold_flat_value(flat_sym.value, flat_class, seen)
+
+
+def _fold_flat_value(value, flat_class: InstanceClass, seen: set[str]) -> ast.Primary | None:
+    """Fold an already-flattened value to an ast.Primary literal if possible
+
+    Return None if any operand is unresolvable (e.g. references a non-constant variable
+    or an unsupported operator).
+    """
+    if value is None or (isinstance(value, ast.Primary) and value.value is None):
         return None
-    if isinstance(val, ast.Primary):
-        return val
-    if isinstance(val, (int, float, bool, str)):
-        return ast.Primary(value=val)
-    if isinstance(val, InstanceSymbol):
-        return _resolve_param_ref(val.name, flat_class, seen)
+    if isinstance(value, ast.Primary):
+        return value
+    if isinstance(value, (int, float, bool, str)):
+        return ast.Primary(value=value)
+    if isinstance(value, InstanceSymbol):
+        return _resolve_param_ref(value.name, flat_class, seen)
+    if isinstance(value, ast.ComponentRef) and not value.child:
+        return _resolve_param_ref(value.name, flat_class, seen)
+    if isinstance(value, ast.Expression):
+        folded_operands: list[ast.Primary] = []
+        for operand in value.operands:
+            folded_operand = _fold_flat_value(operand, flat_class, seen)
+            if folded_operand is None:
+                return None
+            folded_operands.append(folded_operand)
+        operands = folded_operands
+        op_str = str(value.operator)
+        try:
+            if len(operands) == 1:
+                op_func = ExpressionEvaluator.unary_operator.get(op_str)
+                if op_func is None:
+                    return None
+                return ast.Primary(value=op_func(operands[0].value))
+            op_func = ExpressionEvaluator.binary_operator.get(op_str)
+            if op_func is None:
+                return None
+            return ast.Primary(value=op_func(operands[0].value, operands[1].value))
+        except Exception:
+            return None
     return None
 
 
 def _evaluate_parameter_values(flat_class: InstanceClass) -> None:
-    """Fold parameter and constant symbol values to ast.Primary (evaluate_parameters pass)
+    """Fold parameter and constant symbol values to ast.Primary
 
-    Unresolvable or cyclic references remain as InstanceSymbol
+    Unresolvable or cyclic references are left unchanged.
     """
     _FOLD_PREFIXES = frozenset({"parameter", "constant"})
     for sym in flat_class.symbols.values():
         if not (_FOLD_PREFIXES & set(sym.prefixes)):
             continue
-        val = sym.value
-        if val is None or (isinstance(val, ast.Primary) and val.value is None):
-            continue
-        if isinstance(val, (int, float, bool, str)):
-            sym.value = ast.Primary(value=val)
-        elif isinstance(val, ast.Primary):
-            pass  # already wrapped
-        elif isinstance(val, InstanceSymbol):
-            primary = _resolve_param_ref(val.name, flat_class, set())
-            if primary is not None:
-                sym.value = primary
+        folded = _fold_flat_value(sym.value, flat_class, set())
+        if folded is not None:
+            sym.value = folded
 
 
 def _generate_value_equations(flat_class: InstanceClass) -> None:

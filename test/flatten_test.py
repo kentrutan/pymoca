@@ -288,6 +288,21 @@ def test_flattening_modification_rhs_omc_simulation():
     assert isinstance(d_R, ast.Symbol) and d_R.name == "d.R"
 
 
+def test_evaluate_parameters_folds_expressions():
+    """evaluate_parameters=True folds Expression values, not just direct references,
+    regardless of forward/backward declaration order."""
+    txt = """
+    model M
+      parameter Real q = 3*p;
+      parameter Real p = 2;
+    end M;
+    """
+    ast_tree = parser.parse(txt)
+    flat = tree.flatten_class(ast_tree, "M", evaluate_parameters=True)
+    q = flat.symbols["q"].value
+    assert isinstance(q, ast.Primary) and q.value == 6
+
+
 def test_extends_order():
     flat_tree = parse_and_flatten_model("ExtendsOrder.mo", "P.M")
 

@@ -422,7 +422,7 @@ def _check_extends_rules(
 
     extends_builtin = set()
     extends_other = set()
-    for i, (ref_tuple, _partial) in enumerate(zip(extends_refs, extends_list)):
+    for i, ref_tuple in enumerate(extends_refs):
         composite_name = ".".join(ref_tuple)
         if len(ref_tuple) == 1 and ref_tuple[0] in InstanceTree.BUILTIN_TYPES:
             extends_builtin.add(ref_tuple[0])
@@ -557,14 +557,14 @@ def _instantiate_extends_list(
         )
         extends_partially_instantiated.append(extends_instance)
 
-    extends_refs: list[tuple[str, ...]] = [
-        (
-            extends.component.to_tuple()
-            if isinstance(extends, ast.ExtendsClause) and extends.component is not None
-            else (extends.name,)
-        )  # type: ignore[misc]
-        for extends in extends_list
-    ]
+    extends_refs: list[tuple[str, ...]] = []
+    for extends in extends_list:
+        if isinstance(extends, ast.ExtendsClause):
+            assert extends.component is not None, "extends clause must have a component"
+            extends_refs.append(extends.component.to_tuple())
+        else:
+            assert extends.name is not None, "extends target must have a name"
+            extends_refs.append((extends.name,))
     _check_extends_rules(extends_partially_instantiated, extends_refs, parent_instance)
 
     extends_list_instantiated = []
@@ -947,6 +947,7 @@ def _instantiate_partially(
     # Create the instance and copy attributes needed in name lookup or modification
     assert element.name is not None, "element must have a name"
     if isinstance(element, ast.Class):
+        assert isinstance(ast_ref, ast.Class)
         instance = InstanceClass(
             name=element.name,
             ast_ref=ast_ref,

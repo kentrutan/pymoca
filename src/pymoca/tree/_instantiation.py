@@ -745,7 +745,7 @@ def _get_lexical_parent_instance(
             lookup_scope,
             class_.name,
             guard,
-            LookupOptions(instantiate_in_place=False),
+            opts,
         )
     if (
         found is not None

@@ -117,7 +117,7 @@ def _instantiate_class(
     ):
         new_class = cast(
             InstanceClass,
-            _instantiate_partially(
+            _create_partial_instance(
                 orig_class,
                 modification_environment,
                 parent_instance,
@@ -186,7 +186,7 @@ def _instantiate_class(
     else:
         lexical_parent = cast(
             InstanceClass,
-            _instantiate_partially(
+            _create_partial_instance(
                 from_class,
                 ast.ClassModification(),
                 lexical_parent,
@@ -209,7 +209,7 @@ def _instantiate_class(
             list(orig_class.classes.values()) if reuse_orig else list(from_class.classes.values())
         )
         for class_ in classes_source:
-            _instantiate_partially(
+            _create_partial_instance(
                 class_,
                 modification_environment,
                 new_class,
@@ -219,7 +219,7 @@ def _instantiate_class(
         for symbol in from_class.symbols.values():
             if not isinstance(symbol, InstanceSymbol):
                 symbol = _update_class_modification_scopes(symbol, new_class)  # type: ignore[assignment]
-            _instantiate_partially(
+            _create_partial_instance(
                 symbol,  # type: ignore[arg-type]
                 modification_environment,
                 new_class,
@@ -492,7 +492,7 @@ def _instantiate_extends_partially(
     # its modification_environment contains mods from the base class definition
     # (inner/middle level). These must come BEFORE the extends clause mods (outer)
     # in class_modification to maintain correct inner-to-outer ordering.
-    # We skip the normal element merge in _instantiate_partially to prevent these
+    # We skip the normal element merge in _create_partial_instance to prevent these
     # mods from being placed in the shared modification_environment separately,
     # which would cause them to be re-merged in the wrong order during the full pass.
     skip_element_merge = False
@@ -513,7 +513,7 @@ def _instantiate_extends_partially(
     )
     extends_class = cast(
         InstanceClass,
-        _instantiate_partially(
+        _create_partial_instance(
             extends_class,
             modification_environment,
             parent_instance,
@@ -768,7 +768,7 @@ def _get_lexical_parent_instance(
         update_parent = cls.name not in parent.classes
         parent = cast(
             InstanceClass,
-            _instantiate_partially(cls, modifications, parent, parent, update_parent),
+            _create_partial_instance(cls, modifications, parent, parent, update_parent),
         )
         modifications = parent.modification_environment  # type: ignore[attr-defined]
     return parent
@@ -922,7 +922,7 @@ def _instantiate_symbol(
         guard._symbol_type_cache[type_cache_key] = symbol.type
 
 
-def _instantiate_partially(
+def _create_partial_instance(
     element: ast.Class | ast.Symbol | InstanceClass | InstanceSymbol,
     modification_environment: ast.ClassModification,
     parent_instance: InstanceTree | InstanceClass,
@@ -931,7 +931,7 @@ def _instantiate_partially(
     class_modification: ast.ClassModification | None = None,
     skip_element_merge: bool = False,
 ) -> InstanceClass | InstanceSymbol:
-    """Partially instantiate a class or symbol, apply modifiers, and set visibility"""
+    """Create a class or symbol, apply modifiers, and set visibility"""
 
     #  Create an instance of the class to be instantiated ("partially instantiated element")
     if isinstance(element, InstanceElement):

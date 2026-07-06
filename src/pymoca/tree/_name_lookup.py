@@ -106,10 +106,6 @@ def _find_name(
     # class tree (ast_ref). The spec's lookup substrate is the instance tree (MLS 5.6.1.2-.3);
     # kept as a backward-compat shortcut, normally equivalent for unmodified top-level classes.
     # TODO: instantiate missing top-level classes on demand at root, then drop InstanceTree here
-
-    # Late import to avoid circular dependency
-    from ._instantiation import InstanceTree
-
     if (
         not found
         and (

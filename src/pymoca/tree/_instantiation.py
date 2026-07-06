@@ -1193,10 +1193,7 @@ def _apply_redeclares(
     # Instantiate as an extends and add to extends list
     is_class = isinstance(element, InstanceClass)
     parent_instance = element if is_class else element.parent_instance  # type: ignore[assignment]
-    if parent_instance is None:
-        raise ModelicaSemanticError(
-            f"Redeclared element {element.full_name} has no parent instance"
-        )
+    assert parent_instance is not None
     extends_list = [redeclare_class]
     extends_list_instantiated = _instantiate_extends_list(
         extends_list,  # type: ignore[arg-type]

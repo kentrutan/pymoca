@@ -733,10 +733,6 @@ class Class(Node):
             c.parent = self
             c._update_parent_refs()
 
-    def update_classes(self, other: dict[str, Class]) -> None:
-        for class_ in other.values():
-            self.add_class(class_)
-
     @property
     def root(self):
         if self.parent is None:

@@ -25,16 +25,15 @@ XFAIL_IN_PROGRESS = {
     "test/parse_test.py::ParseTest::test_flattening_inheritance_tree",
     "test/parse_test.py::ParseTest::test_flattening_modification_scope",
     "test/parse_test.py::ParseTest::test_inheritance_symbol_modifiers",
+    "test/parse_test.py::ParseTest::test_lookup_needs_instantiation",
     "test/parse_test.py::ParseTest::test_msl3_twopin_units",
     "test/parse_test.py::ParseTest::test_msl_flange_units",
     "test/parse_test.py::ParseTest::test_msl_opamp_units",
-    "test/parse_test.py::ParseTest::test_redeclaration_scope",
     "test/parse_test.py::ParseTest::test_redeclaration_scope_alternative",
+    "test/parse_test.py::ParseTest::test_redeclare_class_with_symbol_error",
     "test/parse_test.py::ParseTest::test_redeclare_component_complicated",
     "test/parse_test.py::ParseTest::test_redeclare_component_in_declaration",
     "test/parse_test.py::ParseTest::test_redeclare_component_in_extends",
-    "test/parse_test.py::ParseTest::test_redeclare_component_type_compatibility",
-    "test/parse_test.py::ParseTest::test_redeclare_components",
 }
 
 

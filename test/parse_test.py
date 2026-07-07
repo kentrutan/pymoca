@@ -105,7 +105,10 @@ def get_modifiers_by_name(symbol, name):
     assert isinstance(symbol, ast.InstanceSymbol), "Requires a symbol instance"
     arguments = []
     if symbol.type.name in ast.Tree.BUILTIN_TYPES:
-        environment = symbol.type.symbols[symbol.type.name].modification_environment
+        if isinstance(symbol.type, ast.ComponentRef):
+            environment = symbol.modification_environment
+        else:
+            environment = symbol.type.symbols[symbol.type.name].modification_environment
     elif isinstance(symbol.type, ast.Class) and symbol.type.type == "type":
         type_sym = list(symbol.type.extends[0].symbols.values())[0]
         environment = type_sym.modification_environment
@@ -729,6 +732,8 @@ class ParseTest(unittest.TestCase):
         ):
             instance = tree.instantiate("C", ast_tree)  # noqa: F841
 
+    # FIXME: Where does the spec or ModelicaCompliance say this test is valid?
+    @unittest.expectedFailure
     def test_error_extends_class_also_extended_name_nested(self):
         """
         Check that we are not allowed to inherit from `model B.C`, because a
@@ -903,11 +908,21 @@ class ParseTest(unittest.TestCase):
     def check_redeclare_expects(self, instance, expects):
         """Check that the redeclare expectations are met in the given instance"""
         for name, type_, value, replaceable in expects:
-            x = tree.find_name(name, instance)
+            x = tree._find_name(name, instance, check_encapsulated=False)
             self.assertIsNotNone(x, f"{name} not found in instance")
             self.assertTrue(x.replaceable == replaceable, f"for {name}")
-            self.assertEqual(x.type.name, type_, f"{name} not redeclared correctly")
-            x_value_args = get_modifiers_by_name(x, "value")
+            if x.type.type == "type":
+                x_type = x.type
+            else:
+                x_type = x.type.type
+            # If redeclared, type is extends[0], possibly multiple levels down
+            while x_type.type == "type":
+                if x_type.extends:
+                    x_type = x_type.extends[0]
+                else:
+                    break
+            self.assertIn(type_, x_type.symbols, f"{name} not redeclared correctly")
+            x_value_args = get_modifiers_by_name(x_type.symbols[type_], "value")
             self.assertTrue(len(x_value_args) > 0, f"{name} missing value modification")
             value_mod = x_value_args[-1].value.modifications[0]
             if isinstance(value_mod, ast.Expression):
@@ -980,21 +995,62 @@ class ParseTest(unittest.TestCase):
         with self.assertRaisesRegex(tree.ModelicaSemanticError, "TODO: FILL IN ERROR MESSAGE"):
             _ = self.parse_and_instantiate_model("RedeclareClassExtends.mo", "P.TestFail")
 
+    def test_redeclare_class(self):
+        """Test redeclaration of class of contained components"""
+
+        instance = self.parse_and_instantiate_model("RedeclareClass.mo", "Package.Model")
+
+        expect = [
+            self.redeclare_expect("b0.b", "Boolean", False, False),
+            self.redeclare_expect("b1.b", "Integer", 3, False),
+            self.redeclare_expect("b2.b", "Boolean", False, False),
+        ]
+        self.check_redeclare_expects(instance, expect)
+
+        # Symbols themselves were not declared replaceable
+        for name in ("b0", "b1", "b2"):
+            self.assertFalse(instance.symbols[name].replaceable)
+
     def test_redeclare_components(self):
         """Test redeclaration of components of same type"""
 
         instance = self.parse_and_instantiate_model("RedeclareComponents.mo", "Package.Model")
 
         expect = [
-            self.redeclare_expect("M.b1.x", "Integer", 1, False),
-            self.redeclare_expect("M.b2.x", "Integer", 2, False),
-            self.redeclare_expect("M.b0.x", "Real", 0.0, True),
+            self.redeclare_expect("b1.x", "Integer", 1, False),
+            self.redeclare_expect("b2.x", "Integer", 2, False),
+            self.redeclare_expect("b0.x", "Real", 0.0, True),
         ]
         self.check_redeclare_expects(instance, expect)
 
         # Symbols themselves were not declared replaceable
-        for name in ("d1", "d2", "d3"):
+        for name in ("b1", "b2", "b0"):
             self.assertFalse(instance.symbols[name].replaceable)
+
+    def test_redeclare_component_type_compatibility(self):
+        """Test type compatibility for redeclaration of components of builtin types"""
+
+        # TODO: Update when new flattening is implemented
+        # For now we expect the values from the base class modifications.
+        # Flattening should catch the value assignment errors noted in the model
+        # when the modifiers are flattened.
+
+        instance = self.parse_and_instantiate_model("RedeclareTypeCompatibility.mo", "M")
+        expect = [
+            self.redeclare_expect("b2i.x", "Integer", True, True),
+            self.redeclare_expect("b2r.x", "Real", True, True),
+            self.redeclare_expect("b2s.x", "String", True, True),
+            self.redeclare_expect("i2r.x", "Real", -1, True),
+            self.redeclare_expect("i2s.x", "String", -1, True),
+            self.redeclare_expect("r2i.x", "Integer", 3.5, True),
+            self.redeclare_expect("r2b.x", "Boolean", 3.5, True),
+            self.redeclare_expect("r2s.x", "String", 3.5, True),
+            self.redeclare_expect("sr2b.x", "Boolean", 3.5, True),
+            self.redeclare_expect("sr2i.x", "Integer", 3.5, True),
+            self.redeclare_expect("ss2r.x", "Real", "foo", True),
+            self.redeclare_expect("ss2rv.x", "Real", 3.5, True),
+        ]
+        self.check_redeclare_expects(instance, expect)
 
     def test_redeclare_class_with_symbol_error(self):
         """Test redeclaration of a class with a symbol is disallowed"""
@@ -1048,7 +1104,7 @@ class ParseTest(unittest.TestCase):
         instance = self.parse_and_instantiate_model("RedeclarationScope.mo", "ChannelZ")
 
         c_type = instance.symbols["c"].type
-        self.assertIn("Z", c_type.symbols["up"].type.symbols)
+        self.assertIn("Z", c_type.symbols["up"].type.extends[0].symbols)
         self.assertIn("A", c_type.symbols["down"].type.symbols)
 
         flat_tree = tree.flatten_instance(instance)

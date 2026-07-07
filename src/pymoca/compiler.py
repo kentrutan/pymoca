@@ -398,44 +398,6 @@ def infer_stage(args) -> Stage:
     return Stage.PARSE
 
 
-def _run_casadi_models(args, options: dict) -> int:
-    """Run the CasADi backend's directory-based transfer_model for each model"""
-    import pymoca.backends.casadi.api as casadi_api
-
-    modelica_files = list_modelica_files(args.PATHNAME)
-    if not modelica_files:
-        log.error("No Modelica files in given PATHNAMEs")
-        return 1
-
-    errors = 0
-    for model in args.model:
-        model_dir = None
-        ambiguous = False
-        for path in modelica_files:
-            if path.stem == model:
-                if model_dir:
-                    log.error("More than one Modelica file found for %s", model)
-                    errors += 1
-                    ambiguous = True
-                    model_dir = None
-                    break
-                model_dir = path.parent
-        if not model_dir and not ambiguous:
-            log.error("No unique Modelica file corresponding to model %s", model)
-            errors += 1
-        elif model_dir:
-            log.info("Generating model for %s ...", model)
-            try:
-                _ = casadi_api.transfer_model(str(model_dir), model, options)
-            except Exception:  # pylint: disable=broad-except
-                if log.level == logging.DEBUG:
-                    log.exception("Problem generating CasADi model %s", model)
-                else:
-                    log.error("Problem generating CasADi model %s", model)
-                errors += 1
-    return errors
-
-
 def _run_pipeline(args, modelica_path: list[Path], stage: Stage, options: dict) -> int:
     """Parse files then run each model through the new pipeline up to stage"""
     import pymoca.parser
@@ -506,10 +468,7 @@ def main(argv: list[str] | None = None) -> int:
     stage = infer_stage(args)
     tic = time.perf_counter()
 
-    if args.translator == "casadi" and not (args.path or modelicapath_env):
-        errors = _run_casadi_models(args, options)
-    else:
-        errors = _run_pipeline(args, modelica_path, stage, options)
+    errors = _run_pipeline(args, modelica_path, stage, options)
 
     toc = time.perf_counter()
     log.info("Finished in {:0.4f} seconds".format(toc - tic))

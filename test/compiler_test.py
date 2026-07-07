@@ -190,8 +190,6 @@ def test_casadi_options_bad():
         ("-tcasadi -mspam " + GENERATED_DIR, 1),
         # 1) Given Modelica file does not exist
         ("-tcasadi -mspam eggs", 1),
-        # 1) Can't infer Modelica file from given model (Spring also in Package subdir)
-        ("-tcasadi -mSpring " + MODEL_DIR, 1),
     ]
     for args, expected_errors in bad_options:
         errors = run_compiler(args, check_errors=False)

@@ -585,7 +585,7 @@ class ClassModificationArgument(Node):
         self.value = (
             []
         )  # type: List[Union[ElementModification, ComponentClause, ShortClassDefinition]]
-        self.scope = None  # type: Optional[InstanceClass]
+        self.scope = None  # type: Optional[Union[Class, InstanceClass]]
         self.redeclare = False
         super().__init__(**kwargs)
 
@@ -984,6 +984,7 @@ class InstanceElement:
         modification_environment: Optional[ClassModification] = None,
         parent_instance: Optional["InstanceClass"] = None,
         fully_instantiated: bool = False,
+        partially_instantiated: bool = False,
         **kwargs,
     ):
         """ast_ref is a reference to the AST node where this instance is defined.
@@ -1014,6 +1015,7 @@ class InstanceElement:
             self.type = ComponentRef()  # The default in Symbol
 
         self.fully_instantiated = fully_instantiated
+        self.partially_instantiated = partially_instantiated
         self.parent_instance = parent_instance
 
     @property

@@ -1,0 +1,415 @@
+Modelica Concrete Syntax — MLS 3.5 Appendix A
+================================================
+
+Meta symbols (extended BNF):
+  [ ]   optional
+  { }   repeat zero or more times
+  |     or
+  "x"   literal token (no whitespace between characters)
+
+Keywords are reserved words and shall not be used as identifiers.
+Productions use hyphen as separator.
+
+A.1  Lexical Conventions
+------------------------
+
+IDENT = NONDIGIT { DIGIT | NONDIGIT } | Q-IDENT
+Q-IDENT = "'" { Q-CHAR | S-ESCAPE } "'"
+NONDIGIT = "_" | letters "a" to "z" | letters "A" to "Z"
+STRING = """ { S-CHAR | S-ESCAPE } """
+S-CHAR = see below
+Q-CHAR = NONDIGIT | DIGIT | "!" | "#" | "$" | "%" | "&" | "(" | ")"
+       | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | ">" | "="
+       | "?" | "@" | "[" | "]" | "^" | "{" | "}" | "|" | "~" | " " | """
+S-ESCAPE = "\'" | "\"" | "\?" | "\\"
+         | "\a" | "\b" | "\f" | "\n" | "\r" | "\t" | "\v"
+DIGIT = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+UNSIGNED-INTEGER = DIGIT { DIGIT }
+UNSIGNED-REAL =
+    UNSIGNED-INTEGER "." [ UNSIGNED-INTEGER ]
+  | UNSIGNED-INTEGER [ "." [ UNSIGNED-INTEGER ] ]
+    ( "e" | "E" ) [ "+" | "-" ] UNSIGNED-INTEGER
+  | "." UNSIGNED-INTEGER [ ( "e" | "E" ) [ "+" | "-" ] UNSIGNED-INTEGER ]
+
+S-CHAR is any Unicode character except double-quote '"', and backslash '\'.
+
+
+A.2  Grammar
+-------------
+
+A.2.1  Stored Definition — Within
+
+stored-definition :
+    [ within [ name ] ";" ]
+    { [ final ] class-definition ";" }
+
+
+A.2.2  Class Definition
+
+class-definition :
+    [ encapsulated ] class-prefixes class-specifier
+
+class-prefixes :
+    [ partial ]
+    ( class
+      | model
+      | [ operator ] record
+      | block
+      | [ expandable ] connector
+      | type
+      | package
+      | [ pure | impure ] [ operator ] function
+      | operator
+    )
+
+class-specifier :
+    long-class-specifier | short-class-specifier | der-class-specifier
+
+long-class-specifier :
+    IDENT description-string composition end IDENT
+  | extends IDENT [ class-modification ] description-string composition
+    end IDENT
+
+short-class-specifier :
+    IDENT "=" base-prefix type-specifier [ array-subscripts ]
+    [ class-modification ] description
+  | IDENT "=" enumeration "(" ( [ enum-list ] | ":" ) ")" description
+
+der-class-specifier :
+    IDENT "=" der "(" type-specifier "," IDENT { "," IDENT } ")" description
+
+base-prefix :
+    [ input | output ]
+
+enum-list :
+    enumeration-literal { "," enumeration-literal }
+
+enumeration-literal :
+    IDENT description
+
+composition :
+    element-list
+    { public element-list
+      | protected element-list
+      | equation-section
+      | algorithm-section
+    }
+    [ external [ language-specification ]
+      [ external-function-call ] [ annotation-clause ] ";" ]
+    [ annotation-clause ";" ]
+
+language-specification :
+    STRING
+
+external-function-call :
+    [ component-reference "=" ]
+    IDENT "(" [ expression-list ] ")"
+
+element-list :
+    { element ";" }
+
+element :
+    import-clause
+  | extends-clause
+  | [ redeclare ]
+    [ final ]
+    [ inner ] [ outer ]
+    ( class-definition
+      | component-clause
+      | replaceable ( class-definition | component-clause )
+        [ constraining-clause description ]
+    )
+
+import-clause :
+    import
+    ( IDENT "=" name
+      | name [ ".*" | "." ( "*" | "{" import-list "}" ) ]
+    )
+    description
+
+import-list :
+    IDENT { "," IDENT }
+
+
+A.2.3  Extends
+
+extends-clause :
+    extends type-specifier [ class-modification ] [ annotation-clause ]
+
+constraining-clause :
+    constrainedby type-specifier [ class-modification ]
+
+
+A.2.4  Component Clause
+
+component-clause :
+    type-prefix type-specifier [ array-subscripts ] component-list
+
+type-prefix :
+    [ flow | stream ]
+    [ discrete | parameter | constant ]
+    [ input | output ]
+
+component-list :
+    component-declaration { "," component-declaration }
+
+component-declaration :
+    declaration [ condition-attribute ] description
+
+condition-attribute :
+    if expression
+
+declaration :
+    IDENT [ array-subscripts ] [ modification ]
+
+
+A.2.5  Modification
+
+modification :
+    class-modification [ "=" expression ]
+  | "=" expression
+  | ":=" expression
+
+class-modification :
+    "(" [ argument-list ] ")"
+
+argument-list :
+    argument { "," argument }
+
+argument :
+    element-modification-or-replaceable
+  | element-redeclaration
+
+element-modification-or-replaceable :
+    [ each ] [ final ] ( element-modification | element-replaceable )
+
+element-modification :
+    name [ modification ] description-string
+
+element-redeclaration :
+    redeclare [ each ] [ final ]
+    ( short-class-definition | component-clause1 | element-replaceable )
+
+element-replaceable :
+    replaceable ( short-class-definition | component-clause1 )
+    [ constraining-clause ]
+
+component-clause1 :
+    type-prefix type-specifier component-declaration1
+
+component-declaration1 :
+    declaration description
+
+short-class-definition :
+    class-prefixes short-class-specifier
+
+
+A.2.6  Equations
+
+equation-section :
+    [ initial ] equation { equation ";" }
+
+algorithm-section :
+    [ initial ] algorithm { statement ";" }
+
+equation :
+    ( simple-expression "=" expression
+      | if-equation
+      | for-equation
+      | connect-clause
+      | when-equation
+      | component-reference function-call-args
+    )
+    description
+
+statement :
+    ( component-reference ( ":=" expression | function-call-args )
+      | "(" output-expression-list ")" ":="
+        component-reference function-call-args
+      | break
+      | return
+      | if-statement
+      | for-statement
+      | while-statement
+      | when-statement
+    )
+    description
+
+if-equation :
+    if expression then
+      { equation ";" }
+    { elseif expression then
+      { equation ";" }
+    }
+    [ else
+      { equation ";" }
+    ]
+    end if
+
+if-statement :
+    if expression then
+      { statement ";" }
+    { elseif expression then
+      { statement ";" }
+    }
+    [ else
+      { statement ";" }
+    ]
+    end if
+
+for-equation :
+    for for-indices loop
+      { equation ";" }
+    end for
+
+for-statement :
+    for for-indices loop
+      { statement ";" }
+    end for
+
+for-indices :
+    for-index { "," for-index }
+
+for-index :
+    IDENT [ in expression ]
+
+while-statement :
+    while expression loop
+    { statement ";" }
+    end while
+
+when-equation :
+    when expression then
+      { equation ";" }
+    { elsewhen expression then
+      { equation ";" }
+    }
+    end when
+
+when-statement :
+    when expression then
+      { statement ";" }
+    { elsewhen expression then
+      { statement ";" }
+    }
+    end when
+
+connect-clause :
+    connect "(" component-reference "," component-reference ")"
+
+
+A.2.7  Expressions
+
+expression :
+    simple-expression
+  | if expression then expression
+    { elseif expression then expression }
+    else expression
+
+simple-expression :
+    logical-expression [ ":" logical-expression [ ":" logical-expression ] ]
+
+logical-expression :
+    logical-term { or logical-term }
+
+logical-term :
+    logical-factor { and logical-factor }
+
+logical-factor :
+    [ not ] relation
+
+relation :
+    arithmetic-expression [ relational-operator arithmetic-expression ]
+
+relational-operator :
+    "<" | "<=" | ">" | ">=" | "==" | "<>"
+
+arithmetic-expression :
+    [ add-operator ] term { add-operator term }
+
+add-operator :
+    "+" | "-" | ".+" | ".-"
+
+term :
+    factor { mul-operator factor }
+
+mul-operator :
+    "*" | "/" | ".*" | "./"
+
+factor :
+    primary [ ("^" | ".^") primary ]
+
+primary :
+    UNSIGNED-NUMBER
+  | STRING
+  | false
+  | true
+  | ( component-reference | der | initial | pure ) function-call-args
+  | component-reference
+  | "(" output-expression-list ")"
+  | "[" expression-list { ";" expression-list } "]"
+  | "{" array-arguments "}"
+  | end
+
+UNSIGNED-NUMBER :
+    UNSIGNED-INTEGER | UNSIGNED-REAL
+
+type-specifier :
+    ["."] name
+
+name :
+    IDENT { "." IDENT }
+
+component-reference :
+    [ "." ] IDENT [ array-subscripts ] { "." IDENT [ array-subscripts ] }
+
+function-call-args :
+    "(" [ function-arguments ] ")"
+
+function-arguments :
+    expression [ "," function-arguments-non-first | for for-indices ]
+  | function-partial-application [ "," function-arguments-non-first ]
+  | named-arguments
+
+function-arguments-non-first :
+    function-argument [ "," function-arguments-non-first ]
+  | named-arguments
+
+array-arguments :
+    expression [ "," array-arguments-non-first | for for-indices ]
+
+array-arguments-non-first :
+    expression [ "," array-arguments-non-first ]
+
+named-arguments :
+    named-argument [ "," named-arguments ]
+
+named-argument :
+    IDENT "=" function-argument
+
+function-argument :
+    function-partial-application | expression
+
+function-partial-application :
+    function type-specifier "(" [ named-arguments ] ")"
+
+output-expression-list :
+    [ expression ] { "," [ expression ] }
+
+expression-list :
+    expression { "," expression }
+
+array-subscripts :
+    "[" subscript { "," subscript } "]"
+
+subscript :
+    ":" | expression
+
+description :
+    description-string [ annotation-clause ]
+
+description-string :
+    [ STRING { "+" STRING } ]
+
+annotation-clause :
+    annotation class-modification

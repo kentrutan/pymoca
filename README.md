@@ -24,11 +24,18 @@ pip install "pymoca[lxml]"      # ModelicaXML backend dependencies
 pip install "pymoca[examples]"  # To run Jupyter notebook examples in the repo
 
 pip install "pymoca[all]"       # All of the above
+pip install "pymoca[all,test]"  # Add test dependencies to all
 ```
 
 ## Usage
 
-Pymoca reads and understands Modelica code (`pymoca.parser`) and provides access to an internal representation of the code called an Abstract Syntax Tree or AST (`pymoca.ast`). The AST is further processed to generate output in various formats (`pymoca.backends`). The `pymoca.tree` module provides functionality to transform the AST into a form that can be more easily used by the backends to generate the target output. In particular, `pymoca.tree` provides classes and functions to convert a hierarchical, object-oriented Modelica model of connected components into a "flat" system of equations and associated variables, parameters, and constants. Pymoca error checking is not always complete or easy to understand, so it is better to develop the Modelica code with other tools and then use Pymoca for translation.
+### The Command Line Interface
+
+A `pymoca` script is installed into your PATH with the PyPI install. Run `pymoca --help` at the command line for usage help. Pymoca error checking is not always complete or easy to understand, so it is better to develop the Modelica code with other tools and then use Pymoca for translation.
+
+### Scripting
+
+Pymoca reads and understands Modelica code (`pymoca.parser`) and provides access to an internal representation of the code called an Abstract Syntax Tree or AST (`pymoca.ast`). The AST is further processed to generate output in various formats (`pymoca.backends`). The `pymoca.tree` module provides functionality to transform the AST into a form that can be more easily used by the backends to generate the target output. In particular, `pymoca.tree` provides classes and functions to convert a hierarchical, object-oriented Modelica model of connected components into a "flat" system of equations and associated variables, parameters, and constants.
 
 The [test suite](https://github.com/pymoca/pymoca/tree/master/test) contains examples showing how to use Pymoca and the subset of Modelica that it currently supports.
 

@@ -50,7 +50,7 @@ pymoca = "pymoca.compiler:main"
 casadi = ["casadi>=3.4.0", "setuptools>=60.0.0"]
 lxml = ["lxml>=3.5.0", "scipy>=0.13.3"]
 sympy = ["sympy>=0.7.6.1", "scipy>=0.13.3", "jinja2>=2.10.1"]
-examples = ["jupyterlab", "matplotlib", "control>=0.9.3.post2,<=0.10.0"]
+examples = ["jupyterlab", "matplotlib", "pymoca[casadi,sympy]"]
 # Test/dev tooling. xdist parallelizes the suite and surfaces shared-state bugs by
 # running several tests per worker. forked runs each MSL model in its own subprocess
 # so memory is reclaimed between models; it is fork-only, so it is omitted on Windows,

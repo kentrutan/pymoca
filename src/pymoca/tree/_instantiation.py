@@ -7,7 +7,7 @@ Entry: instantiate(class_tree, class_name) → _instantiate_class()
 
 from __future__ import annotations
 
-import copy  # TODO
+import copy
 from typing import cast
 
 from . import (
@@ -152,14 +152,12 @@ def _instantiate_class(
 
     # 2.1 Partially instantiate local classes, symbols, and extends
     # Use the parsed ast_ref as the symbol/extends source when orig_class is an
-    # InstanceClass that hasn't been fully built yet (state < FULL), *or* when
-    # it is a state-synced stub: _instantiate_class's early-return path (line ~154)
-    # propagates instantiation_state onto the orig_class that was passed in, but
-    # only syncs the state scalar — it does NOT copy over symbols or extends.  A stub
-    # with state=FULL but empty symbols/extends would cause from_class.symbols to be
-    # empty, so no symbols would reach new_class and _check_modification_targets
-    # would wrongly reject modifications that target inherited symbols (e.g. "m" in
-    # PartialThermalPortInductionMachines).  Fall back to ast_ref in this case.
+    # InstanceClass that hasn't been fully built yet (state < FULL), *or* when it is
+    # a state-synced stub: the early-return path above propagates instantiation_state
+    # onto the passed-in orig_class without copying symbols or extends. Sourcing from
+    # such a stub would leave new_class without symbols, making
+    # _check_modification_targets wrongly reject modifications that target inherited
+    # symbols (e.g. "m" in PartialThermalPortInductionMachines).
     _orig_is_stub = (
         isinstance(orig_class, InstanceClass)
         and orig_class.instantiation_state >= InstantiationState.FULL
@@ -249,7 +247,7 @@ def _instantiate_class(
 
     _copy_class_contents(new_class, copy_extends=False)
 
-    # We changed step 3. Instantiate extends to partial instantiation including contents
+    # Step 3 (extends) was already done above during partial instantiation
 
     # TODO: Step 4. Check extends class lookup
     # TODO: Step 5: Check and cull elements with same name in _instantiate_class

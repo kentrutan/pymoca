@@ -188,19 +188,8 @@ def _find_simple_name(
 ) -> ast.Class | ast.Symbol | None:
     """Lookup name per Modelica spec 3.5 section 5.3.1 Simple Name Lookup"""
 
-    # 1. Iteration variables
-    # 2. Classes
-    # 3. Components (Symbols in Pymoca)
-    # 4. Classes and Components from Extends Clauses
-    # 5. Qualified Import names, see 4 (but not from Extends Clauses) (spec 13.2.1)
-    # 6. Public Unqualified Imports (error if multiple are found) (spec 13.2.1)
-    # 7. a) Repeat 1-6 for each lexically enclosing instance scope,
-    #    b) stopping at `encapsulated`
-    #    c) unless predefined type, function, operator then look in root.
-    #    d) If name matches a variable (a.k.a. component, symbol) in an enclosing class, it
-    #       must be a `constant`.
+    # Step numbers below refer to part 1 of the outline in _find_name.
 
-    # Steps 1 - 7
     current_scope = scope
 
     # Search through enclosing scopes until we find something or hit a boundary
@@ -268,19 +257,12 @@ def _find_rest_of_name(
     guard: RecursionGuard,
     opts: LookupOptions,
 ) -> ast.Class | ast.Symbol | None:
-    """Lookup the `B.C` part of Composite Name Lookup (`A.B.C`) (spec 5.3.2)"""
+    """Lookup the `B.C` part of Composite Name Lookup (`A.B.C`) (spec 5.3.2)
 
-    # 1. `A` is looked up using Simple Name Lookup and passed as `first` argument
-    # 2. If `A` is a Component:
-    #     1. `B.C` is looked up from named component elements of `A`
-    #     2. if not found and if `A.B.C` is used as a function call and `A` is a scalar or can be
-    #     evaluated as a scalar from an array and `B` and `C` are classes,
-    #     it is a non-operator function call.
-    # 3. If `A` is a Class:
-    #     1. `A` is temporarily flattened without modifiers of this class
-    #     2. `B.C` is looked up among named elements of temp flattened class,
-    #     but if `A` is not a package, lookup is restricted to `encapsulated` elements only
-    #     and "the class we look inside shall not be partial in a simulation model".
+    `first` is the already-looked-up `A`."""
+
+    # See part 2 of the outline in _find_name.
+
     if isinstance(first, ast.Symbol):
         # Find the symbol type
         if isinstance(first.type, ast.Class):
@@ -432,16 +414,11 @@ def _flatten_first_and_find_rest(
     guard: RecursionGuard,
     opts: LookupOptions,
 ) -> ast.Class | ast.Symbol | None:
-    """Lookup the `B.C` part of Composite Name Lookup (`A.B.C`) where`A` is a Class"""
+    """Lookup the `B.C` part of Composite Name Lookup (`A.B.C`) where `A` is a Class
 
-    # 3. If `A` is a Class:
-    #     1. `A` is temporarily flattened without modifiers of this class
-    #     2. `B.C` is looked up among named elements of temp flattened class,
-    #     but if `A` is not a package, lookup is restricted to `encapsulated` elements only
-    #     and "the class we look inside shall not be partial in a simulation model".
-
-    #     Checking "the class we look inside shall not be partial in a simulation model"
-    #     is left to the caller.
+    Checking "the class we look inside shall not be partial in a simulation model"
+    is left to the caller."""
+    # Implements part 2.3 of the outline in _find_name.
 
     # Late imports to avoid circular dependency
     from ._instantiation import _get_lexical_parent_instance, _instantiate_class
@@ -514,10 +491,6 @@ def _find_local(
     name: str,
 ) -> ast.Class | ast.Symbol | None:
     """Name lookup for predefined classes and contained elements"""
-
-    # 1. Iteration variables
-    # 2. Classes
-    # 3. Components (Symbols in Pymoca)
 
     # 1. Iteration variables
     # TODO: Refactor when handling iteration variables (it will move up one level)

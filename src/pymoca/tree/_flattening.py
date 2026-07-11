@@ -61,7 +61,7 @@ def flatten_instance(
     _flatten_value_ref_names(flat_class)
     if evaluate_parameters:
         _evaluate_parameter_values(flat_class)
-    _generate_value_equations(flat_class)  # MLS 5.6.2 step 1.4
+    _generate_value_equations(flat_class)
     _check_all_references_valid(flat_class)
     _process_transitions(flat_class)
     if expand_connect:
@@ -115,11 +115,9 @@ def _flatten_instance(
     We allow the top-level flattened instance to retain connectors so that we can
     flatten a set of components and connect them together later.
     """
-    # Outline of spec 3.5 section 5.6.2 *Generation of the flat equation system*:
-    # Definitions/Notes:
-    #   - Simple Type: Integer, Real, Boolean, String, enumeration, Clock, or External
-    #     Object
-    #   - Mark steps TODO that we will postpone on the first pass
+    # Outline of spec 3.5 section 5.6.2 *Generation of the flat equation system*.
+    # "Simple Type" below means Integer, Real, Boolean, String, enumeration, Clock,
+    # or External Object.
     #
     # 1 Recursively walk the tree, beginning at the class to be flattened, and process
     # components with the following items used throughout:
@@ -211,8 +209,7 @@ def _flatten_instance(
                 flat_symbol.name = flat_name
                 flat_class.symbols[flat_name] = flat_symbol
 
-        # 1.2 Evaluate the conditional declaration expression and mark the declaration for
-        #     deletion (TODO)
+        # 1.2 Evaluate conditional declarations (TODO)
         _evaluate_conditional_declarations(flat_symbol, flat_class)
 
         # 1.3 Resolve dimensions, including enclosing instances
@@ -394,16 +391,12 @@ def _resolve_modification_attribute(
     guard: RecursionGuard,
     opts: LookupOptions,
 ):
-    # MLS 5.6.2 step 1.4 says value modifications on non-parameter/non-constant
-    # simple-type variables become equations. We don't emit those equations here;
-    # instead we set the raw resolved value on the symbol (`setattr` below) and
-    # let `_generate_value_equations` (called once at the top of `flatten_instance`
-    # after all recursion completes) decide what to do with it. We defer emitting
-    # equations to a 2nd pass because a value expression may reference a
-    # non-yet-processed symbol and each `_flatten_instance` recursion can mutate
+    # MLS 5.6.2 step 1.4 turns value modifications on non-parameter/non-constant
+    # simple-type variables into equations. Here we only set the resolved value on the
+    # symbol (`setattr` below). `_generate_value_equations` emits equations in a second
+    # pass after all recursion completes because a value expression may reference a
+    # not-yet-processed symbol and each `_flatten_instance` recursion can mutate
     # `flat_class.symbols`.
-    # Process the various ElementModification types
-    # type: List[Union[Primary, Expression, ClassModification, Array, ComponentRef]]
     mod = cast(ast.ElementModification, arg.value)
     value = mod.modifications[0]
     assert not isinstance(value, ast.ClassModification)
@@ -1226,26 +1219,9 @@ def _resolve_name(
     pass.
     """
 
-    # Implements MLS section 5.6 steps:
-    # * A. "all references by name in conditional declarations, modifications, dimension
-    #   definitions, annotations, equations and algorithms are resolved to the real
-    #   instance to which they are referring to ... [Either the referenced instance
-    #   belongs to the model to be simulated the path starts at the model itself, or if
-    #   not, it starts at the unnamed root of the instance tree, e.g. in case of a
-    #   constant in a package.]"
-    # * B. Names are replaced by the global unique identifier of the instance "[This
-    #   identifier is normally constructed from the names of the instances along a path
-    #   in the instance tree (and omitting the unnamed nodes of extends clauses),
-    #   separated by dots. Either the referenced instance belongs to the model to be
-    #   simulated the path starts at the model itself, or if not, it starts at the
-    #   unnamed root of the instance tree, e.g. in case of a constant in a package.]"
-    # * C. Classes and symbols are instantiated as needed (if not a fully instantiated instance)
-    # * D. Classes are ignored unless needed by components
-    # * E. Function calls encountered in the above are processed as needed: (TODO)
-    #   - Fill the call with default arguments (section 12.4.1)
-    #   - Look up the function in the instance tree
-    #   - Recursively flatten the function call
-    #   - Add to the list of functions
+    # Implements points A-C of the MLS 5.6.2 outline in _flatten_instance: resolve the
+    # reference to the real instance, rename it to the global unique dot-separated
+    # identifier, instantiating classes and symbols as needed along the way.
 
     # When scope is a raw ast.Class (not yet an InstanceClass), find the
     # corresponding InstanceClass by walking up the instance tree from

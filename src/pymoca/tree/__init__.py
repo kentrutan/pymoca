@@ -44,7 +44,7 @@ class ModelicaError(Exception):
 
     def __init__(self, msg):
         self.msg = msg
-        super().__init__(self)
+        super().__init__(msg)
 
     def __str__(self) -> str:
         return str(self.msg)

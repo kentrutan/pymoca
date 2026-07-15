@@ -3,6 +3,7 @@
 Tests for tree.flatten_instance() / tree.flatten().
 """
 
+import copy
 import os
 import pickle
 
@@ -1398,6 +1399,15 @@ def test_idealgash2o_stale_stub_import():
     flat = tree.flatten_class(root, "Modelica.Media.Examples.IdealGasH2O")
     assert "state.p" in flat.symbols
     assert "smoothState.T" in flat.symbols
+
+
+def test_modelica_error_pickle_roundtrip():
+    """ModelicaError must pickle and deepcopy for multiprocessing error marshalling."""
+    err = tree.ModelicaSemanticError("some message")
+    restored = pickle.loads(pickle.dumps(err))
+    assert isinstance(restored, tree.ModelicaSemanticError)
+    assert str(restored) == "some message"
+    assert str(copy.deepcopy(err)) == "some message"
 
 
 if __name__ == "__main__":

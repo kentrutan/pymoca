@@ -723,14 +723,14 @@ def _flatten_connect_ref(ref: ast.ComponentRef, prefix: str) -> None:
     """Flatten a connect clause ComponentRef by prepending prefix and collapsing children."""
     parts = [ref.name]
     c = ref
-    last_indices = ref.indices
+    indices = ref.indices
     while len(c.child) > 0:
         assert len(c.child) <= 1
         c = c.child[0]
         parts.append(c.name)
-        last_indices = c.indices
+        indices = indices + c.indices
     ref.name = prefix + "." + ".".join(parts) if prefix else ".".join(parts)
-    ref.indices = last_indices
+    ref.indices = indices
     ref.child = []
 
 

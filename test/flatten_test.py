@@ -639,6 +639,48 @@ def test_connect_equations_param_index():
         assert not isinstance(eq, ast.ConnectClause), f"Unexpanded ConnectClause: {eq!r}"
 
 
+def test_connect_equations_indexed_hierarchical():
+    """Test that connect refs keep indices from every segment, not just the last.
+
+    For connect(a[1].p, b[2].p) the generated potential and flow equations must
+    retain the component indices 1 and 2 (MLS 9.1).
+    """
+    flat = parse_and_flatten_model("IndexedConnect.mo", "IndexedConnect")
+
+    # No unexpanded ConnectClauses remain
+    for eq in flat.equations:
+        assert not isinstance(eq, ast.ConnectClause), f"Unexpanded ConnectClause: {eq!r}"
+
+    def literal_indices(ref):
+        return [
+            i.value
+            for index_array in ref.indices
+            for i in index_array
+            if isinstance(i, ast.Primary)
+        ]
+
+    # Potential (equality) equation keeps each side's component index
+    potential = [
+        eq
+        for eq in flat.equations
+        if isinstance(eq, ast.Equation)
+        and _ref_name(eq.left) == "a.p.v"
+        and _ref_name(eq.right) == "b.p.v"
+    ]
+    assert len(potential) == 1, "Expected exactly one a.p.v = b.p.v equation"
+    assert literal_indices(potential[0].left) == [1]
+    assert literal_indices(potential[0].right) == [2]
+
+    # Flow sum-to-zero equation operands keep their indices too
+    flow = [eq for eq in flat.equations if _is_flow_sum_equation(eq, {"a.p.i", "b.p.i"})]
+    assert len(flow) == 1, "Expected exactly one flow sum equation for a.p.i and b.p.i"
+    refs = []
+    _collect_component_refs([flow[0].left], refs)
+    by_name = {ref.name: ref for ref in refs}
+    assert literal_indices(by_name["a.p.i"]) == [1]
+    assert literal_indices(by_name["b.p.i"]) == [2]
+
+
 def _equation_strings(equations):
     """Extract (left_name, '=', right_name) tuples from simple equality equations."""
     result = set()
@@ -676,6 +718,22 @@ def _is_flow_sum_equation(eq, var_names):
     refs = set()
     _collect_component_ref_names([eq.left], refs)
     return refs == var_names
+
+
+def _collect_component_refs(nodes, refs):
+    """Recursively collect all ComponentRef nodes from a list of AST nodes"""
+    for node in nodes:
+        if isinstance(node, ast.ComponentRef):
+            refs.append(node)
+        if isinstance(node, ast.Node):
+            for attr in node.__dict__:
+                val = getattr(node, attr)
+                if isinstance(val, ast.Node):
+                    _collect_component_refs([val], refs)
+                elif isinstance(val, list):
+                    _collect_component_refs(val, refs)
+                elif isinstance(val, dict):
+                    _collect_component_refs(list(val.values()), refs)
 
 
 def _flatten_inline(txt, model_name):

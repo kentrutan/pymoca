@@ -100,24 +100,29 @@ class InvalidCacheError(Exception):
 
 
 def _compile_model(model_folder: str, model_name: str, compiler_options: Dict[str, str]):
+    # parse_annotations is the user-facing option; the parser takes the inverse.
+    strip_annotations = not compiler_options["parse_annotations"]
+
     if compiler_options["lazy_libraries"]:
         # Library folders become a tree of stubs that parse on first class access.
         # Requires a spec-compliant on-disk layout: every package directory holds a
         # package.mo (MLS 3.5 section 13.4).
         from pymoca import parser
 
-        tree = parser.modelicapath_to_tree(compiler_options["library_folders"])
+        tree = parser.modelicapath_to_tree(
+            compiler_options["library_folders"], strip_annotations=strip_annotations
+        )
         # The model folder is not a library; parse its files eagerly and merge them.
-        tree = _parse_folder(model_folder, into=tree)
+        tree = _parse_folder(model_folder, into=tree, strip_annotations=strip_annotations)
     else:
         tree = None
         for folder in [model_folder] + compiler_options["library_folders"]:
-            tree = _parse_folder(folder, into=tree)
+            tree = _parse_folder(folder, into=tree, strip_annotations=strip_annotations)
 
     return generate_model(tree, model_name, compiler_options)
 
 
-def _parse_folder(folder: str, into):
+def _parse_folder(folder: str, into, strip_annotations: bool = False):
     """Parse every .mo file under folder and merge into tree ``into`` (created if None)."""
     # Importing the antlr4 (generated modules) is rather slow. Avoid this ~100 ms
     # startup overhead for cached models by importing only when compiling.
@@ -130,7 +135,7 @@ def _parse_folder(folder: str, into):
 
             with open(os.path.join(root, item), "r", encoding="utf-8") as f:
                 try:
-                    parsed = parser.parse(f.read())
+                    parsed = parser.parse(f.read(), strip_annotations=strip_annotations)
                 except NotImplementedError as exc:
                     logger.warning("Skipping %s: %s", item, exc)
                     continue

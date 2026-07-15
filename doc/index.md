@@ -17,13 +17,8 @@ instructions.
 
 The "[Pymoca new flattening and related features — a guided tour](pymoca_011_vs_new.ipynb)"
 Jupyter notebook compares output between the current version and pymoca 0.11
-on a set of examples showing some of the new features.
-
-To run it live with a Jupyter kernel from the top-level of the repo:
-```bash
-pip install "pymoca[examples]"
-jupyter lab doc/pymoca_011_vs_new.ipynb
-```
+on a set of examples showing some of the new features. See the Setup section for how to run
+it live or re-execute every cell.
 
 ## Migrating from pymoca 0.11
 

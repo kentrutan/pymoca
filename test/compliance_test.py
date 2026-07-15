@@ -6,11 +6,10 @@ import re
 
 import pymoca.ast as ast
 import pymoca.parser
+from pymoca.parser import ModelicaSyntaxError
 from pymoca.tree import (
     InstanceSymbol,
-    InstantiationError,
     ModelicaError,
-    NameLookupError,
     flatten_instance,
     instantiate,
 )
@@ -118,16 +117,10 @@ _GLOBAL_MODELS = [
 ]
 _GLOBAL_REASON = "Global name lookup: partial-class rejection not implemented"
 
-# QualifiedImportConflict triggers parser duplicate-import error
-_IMPORT_CONFLICT = "ModelicaCompliance.Scoping.NameLookup.Imports.QualifiedImportConflict"
-_IMPORT_CONFLICT_REASON = "Parser raises on duplicate qualified import"
-
 KNOWN_FAILURES = {}
 
 for _model in _GLOBAL_MODELS:
     KNOWN_FAILURES[_model] = _GLOBAL_REASON
-
-KNOWN_FAILURES[_IMPORT_CONFLICT] = _IMPORT_CONFLICT_REASON
 
 # Parser-level failures — assert() in algorithm section not supported
 _PARSER_FAILURES = {
@@ -473,10 +466,9 @@ def _resolve_symbol_value(flat, var_name, _visited=None):
 )
 def test_flatten(mo_path, model_name, should_pass):
     """Test that flattening succeeds or fails as expected, with value checking."""
-    ast_tree = load_compliance_model(mo_path)
-    assert ast_tree is not None, f"Failed to parse {mo_path}"
-
     if should_pass:
+        ast_tree = load_compliance_model(mo_path)
+        assert ast_tree is not None, f"Failed to parse {mo_path}"
         instance = instantiate(ast_tree, model_name)
         assert instance is not None
         flat = flatten_instance(instance)
@@ -496,13 +488,10 @@ def test_flatten(mo_path, model_name, should_pass):
                     value == assertion.expected
                 ), f"{assertion.variable}: expected {assertion.expected}, got {value}"
     else:
-        with pytest.raises(
-            (
-                NameLookupError,
-                InstantiationError,
-                ModelicaError,
-                NotImplementedError,
-            )
-        ):
+        # NotImplementedError is deliberately not accepted: it means the
+        # construct was not attempted, not that pymoca correctly rejected it.
+        with pytest.raises((ModelicaError, ModelicaSyntaxError)):
+            ast_tree = load_compliance_model(mo_path)
+            assert ast_tree is not None, f"Failed to parse {mo_path}"
             instance = instantiate(ast_tree, model_name)
             flatten_instance(instance)

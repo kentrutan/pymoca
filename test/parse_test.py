@@ -342,6 +342,12 @@ def test_syntax_error():
     assert re.search(expected_regex, error_text.getvalue())
 
 
+def test_duplicate_component_name_error():
+    """Duplicate component names in a class raise ModelicaSyntaxError"""
+    with pytest.raises(parser.ModelicaSyntaxError, match="x already defined"):
+        parser.parse("model M Real x; Real x; end M;", bypass_cache=True)
+
+
 def test_inner_outer_final_parsed_on_symbol():
     """inner, outer, and final are set on parsed symbols (MLS 5.4, 7.3)."""
     ast_tree = parser.parse("model M inner Real x; outer Real y; final Integer n = 1; end M;")

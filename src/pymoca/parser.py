@@ -1179,7 +1179,7 @@ class ASTListener(ModelicaListener):
         # and redeclare, in which case we do not have to add it to the class's symbols.
         if not (self.in_extends or self.in_redeclaration):
             if sym.name in self.class_node.symbols:
-                raise IOError(sym.name, "already defined")
+                raise syntax_error_from_ctx(f"{sym.name} already defined", ctx)
             self.class_node.symbols[sym.name] = sym
 
     def exitDeclaration(self, ctx: ModelicaParser.DeclarationContext):

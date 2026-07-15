@@ -681,6 +681,39 @@ def test_connect_equations_indexed_hierarchical():
     assert literal_indices(by_name["b.p.i"]) == [2]
 
 
+def test_connect_inherited_component_flow_sign():
+    """Connect refs through inherited components are inside connectors (MLS 9.2).
+
+    A component inherited via extends must classify the same as a locally declared
+    one, so its connector's flow term enters the sum with a positive sign while the
+    outside connector's term is negated.
+    """
+    txt = """
+    connector C  Real e; flow Real f;  end C;
+    model Inner1  C c;  equation  c.e = 1;  end Inner1;
+    model Base0  Inner1 s;  end Base0;
+    model Base  extends Base0;  C p;  equation  connect(s.c, p);  end Base;
+    """
+    flat = _flatten_inline(txt, "Base")
+    flow = [eq for eq in flat.equations if _is_flow_sum_equation(eq, {"s.c.f", "p.f"})]
+    assert len(flow) == 1, "Expected exactly one flow sum equation for s.c.f and p.f"
+    positive, negated = _flow_sum_signs(flow[0].left)
+    assert positive == {"s.c.f"}
+    assert negated == {"p.f"}
+
+
+def _flow_sum_signs(expr):
+    """Split a flow sum expression's operand names into (positive, negated) sets."""
+    positive = set()
+    negated = set()
+    for operand in expr.operands:
+        if isinstance(operand, ast.ComponentRef):
+            positive.add(operand.name)
+        elif isinstance(operand, ast.Expression) and operand.operator == "-":
+            negated.update(ref.name for ref in operand.operands)
+    return positive, negated
+
+
 def _equation_strings(equations):
     """Extract (left_name, '=', right_name) tuples from simple equality equations."""
     result = set()

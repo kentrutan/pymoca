@@ -751,6 +751,19 @@ def _flatten_connect_ref(ref: ast.ComponentRef, prefix: str) -> None:
     ref.child = []
 
 
+def _find_local_or_inherited_symbol(instance: InstanceClass, name: str) -> InstanceSymbol | None:
+    """Look up *name* in instance.symbols, recursing into extends instances."""
+    sym = instance.symbols.get(name)
+    if sym is not None:
+        return sym
+    for extends in instance.extends:
+        if isinstance(extends, InstanceClass):
+            sym = _find_local_or_inherited_symbol(extends, name)
+            if sym is not None:
+                return sym
+    return None
+
+
 def _is_inner_connector(ref: ast.ComponentRef, instance: InstanceClass) -> bool:
     """Determine if a connect ref is 'inner' (belongs to a sub-component) per MLS 9.2.
 
@@ -759,7 +772,7 @@ def _is_inner_connector(ref: ast.ComponentRef, instance: InstanceClass) -> bool:
     first name resolves directly to a connector declared in the current class.
     """
     first_name = ref.name
-    sym = instance.symbols.get(first_name)
+    sym = _find_local_or_inherited_symbol(instance, first_name)
     if sym is None:
         return False
     if isinstance(sym.type, InstanceClass) and sym.type.type == "connector" and len(ref.child) == 0:

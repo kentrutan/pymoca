@@ -199,10 +199,11 @@ def test_stage_flatten_file(tmp_path):
 
 
 def test_stage_flatten_format_repr(capsys):
-    "Flatten stage with --format repr emits repr output"
+    "Flatten stage with --format repr emits a deep pretty-printed dump"
     run_compiler("-p " + MODEL_DIR + " -m Spring --stage flatten --format repr")
     captured = capsys.readouterr()
-    assert captured.out
+    assert len(captured.out.splitlines()) > 1
+    assert "'symbols'" in captured.out
 
 
 def test_casadi_options_good():

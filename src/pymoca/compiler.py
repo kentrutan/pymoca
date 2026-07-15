@@ -7,6 +7,7 @@ import argparse
 import json
 import logging
 import os
+import pprint
 import sys
 import time
 from enum import IntEnum
@@ -163,7 +164,7 @@ def translate(
 def emit_stage_output(model: str, stage_name: str, result, args) -> None:
     """Write pipeline stage result to stdout or a file in outdir"""
     if args.output_format == "repr":
-        text, ext = repr(result), "txt"
+        text, ext = pprint.pformat(result.to_json(result), width=100), "txt"
     else:
         text, ext = json.dumps(result.to_json(result), indent=2), "json"
     if args.outdir is not None:

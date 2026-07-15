@@ -69,11 +69,11 @@ def parse_file(path: Path) -> pymoca.ast.Tree | None:
             if log.level == logging.DEBUG:
                 log.debug(json.dumps(ast.to_json(ast), indent=2))
     # KeyError and AttributeError are problems in ASTListener
-    except (KeyError, AttributeError, OSError):
+    except (KeyError, AttributeError, OSError, UnicodeDecodeError) as err:
         if log.level in (logging.DEBUG, logging.INFO):
             log.exception('Parse error in file "%s"', path)
         else:
-            log.error('Parse error in file "%s"', path)
+            log.error('Parse error in file "%s": %s', path, err)
         return None
     return ast
 

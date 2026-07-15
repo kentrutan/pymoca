@@ -123,6 +123,14 @@ def test_parse_only():
     run_compiler(" ".join([MODEL_DIR, SPRING_MODEL]))
 
 
+def test_non_utf8_file_continues_batch(tmp_path):
+    "A non-UTF-8 file is reported as a parse error and the rest of the batch still runs"
+    bad_file = tmp_path / "Bad.mo"
+    bad_file.write_bytes(b"model Bad // caf\xe9\nend Bad;\n")
+    errors = run_compiler(" ".join([str(bad_file), SPRING_MODEL]), check_errors=False)
+    assert errors == 1
+
+
 def test_flatten_only():
     "If model is given and translator is not, then compiler tool stops after flatten"
     run_compiler("-v -m Spring " + SPRING_MODEL)

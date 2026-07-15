@@ -765,20 +765,22 @@ def _find_local_or_inherited_symbol(instance: InstanceClass, name: str) -> Insta
 
 
 def _is_inner_connector(ref: ast.ComponentRef, instance: InstanceClass) -> bool:
-    """Determine if a connect ref is 'inner' (belongs to a sub-component) per MLS 9.2.
+    """Determine if a connect ref is an inside connector per MLS 9.1.2.
 
-    A connector is 'inner' if the first name in the ref resolves to a non-connector
-    component (i.e., the connector is a port of that component). It is 'outer' if the
-    first name resolves directly to a connector declared in the current class.
+    A connector is inside if the first name in the ref resolves to a non-connector
+    component (i.e., the connector is a port of that component). If the first name
+    resolves to a connector of the current class, the ref is outside - including any
+    connector element of it reached by a deeper path.
     """
     first_name = ref.name
     sym = _find_local_or_inherited_symbol(instance, first_name)
     if sym is None:
         return False
-    if isinstance(sym.type, InstanceClass) and sym.type.type == "connector" and len(ref.child) == 0:
-        # Bare connector name in this scope → outer
+    if isinstance(sym.type, InstanceClass) and sym.type.type in (
+        "connector",
+        "expandableconnector",
+    ):
         return False
-    # Component with sub-connector (or deeper path) → inner
     return True
 
 

@@ -702,6 +702,27 @@ def test_connect_inherited_component_flow_sign():
     assert negated == {"p.f"}
 
 
+def test_connect_subconnector_of_outside_connector_flow_sign():
+    """Connector elements of outside connectors are outside connectors (MLS 9.1.2).
+
+    A dotted ref whose head is a connector of the class itself (e.g. op.pin where op
+    is a hierarchical connector) must classify as outside, so its flow term is negated
+    like the bare connector's would be.
+    """
+    txt = """
+    connector Pin  Real v; flow Real i;  end Pin;
+    connector Plug  Pin pin;  end Plug;
+    model Device  Plug plug;  equation  plug.pin.v = 0;  end Device;
+    model M  Plug op;  Device d;  equation  connect(op.pin, d.plug.pin);  end M;
+    """
+    flat = _flatten_inline(txt, "M")
+    flow = [eq for eq in flat.equations if _is_flow_sum_equation(eq, {"op.pin.i", "d.plug.pin.i"})]
+    assert len(flow) == 1, "Expected exactly one flow sum equation for op.pin.i and d.plug.pin.i"
+    positive, negated = _flow_sum_signs(flow[0].left)
+    assert positive == {"d.plug.pin.i"}
+    assert negated == {"op.pin.i"}
+
+
 def _flow_sum_signs(expr):
     """Split a flow sum expression's operand names into (positive, negated) sets."""
     positive = set()

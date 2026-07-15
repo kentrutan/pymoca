@@ -42,7 +42,7 @@ classifiers = [
 homepage = "https://github.com/pymoca/pymoca"
 
 [project.scripts]
-pymoca = "pymoca.compiler:main"
+pymoca = "pymoca.compiler:console_main"
 
 [project.optional-dependencies]
 # Note that we need setuptools for the distutils.ccompiler dependency

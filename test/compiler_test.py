@@ -53,12 +53,21 @@ def test_argparse_checks_good():
 
 
 def test_console_script_entry_point(monkeypatch, capsys):
-    "main() without argv reads sys.argv, as the installed pymoca script calls it"
+    "console_main() reads sys.argv, as the installed pymoca script calls it"
     monkeypatch.setattr("sys.argv", ["pymoca", "--version"])
     with pytest.raises(SystemExit) as exc_info:
-        pymoca.compiler.main()
+        pymoca.compiler.console_main()
     assert exc_info.value.code == 0
     assert pymoca.__version__ in capsys.readouterr().out
+
+
+def test_console_exit_status_clamped(monkeypatch):
+    "Exit status is the error count clamped to 255 so it cannot wrap to 0"
+    for errors, status in ((0, 0), (3, 3), (300, 255)):
+        monkeypatch.setattr(pymoca.compiler, "main", lambda errors=errors: errors)
+        with pytest.raises(SystemExit) as exc_info:
+            pymoca.compiler.console_main()
+        assert exc_info.value.code == status
 
 
 def test_argparse_checks_bad():

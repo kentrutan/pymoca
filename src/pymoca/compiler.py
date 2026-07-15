@@ -487,7 +487,12 @@ def main(argv: list[str] | None = None) -> int:
     return errors
 
 
-if __name__ == "__main__":
-    err = main(sys.argv[1:])
+def console_main() -> None:
+    """Console script entry point; exit status is the error count clamped to 255"""
+    err = main()
     logging.shutdown()
-    sys.exit(err)
+    sys.exit(min(err, 255))
+
+
+if __name__ == "__main__":
+    console_main()

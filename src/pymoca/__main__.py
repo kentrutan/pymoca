@@ -1,9 +1,4 @@
-import logging
-import sys
-
-from pymoca.compiler import main
+from pymoca.compiler import console_main
 
 if __name__ == "__main__":
-    err = main(sys.argv[1:])
-    logging.shutdown()
-    sys.exit(err)
+    console_main()

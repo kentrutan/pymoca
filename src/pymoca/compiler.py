@@ -180,11 +180,18 @@ def run_model(library_ast: pymoca.ast.Tree, model: str, stage: Stage, args, opti
 
     Returns: error count (0 or 1)
     """
+    import pymoca.ast
     import pymoca.parser
     import pymoca.tree
 
     try:
-        if stage == Stage.INSTANTIATE:
+        if stage == Stage.PARSE:
+            result = pymoca.tree.find_name(library_ast, model)
+            if not isinstance(result, pymoca.ast.Class):
+                log.error("Model %s not found in parsed files", model)
+                return 1
+            emit_stage_output(model, "parse", result, args)
+        elif stage == Stage.INSTANTIATE:
             result = pymoca.tree.instantiate(library_ast, model)
             emit_stage_output(model, "instantiate", result, args)
         elif stage == Stage.FLATTEN:
@@ -291,7 +298,8 @@ def build_arg_parser() -> MyArgumentParser:
         choices=("parse", "instantiate", "flatten", "translate"),
         default=None,
         help="stop at and emit output from this pipeline stage "
-        "(default: translate if -t given, flatten if -m given, parse otherwise)",
+        "(default: translate if -t given, flatten if -m given, otherwise parse, "
+        "which emits output only when --stage parse is given explicitly)",
     )
     genargs.add_argument(
         "--format",
@@ -412,9 +420,12 @@ def _run_pipeline(args, modelica_path: list[Path], stage: Stage, options: dict) 
     else:
         errors += len(error_files)
 
-    if not errors and args.model and stage > Stage.PARSE:
-        for model in args.model:
-            errors += run_model(library_ast, model, stage, args, options)
+    if not errors:
+        if args.model:
+            for model in args.model:
+                errors += run_model(library_ast, model, stage, args, options)
+        elif args.stage == "parse":
+            emit_stage_output(library_ast.name or "root", "parse", library_ast, args)
 
     if error_files:
         log.info("%d of %d files had parse errors", len(error_files), len(modelica_files))

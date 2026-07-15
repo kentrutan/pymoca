@@ -113,14 +113,15 @@ def test_bad_argument_combinations():
         assert errors == expected_errors
 
 
-def test_parse_only():
-    "If only a Modelica file is given, then compiler tool stops after parse"
+def test_parse_only(capsys):
+    "If only a Modelica file is given, then compiler tool checks syntax without output"
     # Parse one file
     run_compiler(SPRING_MODEL)
     # Parse two files
     run_compiler(" ".join([SPRING_MODEL, AIRCRAFT_MODEL]))
     # Parse all files in a directory and a given file
     run_compiler(" ".join([MODEL_DIR, SPRING_MODEL]))
+    assert not capsys.readouterr().out
 
 
 def test_non_utf8_file_continues_batch(tmp_path):
@@ -141,6 +142,33 @@ def test_flatten_only():
 def test_modelicapath():
     "No files given, use MODELICAPATH"
     run_compiler("-v -m Spring -p " + MODEL_DIR)
+
+
+def test_stage_parse_model(capsys):
+    "Explicit parse stage with -m emits the model's parsed AST as JSON"
+    run_compiler("-p " + MODEL_DIR + " -m Spring --stage parse")
+    data = json.loads(capsys.readouterr().out)
+    assert "symbols" in data
+
+
+def test_stage_parse_whole_tree(capsys):
+    "Explicit parse stage without -m emits the whole parsed tree"
+    run_compiler(SPRING_MODEL + " --stage parse")
+    data = json.loads(capsys.readouterr().out)
+    assert "Spring" in data["classes"]
+
+
+def test_stage_parse_file(tmp_path):
+    "Parse stage writes a JSON file to outdir when -o is given"
+    run_compiler("-p " + MODEL_DIR + " -m Spring --stage parse -o " + str(tmp_path))
+    data = json.loads((tmp_path / "Spring.parse.json").read_text())
+    assert "symbols" in data
+
+
+def test_stage_parse_model_not_found():
+    "Parse stage reports an error for a model missing from the parsed files"
+    errors = run_compiler("-p " + MODEL_DIR + " -m NoSuchModel --stage parse", check_errors=False)
+    assert errors == 1
 
 
 def test_stage_instantiate(capsys):

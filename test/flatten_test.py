@@ -1348,18 +1348,21 @@ def test_time_in_modification():
     assert "x" in flat.symbols
 
 
-def test_encapsulated_fully_qualified_type():
-    """Inside an encapsulated class, a fully-qualified name whose first component is a
-    root-level package must still resolve (MLS §13.2.3).
+def test_encapsulated_root_name_lookup():
+    """Root-level names are not visible inside an encapsulated class (MLS 5.3.1);
+    globally-rooted names (MLS 5.3.3) and imports (MLS 13.2.1) still resolve.
 
-    Before the fix, step 7c in _find_simple_name blocked 'package' classes at the root
-    scope, so Modelica.Units.SI.Position failed with 'Type ... not found'.
+    Only predefined types, functions, and operators may be looked up past an
+    encapsulated boundary, so P.Units.SI.Position must fail while
+    .P.Units.SI.Position and an imported SI.Position succeed.
     """
-    instance = parse_and_instantiate_model(
-        "EncapsulatedFullyQualifiedType.mo", "P.EncapsulatedModel"
-    )
-    flat = tree.flatten_instance(instance)
-    assert "x" in flat.symbols
+    for model in ("P.GlobalName", "P.ImportedName"):
+        instance = parse_and_instantiate_model("EncapsulatedFullyQualifiedType.mo", model)
+        flat = tree.flatten_instance(instance)
+        assert "x" in flat.symbols
+
+    with pytest.raises(tree.NameLookupError):
+        parse_and_instantiate_model("EncapsulatedFullyQualifiedType.mo", "P.LeakedRootName")
 
 
 def test_div_builtin_in_dimension():

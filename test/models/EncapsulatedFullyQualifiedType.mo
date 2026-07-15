@@ -1,6 +1,5 @@
-// Regression test: inside an encapsulated class, a fully-qualified type name
-// whose first component is a root-level package must resolve correctly.
-// MLS §13.2.3 allows encapsulated classes to use globally-rooted composite names.
+// Inside an encapsulated class, root-level names are not visible (MLS 5.3.1);
+// globally-rooted names (MLS 5.3.3) and imports (MLS 13.2.1) still resolve.
 package P
   package Units
     package SI
@@ -8,7 +7,16 @@ package P
     end SI;
   end Units;
 
-  encapsulated model EncapsulatedModel
+  encapsulated model GlobalName
+    parameter .P.Units.SI.Position x = 1.0;
+  end GlobalName;
+
+  encapsulated model ImportedName
+    import P.Units.SI;
+    parameter SI.Position x = 1.0;
+  end ImportedName;
+
+  encapsulated model LeakedRootName
     parameter P.Units.SI.Position x = 1.0;
-  end EncapsulatedModel;
+  end LeakedRootName;
 end P;

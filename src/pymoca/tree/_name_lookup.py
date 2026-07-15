@@ -20,6 +20,13 @@ from .instance import (
 )
 from .. import ast
 
+# Predefined type names visible past an encapsulated boundary (MLS 5.3.1)
+_PREDEFINED_NAMES = (
+    frozenset(ast.Tree.BUILTIN_TYPES)
+    | frozenset(ast.Tree.BUILTIN_ENUM_TYPES)
+    | ast.Tree.BUILTIN_OPAQUE_TYPES
+)
+
 
 def find_name(
     scope: ast.Class,
@@ -219,21 +226,13 @@ def _find_simple_name(
         # Step 7a: Move up to parent scope and continue searching
         current_scope = current_scope.parent
 
-    # Step 7c: If not found and we stopped at an encapsulated class,
-    # then search predefined types, functions, operators, and packages in global scope.
-    # Encapsulated classes may not import names from enclosing classes, but they may still
-    # use globally-rooted (fully-qualified) composite names such as Modelica.Units.SI.Position
-    # whose first component is a root-level package (MLS §13.2.3).
+    # Step 7c: If not found and we stopped at an encapsulated class, then search
+    # predefined types, functions, and operators in global scope (MLS 5.3.1).
+    # Other root-level names are not visible past an encapsulated boundary; use a
+    # global name (MLS 5.3.3) or an import (MLS 13.2.1) instead.
     # TODO: Add predefined functions and operators to global scope before this
-    if found is None and current_scope.encapsulated:
+    if found is None and current_scope.encapsulated and name in _PREDEFINED_NAMES:
         found = _find_local(scope.root, name)
-        if not isinstance(found, ast.Class) or found.type not in (
-            "type",
-            "function",
-            "operator",
-            "package",
-        ):
-            found = None
 
     # Step 7d: If name matches a variable (a.k.a. component, symbol) in an enclosing class,
     # it must be a `constant`.

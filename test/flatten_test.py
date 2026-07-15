@@ -735,6 +735,27 @@ def _flow_sum_signs(expr):
     return positive, negated
 
 
+def test_value_ref_names_not_cross_linked():
+    """Attribute refs of same-type instances resolve to their own instance's symbols.
+
+    The deferred inherited-ref rewrite matches on parsed-AST full names, which are
+    shared by every instance of a type. Already-resolved references must be left
+    alone or each instance's ref collapses onto the last-registered instance's symbol.
+    """
+    txt = """
+    model Sub
+      parameter Real k = 3.0;
+      Real x(start = k);
+    end Sub;
+    model Top
+      Sub a;  Sub b(k = 10.0);
+    end Top;
+    """
+    flat = _flatten_inline(txt, "Top")
+    assert flat.symbols["a.x"].start.name == "a.k"
+    assert flat.symbols["b.x"].start.name == "b.k"
+
+
 def _equation_strings(equations):
     """Extract (left_name, '=', right_name) tuples from simple equality equations."""
     result = set()

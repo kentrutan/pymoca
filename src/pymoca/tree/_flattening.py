@@ -1025,6 +1025,11 @@ def _flatten_value_ref_names(flat_class: InstanceClass) -> None:
     under its flat name.  Rewrite references by matching on ``ast_ref.full_name``
     so that downstream passes (``_to_ast_value`` and ``_generate_value_equations``)
     emit equations with flat names.
+
+    Only references whose name is not already a registered flat name are rewritten.
+    ``ast_ref.full_name`` is shared by every instance of the same type, so rewriting
+    an already-resolved reference would cross-link it to whichever instance's symbol
+    was registered last.
     """
     flat_name_by_ref = {}
     for flat_name, sym in flat_class.symbols.items():
@@ -1036,6 +1041,8 @@ def _flatten_value_ref_names(flat_class: InstanceClass) -> None:
         for attr in _VALUE_ATTRS:
             value = getattr(sym, attr, None)
             if not isinstance(value, InstanceSymbol):
+                continue
+            if value.name in flat_class.symbols:
                 continue
             ref_name = getattr(getattr(value, "ast_ref", None), "full_name", None)
             flat_name = flat_name_by_ref.get(ref_name)

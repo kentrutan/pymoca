@@ -20,6 +20,7 @@ import numpy as np
 
 from . import LookupOptions, ModelicaSemanticError, NameLookupError, RecursionGuard
 from ._instantiation import (
+    _VARIABILITY_ORDER,
     _get_lexical_parent_instance,
     _instantiate_class,
     instantiate,
@@ -253,10 +254,17 @@ def _flatten_instance(
             outer_dims = flat_symbol.dimensions
             flat_name_prefix = flat_name + "."
             new_sym_names = set(flat_class.symbols.keys()) - symbols_before_recursive
+            outer_variability = next(
+                (p for p in _VARIABILITY_ORDER if p in flat_symbol.prefixes), None
+            )
             for sym_name in new_sym_names:
                 if sym_name.startswith(flat_name_prefix):
                     sym = flat_class.symbols[sym_name]
                     sym.dimensions = outer_dims + sym.dimensions
+                    # Propagate outer variability to structured-component elements;
+                    # the most restrictive variability wins (MLS 4.4.4.1).
+                    if outer_variability is not None:
+                        _apply_outer_variability(sym, outer_variability)
 
             # Propagate outer symbol prefixes and replaceable to the leaf builtin symbol
             inner_sym = flat_class.symbols.get(flat_name)
@@ -287,6 +295,15 @@ def _flatten_instance(
     _collect_and_resolve_equations(instance, flat_class, prefix)
 
     # Steps 1.9, 2, and 3 are done outside the recursion in the caller
+
+
+def _apply_outer_variability(sym: InstanceSymbol, outer: str) -> None:
+    """Apply an enclosing component's variability prefix if more restrictive (MLS 4.4.4.1)."""
+    inner = next((p for p in _VARIABILITY_ORDER if p in sym.prefixes), None)
+    if inner is None:
+        sym.prefixes.insert(0, outer)
+    elif _VARIABILITY_ORDER.index(outer) < _VARIABILITY_ORDER.index(inner):
+        sym.prefixes[sym.prefixes.index(inner)] = outer
 
 
 def _evaluate_conditional_declarations(symbol: InstanceSymbol, parent: ast.Class):

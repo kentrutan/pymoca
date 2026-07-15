@@ -1036,6 +1036,29 @@ def test_builtin_alias_final_inner_outer_propagated():
     assert flat.symbols["z"].outer is True
 
 
+def test_parameter_record_elements_inherit_variability():
+    """Elements of a parameter record become parameters; the most restrictive
+    variability wins, so a constant element stays constant (MLS 4.4.4.1)."""
+    flat = _flatten_inline(
+        """
+    record R
+        Real x = 1;
+        constant Real c = 2;
+        discrete Real d;
+    end R;
+    model M
+        parameter R r;
+    end M;""",
+        "M",
+    )
+    assert flat.symbols["r.x"].prefixes == ["parameter"]
+    assert flat.symbols["r.x"].value == 1
+    assert flat.symbols["r.c"].prefixes == ["constant"]
+    assert flat.symbols["r.d"].prefixes == ["parameter"]
+    # The binding stays a parameter binding, not an ordinary equation
+    assert flat.equations == []
+
+
 def test_constant_in_modification_scope():
     """Constant used as modification value in its declaring class resolves across extends.
 

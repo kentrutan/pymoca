@@ -891,10 +891,8 @@ def _instantiate_symbol(
         type_cache_key = symbol_type
         cached_type = guard._symbol_type_cache.get(type_cache_key)
         if cached_type is not None:
-            cloned = copy.copy(cached_type)
-            symbol.type = cloned
+            symbol.type = _clone_type_instance(cached_type, symbol)
             _copy_symbol_contents(symbol)
-            symbol.type.parent_instance = symbol  # type: ignore[union-attr]
             symbol.instantiation_state = InstantiationState.FULL
             return
 
@@ -918,6 +916,75 @@ def _instantiate_symbol(
 
     if type_cache_key is not None:
         guard._symbol_type_cache[type_cache_key] = symbol.type
+
+
+def _clone_type_instance(
+    type_instance: InstanceClass, parent_instance: InstanceClass | InstanceSymbol
+) -> InstanceClass:
+    """Clone a cached type instance so parent chains and scopes lead to the clone.
+
+    A shallow copy would share the nested symbols, extends instances, and
+    modification-argument scopes among all clones, so member references would
+    resolve through whichever instance the cached original was instantiated for.
+    """
+    clone_by_id: dict[int, InstanceClass] = {}
+    cloned = _clone_instance_subtree(type_instance, parent_instance, clone_by_id)
+    _rebind_modification_scopes(cloned, clone_by_id)
+    return cloned
+
+
+def _clone_instance_subtree(
+    instance: InstanceClass,
+    parent_instance: InstanceClass | InstanceSymbol,
+    clone_by_id: dict[int, InstanceClass],
+) -> InstanceClass:
+    """Recursively clone an instance's symbols and extends, recording originals."""
+    cloned = copy.copy(instance)
+    clone_by_id[id(instance)] = cloned
+    cloned.parent_instance = parent_instance  # type: ignore[assignment]
+    cloned.modification_environment = _clone_modification(instance.modification_environment)
+    cloned.symbols = copy.copy(instance.symbols)
+    for name, member in instance.symbols.items():
+        member_clone = copy.copy(member)
+        member_clone.parent_instance = cloned
+        member_clone.modification_environment = _clone_modification(member.modification_environment)
+        if isinstance(member_clone.type, InstanceClass):
+            member_clone.type = _clone_instance_subtree(
+                member_clone.type, member_clone, clone_by_id
+            )
+        cloned.symbols[name] = member_clone
+    cloned.extends = [
+        _clone_instance_subtree(ext, cloned, clone_by_id) if isinstance(ext, InstanceClass) else ext
+        for ext in instance.extends
+    ]
+    return cloned
+
+
+def _clone_modification(mod: ast.ClassModification) -> ast.ClassModification:
+    """Copy a ClassModification with per-argument copies so scopes can be rebound."""
+    new_mod = copy.copy(mod)
+    new_mod.arguments = [copy.copy(arg) for arg in mod.arguments]
+    return new_mod
+
+
+def _rebind_modification_scopes(
+    cloned: InstanceClass, clone_by_id: dict[int, InstanceClass]
+) -> None:
+    """Point modification-argument scopes inside a cloned subtree at the clones."""
+    for arg in cloned.modification_environment.arguments:
+        replacement = clone_by_id.get(id(arg.scope))
+        if replacement is not None:
+            arg.scope = replacement
+    for member in cloned.symbols.values():
+        for arg in member.modification_environment.arguments:
+            replacement = clone_by_id.get(id(arg.scope))
+            if replacement is not None:
+                arg.scope = replacement
+        if isinstance(member.type, InstanceClass):
+            _rebind_modification_scopes(member.type, clone_by_id)
+    for ext in cloned.extends:
+        if isinstance(ext, InstanceClass):
+            _rebind_modification_scopes(ext, clone_by_id)
 
 
 def _create_partial_instance(

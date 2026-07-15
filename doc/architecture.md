@@ -611,8 +611,10 @@ are cached.
   `(name, id(scope))`. Prevents `O(N_lookups × N_extends_depth)` re-walks when the same
   scope recurs in many symbol-type lookups.
 - `RecursionGuard._symbol_type_cache` - caches fully-instantiated type classes for symbols
-  whose modification environment is empty. Hits are **shallow-cloned** so each symbol gets
-  its own `parent_instance` slot rather than aliasing a shared parent.
+  whose modification environment is empty. Hits are **cloned per instance subtree**
+  (`_clone_type_instance`): nested symbols, extends instances, and modification-argument
+  scopes are re-parented so member references resolve through the hitting symbol's own
+  parent chain rather than the cached original's.
 - `LookupOptions._searched_extends` - a set shared by reference across one inherited-scope
   traversal, preventing exponential re-visits of the same scope in diamond inheritance. It
   is excluded from the dataclass's `eq`/`hash` so `replace()`-d option variants still share

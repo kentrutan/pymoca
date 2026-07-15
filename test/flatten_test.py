@@ -756,6 +756,31 @@ def test_value_ref_names_not_cross_linked():
     assert flat.symbols["b.x"].start.name == "b.k"
 
 
+def test_type_cache_clone_per_instance_refs():
+    """Cached type instantiation gives each instance its own member scope chain.
+
+    The symbol type cache clones a fully instantiated type for the 2nd+ instance
+    of the same type. A too-shallow clone shares members and modification scopes,
+    so from the 3rd instance on, binding refs resolve to the 2nd instance's symbols.
+    """
+    txt = """
+    model Sub
+      Real m;
+      parameter Real k = 3.0;
+      Real n = k;
+    end Sub;
+    model Top
+      Sub a;  Sub b;  Sub c;  Sub d;
+    equation
+      a.m = 1;  b.m = 2;  c.m = 3;  d.m = 4;
+    end Top;
+    """
+    flat = _flatten_inline(txt, "Top")
+    eq_strs = _equation_strings(flat.equations)
+    for inst in ("a", "b", "c", "d"):
+        assert (f"{inst}.n", "=", f"{inst}.k") in eq_strs
+
+
 def _equation_strings(equations):
     """Extract (left_name, '=', right_name) tuples from simple equality equations."""
     result = set()

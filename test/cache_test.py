@@ -146,11 +146,9 @@ def test_parse_cache_purge():
         cursor.execute("SELECT value FROM metadata WHERE key='created_at'")
         first_created_at = int(cursor.fetchone()[0])
 
-        # Reimport the module to force a cache purge check, but with an
+        # Forget the database to force a cache purge check, but with an
         # expiration time such that the models should not be purged
-        import importlib
-
-        importlib.reload(parser)
+        parser._initialized_dbs.discard(full_db_path)
 
         _ = parser.parse(
             model_b,
@@ -161,9 +159,9 @@ def test_parse_cache_purge():
         cursor.execute("SELECT COUNT(*) FROM models")
         assert cursor.fetchone()[0] == 2
 
-        # Reimport the module again, but now we force a purge by setting
+        # Forget the database again, but now we force a purge by setting
         # expiration to zero
-        importlib.reload(parser)
+        parser._initialized_dbs.discard(full_db_path)
 
         _ = parser.parse(
             model_b,

@@ -219,8 +219,9 @@ Entry: `find_name(scope, name)` -> `_find_name()` -> `_find_simple_name()` -> `_
   are defined in `__init__.py`.
 - **Global name** (MLS 5.3.3): a leading dot parses to an empty-name head `ComponentRef`
   element. The `_find_name()` call detects it and restarts the lookup from the root
-  scope with enclosing-scope search disabled. The "class used during lookup may not be
-  partial" rejection is TODO.
+  scope with enclosing-scope search disabled. Partial-class rejection is TODO - not
+  just the 5.3.3 "class used during lookup may not be partial" rule, but the general
+  MLS 4.4.2 rule that a partial class may not be instantiated as a component type.
 
 ## Instantiation (MLS 5.6.1)
 
@@ -358,9 +359,12 @@ already failed in a less informative way.
 
 ### Symbol/Equation Ordering and Storage
 
-`_flatten_instance()` emits local symbols and equations first, then recurses into
-unnamed extends instances, so inherited entries are appended after local ones in the
-flat output. This is a result of our pre-existing `ast.Class` structure with separate
+`_flatten_instance()` emits local symbols first, then recurses into unnamed extends
+instances, so inherited symbols are appended after local ones in the flat output.
+Equations are the opposite: The extends recursion runs before local equation resolution,
+placing inherited equations before local ones so that inherited symbols are registered
+when local equations resolve.
+This is a result of our pre-existing `ast.Class` structure with separate
 (ordered) `dict`s for symbols, extends, equations, etc. This is a deviation from the MLS
 5.6.1.4 instantiation process under "The local contents of the element" step that says
 "empty extends-clause nodes are created and inserted into the current instance (to be
@@ -659,7 +663,8 @@ fully-populated connector symbols.
 
 ## TODO / WIP / Stubs
 
-- Global name lookup (MLS 5.3.3): partial-class rejection
+- Partial-class rejection: as a component type (MLS 4.4.2) and in global name lookup
+  (MLS 5.3.3) - `partial` is currently never enforced at instantiation
 - `_evaluate_conditional_declarations` (MLS 5.6.2 step 1.2)
 - `_process_transitions` (MLS 5.6.2 step 3)
 - `_check_all_references_valid` (MLS 5.6.2 step 1.9)
@@ -672,3 +677,15 @@ fully-populated connector symbols.
 - Iteration variables in name lookup (`for i = i:i+3`)
 - Type compatibility / constraining-type / prefix preservation for redeclares (`TODO`
   markers in `_instantiation.py`)
+- `final` and `each` on modification arguments: parsed but silently discarded, so
+  `final` protection is not enforced (MLS 7.2.6)
+- Connector compatibility check on `connect`: members are taken from the left
+  connector only, so mismatched connectors are silently accepted (MLS 9.3)
+- Imports are effectively re-exported: composite-name lookup searches the target
+  class's imports, which MLS 13.2.1.1 forbids - defer to a planned imports rewrite
+- Circular extends and self-referential component types are unguarded and raise
+  `RecursionError` instead of a Modelica-level error
+- Error quality on bad input: raw `KeyError` from `connect()` to an undeclared
+  component, duplicate top-level classes silently overwrite, array dimensions are not
+  validated as non-negative integers, and deeply nested models raise a bare
+  `RecursionError`

@@ -37,6 +37,11 @@ model B
     model LoadB = Resistor(R=R);
     model LoadC = LoadB;
 end B;
+model M
+    // Two instances of B: references to inherited R must stay per-instance
+    B p(R=5);
+    B q(R=7);
+end M;
 
 // OMC 1.25.0 -i=B gives:
 // class B
@@ -66,3 +71,31 @@ end B;
 //  h.R = 42.0
 //  i.R = 3
 //  j.R = 2.0
+//
+// OMC 1.25.0 -i=M gives:
+// class M
+//   parameter Real p.R = 5.0;
+//   parameter Real p.a.R = 4.0;
+//   parameter Real p.b.R = p.R;
+//   parameter Real p.c.R = p.R;
+//   parameter Real p.d.R = p.d.R;
+//   constant Real p.d.c = 84.0;
+//   parameter Real p.e.R = p.R;
+//   parameter Real p.f.R = p.R;
+//   parameter Real p.g.R = p.R;
+//   parameter Real p.h.R = 42.0;
+//   parameter Real p.i.R = p.R;
+//   parameter Real p.j.R = 2.0;
+//   parameter Real q.R = 7.0;
+//   parameter Real q.a.R = 4.0;
+//   parameter Real q.b.R = q.R;
+//   parameter Real q.c.R = q.R;
+//   parameter Real q.d.R = q.d.R;
+//   constant Real q.d.c = 84.0;
+//   parameter Real q.e.R = q.R;
+//   parameter Real q.f.R = q.R;
+//   parameter Real q.g.R = q.R;
+//   parameter Real q.h.R = 42.0;
+//   parameter Real q.i.R = q.R;
+//   parameter Real q.j.R = 2.0;
+// end M;

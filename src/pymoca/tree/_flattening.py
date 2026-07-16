@@ -59,7 +59,6 @@ def flatten_instance(
     flat_class = _create_partial_flat_instance(instance)
     _flatten_instance(instance, flat_class, opts=opts)
     _flatten_discovered_functions(flat_class)
-    _flatten_value_ref_names(flat_class)
     if evaluate_parameters:
         _evaluate_parameter_values(flat_class)
     _generate_value_equations(flat_class)
@@ -1011,45 +1010,6 @@ def _generate_connect_equations(flat_class: InstanceClass):
         )
 
 
-def _flatten_value_ref_names(flat_class: InstanceClass) -> None:
-    """Rewrite InstanceSymbol references in symbol value attributes to flat names.
-
-    Per MLS 5.6.2, value modifications are resolved (in source scope) before the
-    enclosing extends clauses are processed.  When a value references an inherited
-    symbol, ``_resolve_name`` must therefore fall back to the class tree — producing
-    an InstanceSymbol whose ``.name`` is the full class path (e.g. ``Pkg.A.x``)
-    rather than the flat name (``x``), because the extends instance isn't yet
-    registered in ``flat_class.symbols``.
-
-    Once all extends have been processed, every referenced inherited symbol exists
-    under its flat name.  Rewrite references by matching on ``ast_ref.full_name``
-    so that downstream passes (``_to_ast_value`` and ``_generate_value_equations``)
-    emit equations with flat names.
-
-    Only references whose name is not already a registered flat name are rewritten.
-    ``ast_ref.full_name`` is shared by every instance of the same type, so rewriting
-    an already-resolved reference would cross-link it to whichever instance's symbol
-    was registered last.
-    """
-    flat_name_by_ref = {}
-    for flat_name, sym in flat_class.symbols.items():
-        ref_name = getattr(getattr(sym, "ast_ref", None), "full_name", None)
-        if ref_name is not None:
-            flat_name_by_ref[ref_name] = flat_name
-
-    for sym in flat_class.symbols.values():
-        for attr in _VALUE_ATTRS:
-            value = getattr(sym, attr, None)
-            if not isinstance(value, InstanceSymbol):
-                continue
-            if value.name in flat_class.symbols:
-                continue
-            ref_name = getattr(getattr(value, "ast_ref", None), "full_name", None)
-            flat_name = flat_name_by_ref.get(ref_name)
-            if flat_name is not None and value.name != flat_name:
-                value.name = flat_name
-
-
 def _get_parameter_value_from_chain(isym: InstanceSymbol) -> ast.Primary | None:
     """Walk an InstanceSymbol value chain to a literal, for inline parameter folding
 
@@ -1207,6 +1167,46 @@ def _flatten_name(
     return ".".join(element_full_name[flat_name_start:])
 
 
+def _class_lineage_contains(instance: InstanceClass, target: ast.Class) -> bool:
+    """Whether instance's class or any of its transitive extends classes is target"""
+    if instance.ast_ref is target or (
+        instance.ast_ref is not None and instance.ast_ref.full_name == target.full_name
+    ):
+        return True
+    return any(
+        isinstance(extends, InstanceClass) and _class_lineage_contains(extends, target)
+        for extends in instance.extends
+    )
+
+
+def _flat_name_from_scope(
+    element: InstanceElement,
+    scope: InstanceClass,
+    context: InstanceClass,
+    name_flat_class: InstanceClass,
+) -> str | None:
+    """Rebuild the flat name of an element found through the class tree.
+
+    Returns None when element does not lie inside scope or no enclosing instance
+    matches.
+    """
+    scope_class = scope.ast_ref
+    if not isinstance(scope_class, ast.Class):
+        return None
+    element_tuple = element_instance_name_tuple(element)
+    scope_tuple = element_instance_name_tuple(scope)
+    if element_tuple[: len(scope_tuple)] != scope_tuple:
+        return None
+    relative = element_tuple[len(scope_tuple) :]
+    current: InstanceElement | None = context
+    while current is not None:
+        if isinstance(current, InstanceClass) and _class_lineage_contains(current, scope_class):
+            prefix = _flatten_name(current, name_flat_class.full_instance_name)
+            return ".".join(filter(None, (prefix, *relative)))
+        current = getattr(current, "parent_instance", None)
+    return None
+
+
 def _resolve_name(
     name: str | ast.ComponentRef,
     scope: InstanceClass,
@@ -1306,7 +1306,14 @@ def _resolve_name(
     # will receive distinct clones — safe as long as consumers key off the name string
     # rather than object identity (which is the current convention).
     if name_flat_class is not None:
-        flat_name = _flatten_name(element, name_flat_class.full_instance_name)
+        root_tuple = tuple(name_flat_class.full_instance_name.split("."))
+        if element_instance_name_tuple(element)[: len(root_tuple)] == root_tuple:
+            flat_name = _flatten_name(element, name_flat_class.full_instance_name)
+        else:
+            # element was found through the class tree so rebuild the flat name
+            flat_name = _flat_name_from_scope(element, scope, flat_class, name_flat_class)
+            if flat_name is None:
+                flat_name = _flatten_name(element, name_flat_class.full_instance_name)
         element = element.clone()
         element.name = flat_name
         element.parent_instance = name_flat_class

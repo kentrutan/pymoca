@@ -264,6 +264,24 @@ def test_flattening_modification_rhs_evaluation():
             raise AssertionError(f"Unexpected value type in test: {value_type}")
 
 
+def test_flattening_modification_rhs_multiple_instances():
+    """References to inherited symbols stay per-instance with multiple instances."""
+
+    flat = parse_and_flatten_model("ModificationScopeFlatten.mo", "M")
+    literals = {"a.R": 4.0, "d.c": 84.0, "h.R": 42.0, "j.R": 2.0}
+    for instance in ("p", "q"):
+        for member in ("b.R", "c.R", "e.R", "f.R", "g.R", "i.R"):
+            value = flat.symbols[f"{instance}.{member}"].value
+            assert isinstance(value, ast.Symbol), f"{instance}.{member} not symbolic: {value!r}"
+            assert value.name == f"{instance}.R", f"Wrong value ref for {instance}.{member}"
+        self_ref = flat.symbols[f"{instance}.d.R"].value
+        assert isinstance(self_ref, ast.Symbol) and self_ref.name == f"{instance}.d.R"
+        for member, expected in literals.items():
+            assert flat.symbols[f"{instance}.{member}"].value == expected
+    assert flat.symbols["p.R"].value == 5.0
+    assert flat.symbols["q.R"].value == 7.0
+
+
 def test_flattening_modification_rhs_omc_simulation():
     """Verify folded parameter values match OMC 1.22.0 simulation results."""
     flat = parse_and_flatten_model("ModificationScopeFlatten.mo", "B", evaluate_parameters=True)

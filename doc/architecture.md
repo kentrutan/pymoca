@@ -267,13 +267,6 @@ The legacy `tree.flatten()` routes directly to this (in `__init__.py`).
 After `_flatten_instance()` returns, `flatten_instance()` runs in order:
 - `_flatten_discovered_functions()` - recursively flattens functions found during step
   1.7 (part E).
-- **Deferred ref-name fixup** - `_flatten_value_ref_names()` rewrites `InstanceSymbol`
-  values whose `.name` is still the class path (e.g. `Pkg.A.x`) to the correct flat name
-  (e.g. `x`). This happens when a value modification references an inherited symbol:
-  `_resolve_name` falls back to the class tree and returns an InstanceSymbol with the
-  full class path because the extends instance is not yet registered in
-  `flat_class.symbols`. The fix runs after the entire extends chain has been walked
-  (when the flat namespace is complete), matching by `ast_ref.full_name`.
 - `_evaluate_parameter_values()` - only when `evaluate_parameters=True`: folds parameter
   and constant values to literals.
 - **1.4 (2nd pass)** `_generate_value_equations()` - converts resolved `.value` on
@@ -312,6 +305,16 @@ registered** in the flat class's symbol table. Registration still happens throug
 element's own definition site during the normal flatten walk. This avoids
 double-registration. `_resolve_name` walks the full scope-to-`InstanceClass` chain and
 uses `parent_instance` (instance hierarchy), not `parent` (lexical).
+
+When the referenced element is found through the class tree (the value modification is
+resolved before its enclosing extends clause is processed, so the extends instance is
+not yet in the flat namespace), the element's parent chain carries no instance context
+and its path would flatten to a class path like `A.R`. `_flat_name_from_scope()`
+rebuilds the flat name from the lookup scope instead: the nearest enclosing instance of
+the reference whose class lineage includes the scope's class supplies the instance
+prefix, and the element's path relative to the scope supplies the rest. Matching
+lexically up from the reference site keeps references inside different instances of the
+same class independent (`p.b.R = p.R` and `q.b.R = q.R`, not both `q.R`).
 
 For Expression-valued modifications, constant folding runs first. When it gives up
 because parameter values have not yet been propagated, a fallback ComponentRef-rewriting

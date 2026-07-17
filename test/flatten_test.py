@@ -1464,6 +1464,32 @@ def test_conditional_component_removed():
     assert "y" in flat.symbols
 
 
+@pytest.mark.xfail(
+    raises=NotImplementedError,
+    reason="stream connectors and inStream() are not yet supported (MLS 15)",
+)
+def test_stream_connector_instream():
+    """Stream connector variables flatten and inStream() is expanded (MLS 15.2)."""
+    flat = _flatten_inline(
+        """
+    connector FluidPort
+        Real p;
+        flow Real m_flow;
+        stream Real h_outflow;
+    end FluidPort;
+    model M
+        FluidPort a, b;
+        Real h_mix;
+    equation
+        connect(a, b);
+        h_mix = inStream(a.h_outflow);
+    end M;""",
+        "M",
+    )
+    assert "a.h_outflow" in flat.symbols
+    assert "b.h_outflow" in flat.symbols
+
+
 def test_modelica_error_pickle_roundtrip():
     """ModelicaError must pickle and deepcopy for multiprocessing error marshalling."""
     err = tree.ModelicaSemanticError("some message")

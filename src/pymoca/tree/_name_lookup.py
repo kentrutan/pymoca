@@ -247,6 +247,16 @@ def _find_simple_name(
     return found
 
 
+def _satisfies_package_requirements(cls: ast.Class) -> bool:
+    """True if *cls* may be looked up like a package (MLS 5.3.3, 13.1).
+
+    A class satisfies the requirements for a package when it contains only
+    classes and constants -- i.e. every component is a constant. Enumeration
+    literals are constants, so enumeration types qualify.
+    """
+    return all("constant" in sym.prefixes for sym in cls.symbols.values())
+
+
 def _find_rest_of_name(
     first: ast.Class | ast.Symbol,
     rest_of_name: str,
@@ -303,14 +313,16 @@ def _find_rest_of_name(
             found = _find_name(first, rest_of_name, guard, opts)
         # Check that found meets non-package lookup requirements in spec section 5.3.2
         # The found.name test is so we only check going left to right in composite name
-        # and not the other direction as we pop the recursive call stack.
+        # and not the other direction as we pop the recursive call stack. A class that
+        # satisfies the requirements for a package (only classes and constants) is looked
+        # up like a package (MLS 5.3.3); this also covers enumeration literal access.
         if (
             opts.check_encapsulated
             and found is not None
             and found.name == _first_name(rest_of_name)
             and first.type != "package"
+            and not _satisfies_package_requirements(first)
             and not (isinstance(found, ast.Class) and found.encapsulated)
-            and not (isinstance(found, ast.Symbol) and "constant" in found.prefixes)
         ):
             raise NameLookupError(
                 f"{first.name} is not a package so {found.name} must be encapsulated"

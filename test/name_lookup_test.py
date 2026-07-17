@@ -395,6 +395,44 @@ def test_non_package_lookup_non_encapsulated():
         _ = find_name(scope, "A.B")
 
 
+def test_non_package_lookup_constant():
+    """Looking up a constant inside a class that does not satisfy the package
+    requirements (it has a non-constant component) is forbidden (MLS 5.3.2)."""
+    tree = pymoca.parser.parse(
+        """
+        model M
+          class A
+            constant Real c = 2.0;
+            Real v = 3.0;
+          end A;
+          Real y = A.c;
+        end M;
+        """
+    )
+    with pytest.raises(
+        pymoca.tree.NameLookupError, match=r"A is not a package so c must be encapsulated"
+    ):
+        _ = find_name(tree.classes["M"], "A.c")
+
+
+def test_package_like_lookup_constant():
+    """Looking up a constant inside a class that satisfies the package
+    requirements (only classes and constants) is allowed (MLS 5.3.3)."""
+    tree = pymoca.parser.parse(
+        """
+        model M
+          class A
+            constant Real c = 2.0;
+          end A;
+          Real y = A.c;
+        end M;
+        """
+    )
+    found = find_name(tree.classes["M"], "A.c")
+    assert found is not None
+    assert isinstance(found, pymoca.ast.Symbol)
+
+
 def test_function_lookup_via_comp():
     """Checks that it's allowed to look up a function via a component"""
     ast = parse_composite_lookup_file("FunctionLookupViaComp.mo")

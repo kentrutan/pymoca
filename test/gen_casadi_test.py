@@ -5,7 +5,10 @@ Modelica parse Tree to AST tree.
 
 import glob
 import os
+import pickle
 import re
+import shutil
+import tempfile
 
 import casadi as ca
 
@@ -14,7 +17,7 @@ import numpy as np
 import pymoca.backends.casadi.generator as gen_casadi
 from pymoca import parser
 from pymoca.backends.casadi.alias_relation import AliasRelation
-from pymoca.backends.casadi.api import CachedModel, transfer_model
+from pymoca.backends.casadi.api import CachedModel, InvalidCacheError, load_model, transfer_model
 from pymoca.backends.casadi.model import (
     CASADI_ATTRIBUTES,
     DelayArgument,
@@ -1139,6 +1142,63 @@ def test_cache_delay_arguments():
 
     assert_model_equivalent_numeric(ref_model, cached_model)
     assert_model_variables_equivalant(ref_model, cached_model)
+
+
+def _build_spring_cache(tmpdir):
+    """Copy Spring.mo into tmpdir and build its cache. Returns (db path, options)."""
+    shutil.copy(os.path.join(MODEL_DIR, "Spring.mo"), tmpdir)
+    options = {"cache": True, "expand_mx": True}
+    model = transfer_model(tmpdir, "Spring", dict(options))
+    assert not isinstance(model, CachedModel)
+    return os.path.join(tmpdir, "Spring.pymoca_cache"), options
+
+
+def _tamper_cache(db_file, **fields):
+    with open(db_file, "rb") as f:
+        db = pickle.load(f)
+    db.update(fields)
+    with open(db_file, "wb") as f:
+        pickle.dump(db, f, protocol=-1)
+    return db
+
+
+def test_cache_invalid_mtime():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_file, options = _build_spring_cache(tmpdir)
+        newer = os.path.getmtime(db_file) + 10
+        os.utime(os.path.join(tmpdir, "Spring.mo"), (newer, newer))
+        with pytest.raises(InvalidCacheError, match="out of date"):
+            load_model(tmpdir, "Spring", dict(options))
+
+
+def test_cache_invalid_pymoca_version():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_file, options = _build_spring_cache(tmpdir)
+        _tamper_cache(db_file, version="invalid-version")
+        with pytest.raises(InvalidCacheError, match="different version of pymoca"):
+            load_model(tmpdir, "Spring", dict(options))
+        # transfer_model falls back to recompiling and refreshes the cache
+        model = transfer_model(tmpdir, "Spring", dict(options))
+        assert not isinstance(model, CachedModel)
+        assert isinstance(transfer_model(tmpdir, "Spring", dict(options)), CachedModel)
+
+
+def test_cache_invalid_options():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        _db_file, options = _build_spring_cache(tmpdir)
+        with pytest.raises(InvalidCacheError, match="different compiler options"):
+            load_model(tmpdir, "Spring", dict(options, detect_aliases=True))
+
+
+def test_cache_invalid_os():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_file, options = _build_spring_cache(tmpdir)
+        with open(db_file, "rb") as f:
+            saved_options = pickle.load(f)["options"]
+        # The OS check only runs for codegen caches, so flag the cache as one
+        _tamper_cache(db_file, library_os="unknown_os", options=dict(saved_options, codegen=True))
+        with pytest.raises(InvalidCacheError, match="incompatible OS"):
+            load_model(tmpdir, "Spring", dict(options, codegen=True))
 
 
 def test_codegen():

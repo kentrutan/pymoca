@@ -1519,6 +1519,44 @@ def test_operator_record_overload():
     assert eq_map["c"].operator != "+"
 
 
+@pytest.mark.xfail(reason="state machine transitions are not yet processed (MLS 17)")
+def test_state_machine_transitions_processed():
+    """transition() and initialState() define state machine semantics (MLS 17.1).
+
+    Flattening must consume them into a state machine representation instead of
+    leaving them behind as ordinary function-call equations.
+    """
+    flat = _flatten_inline(
+        """
+    model M
+        inner Integer i(start = 0);
+        block State1
+            outer output Integer i;
+        equation
+            i = previous(i) + 2;
+        end State1;
+        State1 state1;
+        block State2
+            outer output Integer i;
+        equation
+            i = previous(i) - 1;
+        end State2;
+        State2 state2;
+    equation
+        initialState(state1);
+        transition(state1, state2, i > 10, immediate = false);
+        transition(state2, state1, i < 1, immediate = false);
+    end M;""",
+        "M",
+    )
+    leftover = [
+        eq
+        for eq in flat.equations
+        if isinstance(eq, ast.Function) and eq.name in ("initialState", "transition")
+    ]
+    assert not leftover
+
+
 def test_modelica_error_pickle_roundtrip():
     """ModelicaError must pickle and deepcopy for multiprocessing error marshalling."""
     err = tree.ModelicaSemanticError("some message")

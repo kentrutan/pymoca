@@ -1419,6 +1419,24 @@ def test_idealgash2o_stale_stub_import():
     assert "smoothState.T" in flat.symbols
 
 
+@pytest.mark.xfail(reason="conditional component declarations are not yet evaluated (MLS 4.4.5)")
+def test_conditional_component_removed():
+    """A component whose condition is false is removed from the flat model (MLS 4.4.5)."""
+    flat = _flatten_inline(
+        """
+    model M
+        parameter Boolean use_x = false;
+        Real x if use_x;
+        Real y;
+    equation
+        y = 1.0;
+    end M;""",
+        "M",
+    )
+    assert "x" not in flat.symbols
+    assert "y" in flat.symbols
+
+
 def test_modelica_error_pickle_roundtrip():
     """ModelicaError must pickle and deepcopy for multiprocessing error marshalling."""
     err = tree.ModelicaSemanticError("some message")

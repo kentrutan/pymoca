@@ -1490,6 +1490,35 @@ def test_stream_connector_instream():
     assert "b.h_outflow" in flat.symbols
 
 
+@pytest.mark.xfail(reason="operator record overload resolution is not yet implemented (MLS 14)")
+def test_operator_record_overload():
+    """Binary '+' on operator record operands resolves to the '+' operator function (MLS 14.4)."""
+    flat = _flatten_inline(
+        """
+    operator record Complex
+        Real re;
+        Real im;
+        encapsulated operator function '+'
+            import Complex;
+            input Complex c1;
+            input Complex c2;
+            output Complex result;
+        algorithm
+            result := Complex(re=c1.re + c2.re, im=c1.im + c2.im);
+        end '+';
+    end Complex;
+    model M
+        Complex a, b, c;
+    equation
+        c = a + b;
+    end M;""",
+        "M",
+    )
+    eq_map = {eq.left.name: eq.right for eq in flat.equations if hasattr(eq, "left")}
+    # The builtin '+' must be replaced by a call to the Complex.'+' overload
+    assert eq_map["c"].operator != "+"
+
+
 def test_modelica_error_pickle_roundtrip():
     """ModelicaError must pickle and deepcopy for multiprocessing error marshalling."""
     err = tree.ModelicaSemanticError("some message")

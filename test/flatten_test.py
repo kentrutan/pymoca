@@ -1419,6 +1419,33 @@ def test_idealgash2o_stale_stub_import():
     assert "smoothState.T" in flat.symbols
 
 
+@pytest.mark.xfail(reason="outer components are not yet merged with their inner match (MLS 5.4)")
+def test_outer_component_resolves_to_inner():
+    """An outer component is an alias for the matching inner declaration (MLS 5.4).
+
+    Flattening must redirect references through the outer component to the
+    inner one instead of keeping a separate flattened symbol for the outer.
+    """
+    flat = _flatten_inline(
+        """
+    model Comp
+        outer Real T;
+        Real u;
+    equation
+        u = T;
+    end Comp;
+    model M
+        inner Real T = 25.0;
+        Comp c;
+    end M;""",
+        "M",
+    )
+    assert "T" in flat.symbols
+    assert "c.T" not in flat.symbols
+    eq_map = {eq.left.name: eq.right for eq in flat.equations if hasattr(eq, "left")}
+    assert eq_map["c.u"].name == "T"
+
+
 @pytest.mark.xfail(reason="conditional component declarations are not yet evaluated (MLS 4.4.5)")
 def test_conditional_component_removed():
     """A component whose condition is false is removed from the flat model (MLS 4.4.5)."""

@@ -1380,7 +1380,7 @@ def test_encapsulated_root_name_lookup():
         flat = tree.flatten_instance(instance)
         assert "x" in flat.symbols
 
-    with pytest.raises(tree.NameLookupError):
+    with pytest.raises(tree.ModelicaSemanticError):
         parse_and_instantiate_model("EncapsulatedFullyQualifiedType.mo", "P.LeakedRootName")
 
 

@@ -121,7 +121,7 @@ def test_import_not_inherited():
     library_ast = parse_imports_file("ExtendImport.mo")
     model_name = "ModelicaCompliance.Scoping.NameLookup.Imports.ExtendImport"
     flat_class = ast.ComponentRef.from_string(model_name)
-    with pytest.raises(tree.NameLookupError):
+    with pytest.raises(tree.ModelicaSemanticError):
         flat_ast = tree.flatten(library_ast, flat_class)  # noqa: F841
 
 

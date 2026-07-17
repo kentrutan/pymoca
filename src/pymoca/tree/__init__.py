@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 __all__ = [
+    "FlatteningError",
     "InstanceClass",
     "InstanceElement",
     "InstanceSymbol",
@@ -65,6 +66,12 @@ class NameLookupError(ModelicaError):
 
 class InstantiationError(ModelicaError):
     """Error instantiating a Modelica element"""
+
+    pass
+
+
+class FlatteningError(ModelicaError):
+    """Error flattening a Modelica model"""
 
     pass
 

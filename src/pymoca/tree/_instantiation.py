@@ -14,7 +14,6 @@ from . import (
     InstantiationError,
     LookupOptions,
     ModelicaSemanticError,
-    NameLookupError,
     RecursionGuard,
 )
 from ._name_lookup import _find_name, find_name
@@ -44,7 +43,7 @@ def instantiate(class_tree: ast.Tree, class_name: str) -> InstanceClass:
     instance_tree = InstanceTree(class_tree)
     class_ = find_name(instance_tree, class_name)
     if class_ is None:
-        raise NameLookupError(f"{class_name} not found in given tree")
+        raise InstantiationError(f"{class_name} not found in given tree")
     if isinstance(class_, ast.Symbol):
         raise InstantiationError(f"Found Symbol for {class_name} but need Class to instantiate")
     # Spec v 3.5 section 5.6.1.3 says the instance tree root is parent in the top-level call
@@ -868,12 +867,12 @@ def _instantiate_symbol(
             LookupOptions(instantiate_in_place=opts.instantiate_in_place),
         )
         if symbol_type is None:
-            raise NameLookupError(
+            raise ModelicaSemanticError(
                 f"Type {symbol.type} of symbol {symbol.name} "
                 f"not found in {parent_instance.full_name}"
             )
         if isinstance(symbol_type, ast.Symbol):
-            raise NameLookupError(
+            raise ModelicaSemanticError(
                 f"Type {symbol.type} of symbol {symbol.name} "
                 f"resolved to a Symbol, not a Class in {parent_instance.full_name}"
             )
@@ -1209,7 +1208,7 @@ def _apply_redeclares(
     )
 
     if redeclare_class is None:
-        raise NameLookupError(
+        raise ModelicaSemanticError(
             f"Redeclare class {redeclare_name} not found in scope {scope_class.full_name}"
         )
     if isinstance(redeclare_class, ast.Symbol):

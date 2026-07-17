@@ -214,7 +214,7 @@ def test_missing_redeclare_class_error():
         end A;
     """
     ast_tree = parser.parse(txt)
-    with pytest.raises(tree.NameLookupError, match="Redeclare class D not found in scope A"):
+    with pytest.raises(tree.ModelicaSemanticError, match="Redeclare class D not found in scope A"):
         _ = tree.instantiate(ast_tree, "A")
 
 

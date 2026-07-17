@@ -18,7 +18,14 @@ from typing import cast
 
 import numpy as np
 
-from . import LookupOptions, ModelicaSemanticError, NameLookupError, RecursionGuard
+from . import (
+    FlatteningError,
+    InstantiationError,
+    LookupOptions,
+    ModelicaSemanticError,
+    NameLookupError,
+    RecursionGuard,
+)
 from ._instantiation import (
     _VARIABILITY_ORDER,
     _get_lexical_parent_instance,
@@ -350,7 +357,13 @@ def _resolve_dimensions(
                         guard=guard,
                         opts=opts,
                     )
-                except (NotImplementedError, ModelicaSemanticError, NameLookupError):
+                except (
+                    NotImplementedError,
+                    ModelicaSemanticError,
+                    NameLookupError,
+                    InstantiationError,
+                    FlatteningError,
+                ):
                     result = None
                 if isinstance(result, (int, float)):
                     dim_list[i] = ast.Primary(value=int(result))
@@ -425,9 +438,10 @@ def _resolve_modification_attribute(
             pass
         else:
             assert symbol.parent_instance is not None
+            assert arg.scope is not None
             value = _resolve_name(
                 value,
-                arg.scope,  # type: ignore[arg-type]  # may be raw Class; _resolve_name walks tree
+                arg.scope,
                 symbol.parent_instance,
                 name_flat_class=flat_class,
                 guard=guard,
@@ -464,7 +478,13 @@ def _resolve_modification_attribute(
                 )
                 if result is not None:
                     value = result
-            except (NotImplementedError, ModelicaSemanticError, NameLookupError):
+            except (
+                NotImplementedError,
+                ModelicaSemanticError,
+                NameLookupError,
+                InstantiationError,
+                FlatteningError,
+            ):
                 pass  # keep original ast.Expression
             # When the expression cannot be folded to a scalar, rewrite any
             # ComponentRef operands to their flat names so that the stored
@@ -1209,7 +1229,7 @@ def _flat_name_from_scope(
 
 def _resolve_name(
     name: str | ast.ComponentRef,
-    scope: InstanceClass,
+    scope: InstanceClass | ast.Class,
     flat_class: InstanceClass,
     *,
     guard: RecursionGuard,
@@ -1250,13 +1270,14 @@ def _resolve_name(
         current = flat_class
         while current is not None:
             if isinstance(current, InstanceClass) and (
-                current.ast_ref is scope or current.ast_ref.full_name == scope.full_name
+                current.ast_ref is scope
+                or (current.ast_ref is not None and current.ast_ref.full_name == scope.full_name)
             ):
                 scope = current
                 break
             current = getattr(current, "parent_instance", None)
         if not isinstance(scope, InstanceClass):
-            raise NameLookupError(
+            raise FlatteningError(
                 f"Unable to find instance for scope {scope.full_name} from {flat_class.full_name}"
             )
 
@@ -1281,7 +1302,7 @@ def _resolve_name(
         LookupOptions(instantiate_in_place=opts.instantiate_in_place),
     )
     if found is None:
-        raise NameLookupError(f"Unable to resolve {name} in scope {scope.full_name}")
+        raise ModelicaSemanticError(f"Unable to resolve {name} in scope {scope.full_name}")
 
     is_symbol = isinstance(found, ast.Symbol)
 

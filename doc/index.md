@@ -30,8 +30,8 @@ API changes a 0.11 user is most likely to hit:
 - `tree.flatten_class(root, class_name)` is a **different function** than the 0.11
   helper of the same name: it instantiates and flattens `class_name` and returns the
   flat `tree.InstanceClass`, the new pipeline's native result.
-- The instance types (`InstanceClass`, `InstanceSymbol`, ...) moved from `pymoca.ast`
-  to `pymoca.tree`.
+- `InstanceClass` moved from `pymoca.ast` to `pymoca.tree` where the new instance
+  types (`InstanceSymbol`, ...) reside.
 - Errors are reported through the `tree.ModelicaError` hierarchy (`NameLookupError`,
   `InstantiationError`, `ModelicaSemanticError`), replacing `ast.ClassNotFoundError`
   and friends. `parser.parse` raises `parser.ModelicaSyntaxError` instead of

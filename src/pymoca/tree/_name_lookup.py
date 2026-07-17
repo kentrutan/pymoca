@@ -109,12 +109,13 @@ def _find_name(
     if found is not None and rest_of_name:
         found = _find_rest_of_name(found, rest_of_name, guard, replace(opts, search_inherited=True))
 
-    # Including InstanceTree below lets a missing top-level name fall back to the lexical
-    # class tree (ast_ref). The spec's lookup substrate is the instance tree (MLS 5.6.1.2-.3);
-    # kept as a backward-compat shortcut, normally equivalent for unmodified top-level classes.
-    # TODO: instantiate missing top-level classes on demand at root, then drop InstanceTree here
+    # Whole-search fallback to the lexical class tree (ast_ref) for instance scopes
+    # whose parent chain does not reach the root - classes temporarily flattened for
+    # composite name lookup (MLS 5.3.2 bullet 4) - so enclosing scopes and root
+    # builtins stay reachable through the lexical chain.
     if (
         not found
+        and isinstance(scope, InstanceClass)
         and (
             not guard.current_extends
             # Also fall back to the class tree for uninstantiated InstanceClasses even
@@ -123,12 +124,8 @@ def _find_name(
             # uninstantiated package (e.g. FixedPhase inside Types_ic) are invisible.
             # Falling back to ast_ref is safe: ast.Class is not an InstanceClass, so
             # this recursive call cannot re-trigger the fallback.
-            or (
-                isinstance(scope, InstanceClass)
-                and scope.instantiation_state < InstantiationState.PARTIAL
-            )
+            or scope.instantiation_state < InstantiationState.PARTIAL
         )
-        and isinstance(scope, (InstanceClass, InstanceTree))
     ):
         # Not found in instance tree, look in class tree
         ast_ref = scope.ast_ref
@@ -374,10 +371,8 @@ def _find_composite_name_in_classes(
         scope = _instantiate_class_if_needed_for_lookup(scope, guard, opts)
 
     first_name, _, next_names = name.partition(".")
-    found = None
-    if first_name in scope.classes:
-        found = scope.classes[first_name]
-    else:
+    found = _find_local_class(scope, first_name)
+    if found is None:
         next_names = name
     if found and next_names:
         next_found, next_names = _find_composite_name_in_classes(found, next_names, guard, opts)
@@ -497,13 +492,37 @@ def _find_local(
         return found
 
     # 2. Classes
-    if name in scope.classes:
-        return scope.classes[name]
+    if found := _find_local_class(scope, name):
+        return found
 
     # 3. Components (Symbols in Pymoca)
     if name in scope.symbols:
         return scope.symbols[name]
+    if isinstance(scope, (InstanceClass, InstanceTree)):
+        ast_ref = scope.ast_ref
+        assert isinstance(ast_ref, ast.Class), "InstanceClass/InstanceTree.ast_ref must be a Class"
+        if name in ast_ref.symbols:
+            return ast_ref.symbols[name]
 
+    return None
+
+
+def _find_local_class(scope: ast.Class, name: str) -> ast.Class | None:
+    """Find a locally declared class, including declared-but-uninstantiated ones.
+
+    An instance scope may lack instances for some declared children (an unparsed
+    MODELICAPATH stub skipped during partial instantiation, a scope below PARTIAL,
+    or a top-level class never copied into the InstanceTree root). Falling through
+    to the scope's ast_ref keeps such names visible at the local tier, so they
+    shadow inherited, imported, and enclosing-scope names per MLS 5.3.1.
+    """
+    if name in scope.classes:
+        return scope.classes[name]
+    if isinstance(scope, (InstanceClass, InstanceTree)):
+        ast_ref = scope.ast_ref
+        assert isinstance(ast_ref, ast.Class), "InstanceClass/InstanceTree.ast_ref must be a Class"
+        if name in ast_ref.classes:
+            return ast_ref.classes[name]
     return None
 
 

@@ -321,15 +321,25 @@ because parameter values have not yet been propagated, a fallback ComponentRef-r
 walker applies the same global-path replacement so kept Expressions emerge with globally
 rooted names (e.g. `e.H_b` rather than `H_b`).
 
-### Name Lookup Instance -> AST (`ast_ref`) Fallback
+### Name Lookup Instance -> AST (`ast_ref`) at the Local Tier
 
-`_find_name` (the shared entry point for both simple and composite name lookup) falls
-back from the instance tree to the lexical class tree via `scope.ast_ref` when a name is
-not found in the instance tree. For an `InstanceClass` this is safe and necessary: it
-fires even mid-instantiation for an instance still below `PARTIAL` (whose `.classes` is
-empty), so types defined directly inside an un-instantiated package remain visible. The
-recursive call targets an `ast.Class`, which is not an `InstanceClass`, so it cannot
-re-trigger the fallback.
+When a name misses an instance scope's own `.classes`/`.symbols`, the local lookup step
+(`_find_local` / `_find_local_class`) also checks the scope's `scope.ast_ref` lexical
+class before moving on to inherited, imported, and enclosing-scope names. This keeps
+declared-but-uninstantiated elements visible with correct MLS 5.3.1 precedence: an
+instance still below `PARTIAL` has empty `.classes`, and a scope at `PARTIAL` or above
+may lack instances for unparsed MODELICAPATH stub children skipped during partial
+instantiation. The check is a dict membership plus a direct return of the raw
+`ast.Class`/`ast.Symbol` - no recursive lookup - so it is safe during extends traversal
+and cannot recurse.
+
+`_find_name` retains a narrower whole-search fallback for `InstanceClass` scopes: when
+every tier fails, it retries the full name on `scope.ast_ref`. This covers instance
+scopes whose instance `parent` chain does not reach back to the root - notably classes
+temporarily flattened for composite name lookup (MLS 5.3.2 bullet 4) - where enclosing
+scopes and root builtins like `Real` are only reachable through the lexical chain. It no
+longer applies to the root `InstanceTree`, and it cannot shadow declared locals: those
+are resolved at the local tier before lower-priority tiers are searched.
 
 ### Extends Lookup: `search_inherited=False/True`
 
@@ -427,17 +437,15 @@ violated at load time, not a parse error. Three `parser.py` sites drive the diff
   clean but still does not raise the error 13.4.2 mandates - a separate, quieter deviation
   (silent drop vs. error).
 
-A related backward-compatible detail (distinct from the deviation above, and not about
-multiplicity): the root `InstanceTree` is included in the `scope.ast_ref` fallback's scope
-check (`isinstance(scope, (InstanceClass, InstanceTree))`), so a missing top-level
-name can be resolved by reading the lexical class tree directly. The spec's lookup
-substrate is the instance tree - 5.6.1.2 ("The output of the instantiation process is an
-instance tree") and 5.6.1.3 ("During instantiation all lookup is performed using the
-instance tree"), built from the class tree with parts allowed to be built lazily (5.6.1)
-- so the purely instance-tree-driven path would materialize the missing top-level class
-on demand (as `instantiate_in_place` does elsewhere) rather than read the `ast.Class`.
-For unmodified top-level classes the two are normally equivalent, so the root fallback is
-kept as a shortcut. A `TODO` tracks removing `InstanceTree` from the check.
+A related detail (distinct from the deviation above, and not about multiplicity): the
+root `InstanceTree` never holds instances of top-level user classes - they are resolved
+on first lookup through the local-tier `ast_ref` check (see "Name Lookup Instance -> AST
+(`ast_ref`) at the Local Tier"). The spec's lookup substrate is the instance tree -
+5.6.1.2 ("The output of the instantiation process is an instance tree") and 5.6.1.3
+("During instantiation all lookup is performed using the instance tree"), built from the
+class tree with parts allowed to be built lazily (5.6.1) - and reading a scope's own
+declared members from its defining `ast.Class` is the lazy construction of exactly that
+tier, so top-level resolution at the root follows the same rule as every other scope.
 
 ### MODELICAPATH Precedence (MLS 3.5 §13.3)
 
@@ -674,8 +682,6 @@ fully-populated connector symbols.
 - Record modifications in `_resolve_modifications`
 - `ExpressionEvaluator` - partial implementation, uses an operator-dispatch table (no
   `eval()`)
-- Root `InstanceTree` inclusion in `_find_name()`'s `ast_ref` fallback scope check:
-  backward-compatible shortcut (`TODO` to remove `InstanceTree`)
 - Built-in functions/operators not yet added to `InstanceTree`
 - Iteration variables in name lookup (`for i = i:i+3`)
 - Type compatibility / constraining-type / prefix preservation for redeclares (`TODO`

@@ -647,6 +647,81 @@ def test_modelicapath_path_to_class_ignores_other(tmp_path):
     assert parser._path_to_class(dangling) is None
 
 
+def _flat_unit(flat: ast.Class, symbol: str) -> str:
+    unit = flat.symbols[symbol].unit
+    if isinstance(unit, ast.Primary):
+        return unit.value
+    return unit
+
+
+def test_lazy_local_shadows_import(tmp_path):
+    """A declared-but-unparsed stub sibling shadows a same-named import (MLS 5.3.1)."""
+    lib_dir = tmp_path / "Lib"
+    lib_dir.mkdir()
+    (lib_dir / "package.mo").write_text(
+        "package Lib\n" "  import Other.X;\n" "  model M\n    X y;\n  end M;\n" "end Lib;"
+    )
+    (lib_dir / "X.mo").write_text('within Lib;\ntype X = Real(unit="local");')
+    (tmp_path / "Other.mo").write_text(
+        'package Other\n  type X = Real(unit="imported");\nend Other;'
+    )
+    stub_tree = parser.modelicapath_to_tree(dirs=[tmp_path])
+    flat = tree.flatten_class(stub_tree, "Lib.M")
+    assert _flat_unit(flat, "y") == "local"
+
+
+def test_lazy_local_shadows_enclosing_scope(tmp_path):
+    """A declared-but-unparsed stub sibling shadows an enclosing-scope name (MLS 5.3.1)."""
+    o_dir = tmp_path / "O"
+    o_dir.mkdir()
+    (o_dir / "package.mo").write_text('package O\n  type X = Real(unit="outer");\nend O;')
+    i_dir = o_dir / "I"
+    i_dir.mkdir()
+    (i_dir / "package.mo").write_text("within O;\npackage I\n  model M\n    X y;\n  end M;\nend I;")
+    (i_dir / "X.mo").write_text('within O.I;\ntype X = Real(unit="inner");')
+    stub_tree = parser.modelicapath_to_tree(dirs=[tmp_path])
+    flat = tree.flatten_class(stub_tree, "O.I.M")
+    assert _flat_unit(flat, "y") == "inner"
+
+
+def test_lazy_local_shadows_inherited(tmp_path):
+    """A declared-but-unparsed stub sibling shadows a same-named inherited element."""
+    p_dir = tmp_path / "P"
+    p_dir.mkdir()
+    (p_dir / "package.mo").write_text(
+        "package P\n  extends B;\n  model M\n    X y;\n  end M;\nend P;"
+    )
+    (p_dir / "X.mo").write_text('within P;\ntype X = Real(unit="local");')
+    (tmp_path / "B.mo").write_text('package B\n  type X = Real(unit="inherited");\nend B;')
+    stub_tree = parser.modelicapath_to_tree(dirs=[tmp_path])
+    flat = tree.flatten_class(stub_tree, "P.M")
+    assert _flat_unit(flat, "y") == "local"
+
+
+def test_lazy_local_found_during_extends_traversal(tmp_path):
+    """A skipped stub child of a PARTIAL scope resolves while current_extends is set.
+
+    The old whole-search ast_ref fallback was suppressed under an extends
+    traversal for scopes at PARTIAL or above, making such stubs invisible."""
+    from pymoca.tree import LookupOptions, RecursionGuard
+    from pymoca.tree._name_lookup import _find_name
+
+    lib_dir = tmp_path / "Lib"
+    lib_dir.mkdir()
+    (lib_dir / "package.mo").write_text("package Lib\n  model M\n    Real y;\n  end M;\nend Lib;")
+    (lib_dir / "X.mo").write_text("within Lib;\ntype X = Real;")
+    stub_tree = parser.modelicapath_to_tree(dirs=[lib_dir])
+    m_instance = tree.instantiate(stub_tree, "Lib.M")
+    lib_instance = m_instance.parent
+    assert "X" not in lib_instance.classes  # stub was skipped, not instantiated
+
+    guard = RecursionGuard()
+    guard.current_extends.add(object())
+    found = _find_name(lib_instance, "X", guard, LookupOptions())
+    assert isinstance(found, ast.Class)
+    assert found.name == "X"
+
+
 def test_parse_enum_basic():
     """Parsing a simple enumeration type builds the correct AST.
 

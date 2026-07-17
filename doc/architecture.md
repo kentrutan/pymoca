@@ -688,8 +688,18 @@ fully-populated connector symbols.
   markers in `_instantiation.py`)
 - `final` and `each` on modification arguments: parsed but silently discarded, so
   `final` protection is not enforced (MLS 7.2.6)
+- Extends-clause class lookup is not verified before and after inheritance to detect
+  a differing result (MLS 5.6.1.4) - `TODO` marker in `_instantiation.py`
+- Protected-element access, inheritance, redeclare, and modification restrictions are
+  not enforced (MLS 4.1, 7.1.3); tracked by the `Scoping.Visibility.*`,
+  `Inheritance.Flattening.ProtectedInheritance`, and `Redeclare` protected-class xfails
+- A name found in more than one unqualified import is not rejected as ambiguous
+  (MLS 13.2.1.1); tracked by the `Scoping.NameLookup.Imports.UnqualifiedImportConflict`
+  xfail
 - Connector compatibility check on `connect`: members are taken from the left
   connector only, so mismatched connectors are silently accepted (MLS 9.3)
+- `discrete` (and other unsupported) connector-variable prefixes raise
+  `NotImplementedError` during connect expansion rather than being flattened
 - Imports are effectively re-exported: composite-name lookup searches the target
   class's imports, which MLS 13.2.1.1 forbids - defer to a planned imports rewrite
 - Circular extends and self-referential component types are unguarded and raise

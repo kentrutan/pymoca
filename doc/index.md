@@ -8,7 +8,8 @@ of components defined by object-oriented Modelica classes into a set of variable
 simultaneous equations that are easier to further process for analysis or simulation. Pymoca
 can translate Modelica to [CasADi](https://web.casadi.org), [SymPy](https://www.sympy.org), and
 [ModelicaXML](https://github.com/modelica-association/ModelicaXML), but most development and
-usage has been with CasADi.
+usage has been with CasADi. The XML backend is unmaintained (the ModelicaXML project it is
+based on has been abandoned) and may be removed in a future release.
 
 See the project [README](https://github.com/pymoca/pymoca#readme) for installation and usage
 instructions.

@@ -679,6 +679,16 @@ fully-populated connector symbols.
 - `_evaluate_conditional_declarations` (MLS 5.6.2 step 1.2)
 - `_process_transitions` (MLS 5.6.2 step 3)
 - `_check_all_references_valid` (MLS 5.6.2 step 1.9)
+- Equation `ComponentRef` resolution (MLS 5.6.2 step 1.7) is string-prefix rewriting,
+  not name lookup: `_EquationRefResolver` tests `prefix + name` against
+  `flat_class.symbols`, so refs to enclosing-scope constants stay unresolved, and a
+  ref that should resolve to an enclosing-scope constant or a for-loop index is
+  silently captured by a same-named flat symbol when one exists at that prefix.
+  The fix must live in `_collect_and_resolve_equations`, where the instance scope
+  is still in hand - the flat output carries no per-equation scope provenance, so
+  a post-hoc pass over the flat class cannot resolve a bare enclosing-scope name.
+  `_resolve_name` already does exactly this (resolve in scope, register into the
+  flat class under a flat name) for modification values
 - Record modifications in `_resolve_modifications`
 - `ExpressionEvaluator` - partial implementation, uses an operator-dispatch table (no
   `eval()`)

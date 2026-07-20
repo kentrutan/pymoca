@@ -87,10 +87,23 @@ ERROR Solver failed with status INFEASIBLE
 RTC-Tools does not treat this as a process failure (the script still exits 0),
 so it shows as "ok" in the run-status table, but the exported values are the
 solver's failure fallback (mostly zero), not a real solution — max rel diff
-against 0.9.2 is 1.0. **Not investigated further**: this is a new, distinct
-problem (a real optimization infeasibility, not a naming/lookup crash like the
-other six), and finding its root cause is a separate, open-ended
-investigation of comparable scope to any of the fixes above.
+against 0.9.2 is 1.0.
+
+**Ruled out**: a symbol-level fingerprint diff against 0.9.2 (using the correct
+`tree.flatten()`/`flatten_to_tree` entry point — the one the CasADi backend
+actually uses, not `flatten_class`, which skips post-processing including
+`annotate_states` and gave a false-alarm missing-`state`-prefix reading on a
+first pass) shows the flattened models are **structurally identical**: same
+symbol count (73), same equation count (37), same prefixes/min/max/fixed for
+every sampled variable including the two `state`-prefixed variables
+(`storage.V`, `storage.HQ.C`) and both discrete inputs. So this is not a
+flattening/fingerprint bug like fixes 1-7 — the defect is either in specific
+equation *values* (not visible in a structural fingerprint), in how the
+CasADi generator builds the residual/bounds from that structure, or a
+solver-path issue. **Not investigated further** in this session: narrowing it
+requires comparing generated equation expressions or numerically evaluating
+`dae_residual_function` at matched points between versions, which is a
+separate, open-ended investigation.
 
 ## Remaining issue B: `Deltares` KeyError in 4 channel-flow examples
 
@@ -98,32 +111,48 @@ investigation of comparable scope to any of the fixes above.
 KeyError: 'Deltares'
 ```
 
-Root-caused to: `_get_constant_value` can extract a constant's literal when
-its type is *directly* a builtin (`Integer`/`Real`/...), by reading a
-synthetic same-named symbol in the type's own `.symbols`. It cannot do this
-when the constant's type is itself an alias one level removed (e.g.
-`final constant Modelica.Units.SI.Acceleration g_n = 9.80665;` inside
-`Deltares.Constants`, where the type is `Acceleration`, not `Real`). Minimal
-reproduction:
+Root-caused precisely, but not fixed: `_get_constant_value` can extract a
+constant's literal only when its type is *directly* a builtin
+(`Integer`/`Real`/...). It cannot do this when the constant's type is itself
+an alias one level removed, e.g.:
 
 ```modelica
 package Deltares
   package Constants
     type Accel = Real(unit="m/s2");
-    final constant Accel g_n = 9.8;
+    final constant Accel g_n = 9.80665;
   end Constants;
 end Deltares;
 ```
 
-For this symbol, neither `.value`, `.ast_ref.value`, nor
-`.modification_environment.arguments` carry the literal `9.8` on the
-`InstanceSymbol` produced by composite-name lookup, and the referenced type's
-own `.symbols` is empty (unlike the directly-builtin-typed case fix #5
-handles) — so the existing `_get_constant_value` fallback has nothing to read.
-**Not fixed**: the value appears to be lost during partial instantiation for
-lookup somewhere in `_instantiation.py`/`_name_lookup.py`, upstream of
-`_get_constant_value`; tracing that precisely is a further, separate
-investigation.
+Traced the full path with a minimal repro and instrumented tracing through
+`_instantiate_symbol`/`_instantiate_class`/`_instantiate_extends_list`:
+
+- `g_n`'s own `modification_environment.arguments` correctly carries
+  `value=9.80665` going into `_instantiate_symbol`.
+- `_instantiate_class("Accel", modification_environment=[value=9.80665], ...)`
+  is called correctly and does take the "build a fresh instance" branch
+  (non-empty `modification_environment.arguments`).
+- But the resulting `Accel` instance's `.extends` list (`Accel` is `type Accel
+  = Real(...)`, i.e. an unnamed extends to `Real`) ends up with
+  `modification_environment.arguments == []` on the extends target — the
+  `value=9.80665` modification never gets threaded from the alias type's own
+  modification onto its unnamed extends-to-builtin.
+- This differs structurally from the *directly*-builtin-typed case (fix #5's
+  `n`/`n_substances`), which works via a special case in `_instantiate_class`
+  (`orig_class.name in InstanceTree.BUILTIN_TYPES`) that produces a synthetic
+  same-named symbol in `.symbols` carrying the modification — a mechanism that
+  only applies when the symbol's type name literally matches a builtin, not
+  when it's an alias reached via one more level of unnamed extends.
+
+**Not fixed**: a correct fix means changing how `(value=X)` modifications
+merge onto an unnamed extends-to-builtin during class instantiation
+(`_instantiate_class` / `_instantiate_extends_list` in
+`src/pymoca/tree/_instantiation.py`) — core, widely-used modification-merging
+logic exercised by every class/symbol instantiation in the codebase. A hasty
+change here risks regressions well beyond this one case; getting it right
+needs dedicated investigation and much broader test coverage than the
+targeted repro used to characterize it.
 
 ## Compile time
 

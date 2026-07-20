@@ -68,6 +68,12 @@ def main():
     ap.add_argument("--out", required=True, help="results output directory")
     ap.add_argument("--timeout", type=int, default=900)
     ap.add_argument("--only", default="", help="comma-separated example names to include")
+    ap.add_argument(
+        "--modelicapath",
+        default="",
+        help="value to export as MODELICAPATH for each run (e.g. an MSL root); "
+        "falls back to the ambient MODELICAPATH when omitted",
+    )
     args = ap.parse_args()
 
     examples_dir = Path(args.examples).resolve()
@@ -98,6 +104,12 @@ def main():
         env["BENCH_PYMOCA_VER"] = args.label
         env["XDG_CACHE_HOME"] = str(xdg_cache)
         env["MPLBACKEND"] = "Agg"  # never pop up plot windows
+        if args.modelicapath:
+            # Put an MSL (or any shared library) on pymoca's search path so
+            # models that `extend` MSL classes (e.g. Modelica.Icons.Package)
+            # resolve. Honored by the patched CasADi backend; ignored by
+            # pymoca versions that don't read MODELICAPATH.
+            env["MODELICAPATH"] = args.modelicapath
 
         log_path = out_dir / f"{key}.log"
         start = time.perf_counter()

@@ -32,6 +32,7 @@ RTC_SRC=""
 WORKDIR="./bench-work"
 ONLY=""
 TIMEOUT="900"
+MODELICAPATH=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -44,6 +45,7 @@ while [[ $# -gt 0 ]]; do
     --workdir) WORKDIR="$2"; shift 2;;
     --only) ONLY="$2"; shift 2;;
     --timeout) TIMEOUT="$2"; shift 2;;
+    --modelicapath) MODELICAPATH="$2"; shift 2;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -92,21 +94,39 @@ versions() {  # <venv_python>
   "$1" -c 'import pymoca,casadi,rtctools,numpy,scipy;print("pymoca",pymoca.__version__);print("casadi",casadi.__version__);print("rtctools",rtctools.__version__);print("numpy",numpy.__version__);print("scipy",scipy.__version__)'
 }
 
+# --- MSL / MODELICAPATH ---
+# The RTC-Tools Deltares models `extend` MSL classes (e.g. Modelica.Icons.Package)
+# that are not on the library path. Put an MSL on MODELICAPATH so they resolve;
+# the patched CasADi backend reads it, older/untolerant pymoca ignores it. When
+# --modelicapath is not given and pymoca-b is a checkout, use its vendored
+# MSL-4.0.x submodule.
+if [[ -z "$MODELICAPATH" && -d "$PYMOCA_B" ]]; then
+  MSL_DIR="$PYMOCA_B/test/libraries/MSL-4.0.x"
+  if [[ ! -f "$MSL_DIR/Modelica/package.mo" ]]; then
+    echo "initializing MSL-4.0.x submodule ..."
+    git -C "$PYMOCA_B" submodule update --init --depth 1 test/libraries/MSL-4.0.x || true
+  fi
+  [[ -f "$MSL_DIR/Modelica/package.mo" ]] && MODELICAPATH="$MSL_DIR"
+fi
+[[ -n "$MODELICAPATH" ]] && echo "MODELICAPATH=$MODELICAPATH"
+
 RESULTS="$WORKDIR/results"
 mkdir -p "$RESULTS"
 
 ONLY_ARG=()
 [[ -n "$ONLY" ]] && ONLY_ARG=(--only "$ONLY")
+MP_ARG=()
+[[ -n "$MODELICAPATH" ]] && MP_ARG=(--modelicapath "$MODELICAPATH")
 
 echo "=== running suite under $LABEL_A ==="
 "$WORKDIR/venv_a/bin/python" "$HERE/run_all.py" \
   --python "$WORKDIR/venv_a/bin/python" --examples "$EXAMPLES" \
-  --label "$LABEL_A" --out "$RESULTS/$LABEL_A" --timeout "$TIMEOUT" "${ONLY_ARG[@]}"
+  --label "$LABEL_A" --out "$RESULTS/$LABEL_A" --timeout "$TIMEOUT" "${ONLY_ARG[@]}" "${MP_ARG[@]}"
 
 echo "=== running suite under $LABEL_B ==="
 "$WORKDIR/venv_b/bin/python" "$HERE/run_all.py" \
   --python "$WORKDIR/venv_b/bin/python" --examples "$EXAMPLES" \
-  --label "$LABEL_B" --out "$RESULTS/$LABEL_B" --timeout "$TIMEOUT" "${ONLY_ARG[@]}"
+  --label "$LABEL_B" --out "$RESULTS/$LABEL_B" --timeout "$TIMEOUT" "${ONLY_ARG[@]}" "${MP_ARG[@]}"
 
 # --- metadata header ---
 META="$RESULTS/meta.json"

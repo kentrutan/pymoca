@@ -5,7 +5,7 @@ import logging
 import os
 import pickle
 from enum import IntEnum
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import casadi as ca
 
@@ -99,6 +99,18 @@ class InvalidCacheError(Exception):
     pass
 
 
+def _modelicapath_dirs() -> List[str]:
+    """Directories from the ``MODELICAPATH`` environment variable.
+
+    ``MODELICAPATH`` lets callers put shared libraries (e.g. the Modelica
+    Standard Library) on the compile search path without enumerating every
+    folder in ``library_folders``. Entries are separated by ``os.pathsep``;
+    empty entries are ignored.
+    """
+    modelicapath = os.environ.get("MODELICAPATH", "")
+    return [d for d in modelicapath.split(os.pathsep) if d]
+
+
 def _compile_model(model_folder: str, model_name: str, compiler_options: Dict[str, str]):
     # Importing the antlr4 (generated modules) is rather slow. Avoid for this
     # ~100 ms startup overhead for cached models by importing only when
@@ -122,6 +134,19 @@ def _compile_model(model_folder: str, model_name: str, compiler_options: Dict[st
                         tree = parsed
                     else:
                         tree.extend(parsed)
+
+    # Merge any MODELICAPATH roots (e.g. the Modelica Standard Library) as a
+    # lazy tree, so their classes resolve on demand without eagerly parsing the
+    # whole library. This lets models that `extend` MSL classes such as
+    # Modelica.Icons.Package flatten even when the MSL is not enumerated in
+    # library_folders.
+    mp_dirs = _modelicapath_dirs()
+    if mp_dirs:
+        mp_tree = parser.modelicapath_to_tree(mp_dirs)
+        if tree is None:
+            tree = mp_tree
+        else:
+            tree.extend(mp_tree)
 
     return generate_model(tree, model_name, compiler_options)
 
@@ -328,7 +353,7 @@ def load_model(model_folder: str, model_name: str, compiler_options: Dict[str, s
     if compiler_options["mtime_check"]:
         # Mtime check
         cache_mtime = os.path.getmtime(db_file)
-        for folder in [model_folder] + compiler_options["library_folders"]:
+        for folder in [model_folder] + compiler_options["library_folders"] + _modelicapath_dirs():
             for root, _dir, files in os.walk(folder, followlinks=True):
                 for item in fnmatch.filter(files, "*.mo"):
                     filename = os.path.join(root, item)

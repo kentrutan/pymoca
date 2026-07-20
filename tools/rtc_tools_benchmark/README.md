@@ -27,6 +27,12 @@ tools/rtc_tools_benchmark/run_benchmark.sh \
   omit to shallow-clone `master`.
 - `--only basic,mixed_integer` restricts to named examples; `--timeout` bounds
   each script (default 900 s); `--workdir` sets where venvs/results/report go.
+- `--modelicapath <dir>` puts a library root (e.g. an MSL) on `MODELICAPATH`
+  for every run. When omitted and `--pymoca-b` is a checkout, the driver
+  initializes and uses that checkout's vendored `test/libraries/MSL-4.0.x`
+  submodule. The RTC-Tools Deltares models `extend` MSL classes such as
+  `Modelica.Icons.Package`; the patched CasADi backend reads `MODELICAPATH` so
+  they resolve, and pymoca versions that don't read it simply ignore the var.
 
 Output: `<workdir>/RESULTS.md`.
 

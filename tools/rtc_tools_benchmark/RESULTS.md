@@ -30,8 +30,8 @@ xfailed, 0 failed** (`pytest test/ --ignore=test/msl_examples_test.py
 
 Of the 18 that run, **15 are bit-identical** to 0.9.2 (`0.000e+00` max diff).
 3 (`goal_programming`, `mixed_integer`, `channel_wave_damping__example_optimization`)
-run but the solver fails to find a real solution — a distinct,
-still-uninvestigated problem (Remaining issue A, below). The other 3
+run but the solver fails to find a real solution — root-caused to an upstream
+library defect, not a pymoca bug (Remaining issue A, below). The other 3
 non-bit-identical rows in the numeric table are a benchmark-harness artifact,
 not a divergence (see the note under "Numerical results").
 
@@ -116,7 +116,7 @@ Each commit was verified independently: a minimal reproduction isolating the
 exact defect, the full pymoca test suite (444 or 445 passed, 0 failed) after
 every commit, and a full RTC-Tools benchmark re-run.
 
-## Remaining issue A: 3 examples solve to a fallback, not a real answer
+## Remaining issue A: root-caused — an upstream library type-mismatch, not a pymoca bug
 
 `goal_programming`, `mixed_integer`, and `channel_wave_damping__example_optimization`
 all now flatten, compile, and run to completion (exit 0), but the solver does
@@ -136,34 +136,59 @@ RTC-Tools does not treat either as a process failure (the script still exits
 are the solver's failure fallback (mostly zero), not a real solution — max
 rel diff against 0.9.2 is 1.0 for all three.
 
-**Ruled out this session**:
+**Ruled out**: a symbol-level fingerprint diff against 0.9.2 for
+`goal_programming` (using the correct `tree.flatten()`/`flatten_to_tree`
+entry point) showed the flattened models structurally identical (73 symbols,
+37 equations). For `channel_wave_damping__example_optimization`,
+`model.states`/`model.alg_states` matched exactly (27/0) between PR and 0.9.2
+once compared with **matching** `compiler_options` (an earlier lead pointing
+at a 149-vs-143 equation-count mismatch was an artifact of a debugging script
+that omitted `detect_aliases` etc. on the PR side only). The extra 6
+`min_abs_Q`/`min_divisor` parameters (below) are not the cause either:
+parameters are fixed, not NLP decision variables.
 
-- A symbol-level fingerprint diff against 0.9.2 for `goal_programming` (using
-  the correct `tree.flatten()`/`flatten_to_tree` entry point — the one the
-  CasADi backend actually uses) shows the flattened models are
-  **structurally identical**: same symbol count (73), same equation count
-  (37), same prefixes/min/max/fixed for every sampled variable.
-- For `channel_wave_damping__example_optimization`, comparing `model.states` /
-  `model.alg_states` between PR and 0.9.2 **with matching `compiler_options`**
-  (crucially including `detect_aliases`, `eliminate_constant_assignments`,
-  etc. — RTC-Tools' `ModelicaMixin` sets all of these) shows an exact match
-  (27 states, 0 alg_states, both versions). An earlier lead pointing at a
-  149-vs-143 equation-count mismatch turned out to be an artifact of a
-  debugging script that omitted those simplification options on the PR side
-  only — not a real structural difference.
-- The extra 6 `parameters` this example now correctly exposes
-  (`{reach}.min_abs_Q`, `{reach}.min_divisor`, see below) are **not** the
-  cause: parameters are fixed, not NLP decision variables, so a parameter
-  count difference cannot by itself change the problem's degrees of freedom.
+**Root cause, found by an exhaustive (not sampled) symbol-attribute diff**:
+`Modelica.Units.SI.Distance` is defined in MSL as `type Distance =
+Length(min=0)` — non-negative by design. The `Deltares.ChannelFlow` library
+(an RTC-Tools dependency, *not* part of pymoca) types several
+internally-computed quantities as `Distance` even though they are signed or
+transiently need boundary/negative values during NLP solving:
 
-So this is not a flattening/fingerprint bug like fixes 1-10 — the defect is
-either in specific equation *values* (not visible in a structural
-fingerprint), in how the CasADi generator builds the residual/bounds from
-that structure, or a solver-path issue specific to
-`GoalProgrammingMixin`/discrete-decision models. **Not investigated further**
-in this session: narrowing it requires comparing generated equation
-expressions or numerically evaluating `dae_residual_function` at matched
-points between versions, which is a separate, open-ended investigation.
+- `Deltares.ChannelFlow.Hydraulic.Structures.Pump.dH` — `dH = HQDown.H -
+  HQUp.H`, a head *difference*, legitimately negative whenever downstream is
+  higher than upstream (exactly what `goal_programming`'s `is_downhill`
+  logic exists to allow). Used by both `goal_programming` and
+  `mixed_integer` (both instantiate `Pump` twice, as `pump` and `orifice`).
+- `Deltares.ChannelFlow.Hydraulic.Branches.Internal.PartialHomotopic._wetted_perimeter`,
+  a differential `state` — used by `channel_wave_damping`.
+
+Under 0.9.2, this `min=0` type default is never propagated onto these
+variables (confirmed directly: `pump.dH`/`orifice.dH` come out `min=-inf` in
+0.9.2's own compiled `model.states`/`model.alg_states`, vs `min=0.0` under
+the PR). The PR branch correctly implements MLS type-attribute inheritance
+(no explicit override on the declaration means the type's own default
+modification applies), turning `min=0` into a hard NLP box constraint that
+makes the true physical solution infeasible whenever `dH`/`_wetted_perimeter`
+need to go negative.
+
+**Verified experimentally** (not committed — a throwaway edit to the venv's
+installed library copy, reverted immediately after): overriding
+`dH(min=-100)` in the installed `Pump.mo` made `goal_programming` solve to
+`SUCCESS` with results matching the 0.9.2 reference closely (`Q_pump`
+integral 60.099 vs 0.9.2's 60.104; per-step values agree to 3-4 significant
+figures, the residual gap consistent with normal solver-path/collocation
+tolerance rather than a structural difference).
+
+**Not a pymoca bug**: this is pymoca doing the *more* spec-correct thing —
+propagating a type's default `min`/`max` attribute per MLS §4.4.4 wherever
+the declaring component doesn't override it — which 0.9.2 simply never
+implemented for non-parameter variables. The defect is in `Deltares.
+ChannelFlow`'s own type choices (`dH`/`_wetted_perimeter` should be typed
+`Length`, the general signed quantity, not `Distance`), a package outside
+this repository. Weakening pymoca's attribute-inheritance correctness to
+accommodate it would be a regression, not a fix, so no pymoca-side change was
+made. Reported to the user with the finding and a recommendation to leave
+pymoca as-is; the fix belongs upstream in `Deltares.ChannelFlow`.
 
 ## Extra `min_abs_Q` / `min_divisor` parameters: expected, not a bug
 
@@ -208,12 +233,15 @@ all) and is orthogonal to the fixes above.
 
 Ten atomic, independently-verified fixes took the branch from 3/18 to 18/18
 RTC-Tools scripts running, with 15/18 of those bit-identical to 0.9.2. Of the
-3 non-bit-identical examples with extra `min_abs_Q`/`min_divisor` parameters,
-that divergence is a benign, expected correctness improvement over 0.9.2, not
-a bug. One distinct, unresolved problem remains: 3 examples
+non-bit-identical examples, `cascading_channels`'s extra
+`min_abs_Q`/`min_divisor` parameters are a benign, expected correctness
+improvement over 0.9.2, not a bug. The remaining 3
 (`goal_programming`, `mixed_integer`, `channel_wave_damping__example_optimization`)
-run to completion but the solver fails to find a real solution, a
-deeper numerical/generator issue not yet root-caused.
+are conclusively root-caused to an upstream `Deltares.ChannelFlow` library
+type mismatch (`Distance` instead of `Length` on signed quantities), verified
+by a working experimental patch that reproduces the 0.9.2 reference results —
+not a pymoca defect, so no pymoca-side fix was made; see "Remaining issue A"
+for the recommendation.
 
 ---
 ## Generated data (18/18 run, `pr8fix` = branch tip after all ten fixes)

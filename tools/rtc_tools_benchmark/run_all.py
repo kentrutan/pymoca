@@ -47,7 +47,7 @@ def discover(examples_dir: Path):
     return runs
 
 
-def clean_caches(example_dir: Path, xdg_cache: Path):
+def clean_caches(example_dir: Path, xdg_cache: Path, keep_parse_cache: bool = False):
     # RTC-Tools compiled-model cache written next to the model.
     for cache in example_dir.rglob("*.pymoca_cache"):
         try:
@@ -55,7 +55,11 @@ def clean_caches(example_dir: Path, xdg_cache: Path):
         except OSError:
             pass
     # pymoca's own parse cache (PR branch keeps a sqlite DB under XDG cache).
-    if xdg_cache.exists():
+    # Wiped by default for a fair cold-compile comparison; --keep-parse-cache
+    # leaves it in place across scripts (and across separate run_all.py
+    # invocations sharing --xdg-cache) to measure the effect of pymoca's
+    # MSL/library parse cache instead.
+    if not keep_parse_cache and xdg_cache.exists():
         shutil.rmtree(xdg_cache, ignore_errors=True)
     xdg_cache.mkdir(parents=True, exist_ok=True)
 
@@ -74,6 +78,21 @@ def main():
         help="value to export as MODELICAPATH for each run (e.g. an MSL root); "
         "falls back to the ambient MODELICAPATH when omitted",
     )
+    ap.add_argument(
+        "--keep-parse-cache",
+        action="store_true",
+        help="do not wipe pymoca's own MSL/library parse cache between scripts "
+        "(breaks the fair cold-compile comparison; use to measure the effect "
+        "of a warm parse cache instead, typically combined with --xdg-cache "
+        "pointed at a location shared across separate invocations)",
+    )
+    ap.add_argument(
+        "--xdg-cache",
+        default="",
+        help="XDG_CACHE_HOME to use for pymoca's parse cache; defaults to "
+        "<out>/xdg_cache. Point two separate runs at the same path to let the "
+        "second reuse the first's cache (with --keep-parse-cache).",
+    )
     args = ap.parse_args()
 
     examples_dir = Path(args.examples).resolve()
@@ -82,7 +101,7 @@ def main():
     bench_json = out_dir / "compile.jsonl"
     if bench_json.exists():
         bench_json.unlink()
-    xdg_cache = out_dir / "xdg_cache"
+    xdg_cache = Path(args.xdg_cache).resolve() if args.xdg_cache else out_dir / "xdg_cache"
 
     only = {s for s in args.only.split(",") if s}
     runs = discover(examples_dir)
@@ -95,7 +114,7 @@ def main():
         key = f"{name}__{script.stem}"
         print(f"[{args.label}] running {key} ...", flush=True)
 
-        clean_caches(example_dir, xdg_cache)
+        clean_caches(example_dir, xdg_cache, keep_parse_cache=args.keep_parse_cache)
 
         env = dict(os.environ)
         env["PYTHONPATH"] = str(HERE) + os.pathsep + env.get("PYTHONPATH", "")

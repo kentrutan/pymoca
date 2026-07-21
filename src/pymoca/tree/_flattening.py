@@ -1008,7 +1008,30 @@ def _inline_equation_side(
     elif isinstance(node, ast.IfExpression):
         _rewrite_operand_list(node.conditions, scope, flat_class, flat_class, guard, opts, prefix)
         _rewrite_operand_list(node.expressions, scope, flat_class, flat_class, guard, opts, prefix)
+    elif isinstance(node, ast.Slice):
+        for attr in ("start", "stop", "step"):
+            bound = _inline_equation_side(
+                getattr(node, attr), scope, flat_class, guard, opts, prefix
+            )
+            setattr(node, attr, bound)
     return node
+
+
+def _resolve_for_index_ranges(
+    indices,
+    scope: InstanceClass,
+    flat_class: InstanceClass,
+    prefix: str,
+    guard: RecursionGuard,
+    opts: LookupOptions,
+) -> None:
+    """Resolve ComponentRefs in a for-loop's own range expressions (`1:n` in
+    `for i in 1:n loop`), evaluated in the enclosing scope -- unlike the loop
+    body, a range bound is never in scope of the loop's own index (MLS 11.2.2)."""
+    for idx in indices:
+        idx.expression = _inline_equation_side(
+            idx.expression, scope, flat_class, guard, opts, prefix
+        )
 
 
 def _resolve_equation_refs(
@@ -1032,15 +1055,23 @@ def _resolve_equation_refs(
         node.left = _inline_equation_side(node.left, scope, flat_class, guard, opts, prefix)
         node.right = _inline_equation_side(node.right, scope, flat_class, guard, opts, prefix)
     elif isinstance(node, ast.ForEquation):
+        _resolve_for_index_ranges(node.indices, scope, flat_class, prefix, guard, opts)
         opts = replace(
             opts, iteration_variables=opts.iteration_variables | {idx.name for idx in node.indices}
         )
         for sub in node.equations:
             _resolve_equation_refs(sub, scope, flat_class, prefix, guard, opts)
     elif isinstance(node, (ast.IfEquation, ast.WhenEquation)):
+        node.conditions = [
+            _inline_equation_side(cond, scope, flat_class, guard, opts, prefix)
+            for cond in node.conditions
+        ]
         for block in node.blocks:
-            for item in block:
-                _resolve_equation_refs(item, scope, flat_class, prefix, guard, opts)
+            for i, item in enumerate(block):
+                if isinstance(item, ast.Expression):
+                    block[i] = _inline_equation_side(item, scope, flat_class, guard, opts, prefix)
+                else:
+                    _resolve_equation_refs(item, scope, flat_class, prefix, guard, opts)
 
 
 def _resolve_statement_refs(
@@ -1061,6 +1092,7 @@ def _resolve_statement_refs(
         ]
         node.right = _inline_equation_side(node.right, scope, flat_class, guard, opts, prefix)
     elif isinstance(node, ast.ForStatement):
+        _resolve_for_index_ranges(node.indices, scope, flat_class, prefix, guard, opts)
         opts = replace(
             opts, iteration_variables=opts.iteration_variables | {idx.name for idx in node.indices}
         )

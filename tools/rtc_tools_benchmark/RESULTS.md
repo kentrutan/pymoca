@@ -352,6 +352,61 @@ indices were being needlessly name-resolved) cut warm-cache compile time by
 "Compile time" above.
 
 ---
+## Follow-up: equation/statement reference resolution refactor
+
+A later doc note on `fix-inherited-symbol-scope-pr` flagged that equation
+`ComponentRef` resolution (MLS 5.6.2 step 1.7) was string-prefix rewriting,
+not name lookup (`_EquationRefResolver` composed `prefix + name` and trusted
+any match against `flat_class.symbols`), and that a ref which should resolve
+to an enclosing-scope constant or a for-loop index could be silently
+captured by a same-named flat symbol instead. A repro confirmed this
+for-loop-index collision is a real, long-standing bug present on **both**
+this branch and pymoca 0.9.2 (a nested component with a member `i` and its
+own `for i in 1:3 loop` both wrongly resolve the loop's `i` to the member),
+though no RTC-Tools model happens to trigger it.
+
+Fixed via a two-part refactor:
+
+- **Part A** (`tree: Implement iteration-variable name lookup`): filled in
+  `_find_iteration_variable`, previously a `return None` stub reserving the
+  MLS 5.3.1 step-1 precedence slot for for-loop indices in `_name_lookup.py`.
+  A new `iteration_variables: frozenset[str]` field on `LookupOptions`
+  carries the active loop indices; `_find_simple_name` now checks it first,
+  before walking any enclosing scope.
+- **Part B** (`tree: Resolve equation and statement refs through name
+  lookup`): retired `_EquationRefResolver` from the equation/statement path
+  (kept only for `_generate_value_equations`, a post-flattening context with
+  no for-loops) in favor of a scope-aware rewrite that consults the Part A
+  lookup first (collision-safe) and falls back to a `prefix`-composed fast
+  path for the common case (performance-preserving). This also extended
+  constant inlining and ref resolution to algorithm statements, which
+  previously got neither.
+
+**Regression found during re-verification, fixed in a follow-up commit**
+(`tree: Resolve if-equation conditions and for-equation range bounds`): the
+retired `_EquationRefResolver` was a generic `TreeWalker` that visited every
+`ast.Node`-typed attribute regardless of name, so it resolved
+`IfEquation`/`WhenEquation.conditions` and `ForEquation`/`ForStatement`
+index range bounds (e.g. the `n` in `for i in 1:n loop`) "for free". The
+hand-rolled Part B replacement only recursed into `.blocks`/`.equations`/
+`.statements` and missed both — silently leaving a bare, unresolved name
+(e.g. a nested component's own parameter or condition variable, referenced
+bare from inside that component's own equations) in the flattened tree.
+This reproduced as a real `KeyError` deep in CasADi code generation for 6 of
+the 18 RTC-Tools example scripts (`cascading_channels`, `channel_pulse`,
+`channel_wave_damping` x2, `goal_programming`, `mixed_integer`) — caught by
+re-running the full benchmark after the refactor, not by the unit test
+suite (added two regression tests to `flatten_test.py` afterward). Fixed by
+adding the missing `.conditions` walk and a shared `_resolve_for_index_ranges`
+helper for both for-loop node types.
+
+Re-verified after the fix: full pymoca suite (451 passed, 0 failed) and the
+full 18-script RTC-Tools benchmark (18/18 run under both versions, same
+numerical divergences as before this refactor — `cascading_channels`'s
+benign extra parameters and the 3 upstream-type-mismatch examples above,
+nothing new).
+
+---
 ## Generated data (18/18 run, `pr8fix` = branch tip after all ten fixes)
 
 ## Headline

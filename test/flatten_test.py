@@ -1503,6 +1503,63 @@ def test_for_loop_index_left_unresolved_alongside_constant_inlining():
     assert inner_eq.right.operands[1].value == 2.5
 
 
+def test_for_loop_index_not_shadowed_by_same_named_member():
+    """A for-loop index must win over a same-named component member inside its
+    own body (MLS 5.3.1 step 1, 11.2.2): a nested component `c` with a member
+    `i` and a `for i in ... loop` body must resolve the loop's own `i` to the
+    bare index, not to the coincidentally-same-named flat symbol `c.i` --
+    while a genuine reference to the member outside the loop still resolves
+    to `c.i` normally.
+    """
+    flat = _flatten_inline(
+        """
+    model Inner
+        Real x[3];
+        Real i;
+    equation
+        i = 1.0;
+        for i in 1:3 loop
+            x[i] = i;
+        end for;
+    end Inner;
+    model Outer
+        Inner c;
+    end Outer;""",
+        "Outer",
+    )
+    member_eq, for_eq = flat.equations
+    assert member_eq.left.name == "c.i"
+    inner_eq = for_eq.equations[0]
+    assert inner_eq.left.indices[0][0].name == "i"
+    assert inner_eq.right.name == "i"
+
+
+def test_for_loop_index_not_shadowed_by_same_named_member_in_algorithm():
+    """Statement-path counterpart of the equation collision test above: an
+    algorithm's for-loop index must win over a same-named component member."""
+    flat = _flatten_inline(
+        """
+    model Inner
+        Real i;
+        Real y[3];
+    algorithm
+        i := 1.0;
+        for i in 1:3 loop
+            y[i] := i;
+        end for;
+    end Inner;
+    model Outer
+        Inner c;
+    end Outer;""",
+        "Outer",
+    )
+    member_stmt, for_stmt = flat.statements
+    assert member_stmt.left[0].name == "c.i"
+    inner_stmt = for_stmt.statements[0]
+    assert inner_stmt.left[0].indices[0][0].name == "i"
+    assert inner_stmt.right.name == "i"
+
+
 @pytest.mark.xfail(reason="conditional component declarations are not yet evaluated (MLS 4.4.5)")
 def test_conditional_component_removed():
     """A component whose condition is false is removed from the flat model (MLS 4.4.5)."""

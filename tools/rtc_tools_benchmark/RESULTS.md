@@ -224,10 +224,63 @@ results for these examples are numerically sane (spot-checked
 
 ## Compile time
 
-Not a fair comparison: MSL now loads on every cold compile (~20-30s vs
-~1.5-3.5s for 0.9.2). This is inherent to giving the PR branch a real MSL on
-`MODELICAPATH` (required for the Deltares/MSL `extends` chains to resolve at
-all) and is orthogonal to the fixes above.
+The ~20-30s cold numbers above (`pr8fix`) are not representative of normal
+use: they measure every script paying the full cost of re-parsing MSL from
+scratch, because the benchmark driver deliberately wipes pymoca's own
+parse cache (`$XDG_CACHE_HOME/pymoca/model_txt_cache.db`, a SQLite text ->
+AST cache used automatically by `parser.parse`) before every single script,
+to keep the "cold flatten" timing fair and comparable run-to-run. In normal
+use nothing wipes that cache, so re-ran the comparison letting it persist:
+`run_all.py` gained opt-in `--keep-parse-cache` / `--xdg-cache <path>` flags
+(committed), and the 18-script suite was run twice against the PR branch
+sharing one cache directory across both passes (`--modelicapath` set to the
+vendored MSL as usual).
+
+| Example (script) | 0.9.2 (s) | pr8fix cold (s) | pr warm run 1 (s) | pr warm run 2 (s) |
+| --- | ---: | ---: | ---: | ---: |
+| basic__example | 1.907 | 23.566 | 18.280 | 1.611 |
+| cascading_channels__example | 2.675 | 31.278 | 8.887 | 8.773 |
+| channel_pulse__example | 1.768 | 24.324 | 4.665 | 4.539 |
+| channel_wave_damping__example_local_control | 3.436 | 32.917 | 10.251 | 10.355 |
+| channel_wave_damping__example_optimization | 2.970 | 31.165 | 10.901 | 11.115 |
+| ensemble__example | 1.876 | 23.844 | 1.563 | 1.470 |
+| fallback_option__example | 1.907 | 23.507 | 1.574 | 1.593 |
+| fallback_option__example_with_gp | 1.820 | 24.331 | 1.605 | 1.466 |
+| goal_programming__example | 1.970 | 26.622 | 1.736 | 1.728 |
+| integrator_delay__example | 1.435 | 22.614 | 2.077 | 2.020 |
+| lookup_table__example | 1.851 | 23.152 | 1.600 | 1.592 |
+| mixed_integer__example | 2.024 | 27.845 | 1.858 | 1.852 |
+| pumped_hydropower_system__example | 2.083 | 24.739 | 1.860 | 2.016 |
+| simulation__example | 1.910 | 23.547 | 1.717 | 1.526 |
+| simulation_with_custom_equations__simple_model | 1.867 | 5.848 | 0.919 | 0.816 |
+| single_reservoir__single_reservoir | 1.428 | 23.377 | 1.934 | 2.122 |
+
+`pr warm run 1` is the *first* pass against an empty cache: `basic__example`
+(alphabetically first) still pays almost the full cold cost (18.3s, since
+nothing is cached yet), but every subsequent script benefits from whatever
+common MSL/Deltares classes the earlier ones already parsed and cached —
+by the 6th script (`ensemble__example`) the time has already dropped to
+1.6s. `pr warm run 2` starts from run 1's fully-populated cache: even the
+first script alphabetically (`basic__example`) now compiles in 1.6s, on par
+with 0.9.2, and the rest of the suite matches run 1 within noise (confirming
+run 1 had already saturated the cache by its own end).
+
+Two things worth calling out:
+
+- The gap does **not** fully close for `cascading_channels`,
+  `channel_pulse`, and both `channel_wave_damping` scripts (4.5-11s warm vs
+  ~2-3.5s for 0.9.2). These are the largest, most structurally complex
+  models in the suite (most symbols/equations after flattening, per the
+  "Model structure comparison" table above); their residual time is real
+  flattening/instantiation work over that structure, which a parse cache
+  can't shortcut — it only removes redundant *re-parsing* of unchanged
+  library source text.
+- This was a one-off, `--keep-parse-cache`-enabled experiment, not the
+  benchmark's default mode: `run_all.py`'s ordinary cold-compile numbers
+  above are still the fair, apples-to-apples comparison for correctness
+  work, and remain deliberately cache-wiped. The takeaway is about what
+  *real* RTC-Tools usage will see (a warm cache after the first run), not a
+  claim that PR compile time now matches 0.9.2 unconditionally.
 
 ## Bottom line
 

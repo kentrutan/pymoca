@@ -283,6 +283,57 @@ Two things worth calling out:
   *real* RTC-Tools usage will see (a warm cache after the first run), not a
   claim that PR compile time now matches 0.9.2 unconditionally.
 
+### Profiling the residual gap: for-loop indices were being needlessly resolved
+
+`channel_wave_damping` was profiled with `cProfile` under a genuinely warm
+parse cache (the run above turned out to still include a subtler cache-miss:
+pymoca's parse-cache key includes the exact `pymoca.__version__` string, so
+intervening doc-only commits had already invalidated it; rebuilding fresh
+under one fixed commit gave a clean read). With parsing isolated (1.3s),
+flattening alone (`flatten_to_tree`) still took 15.5s of an 18.2s profiled
+total, vs. 2.0s for 0.9.2's `flatten_class`.
+
+**Root cause**: `_inline_equation_constants` (the equation-constant-inlining
+pass, fix #9 above) walks every `ComponentRef` in every equation and calls
+the name-resolution machinery (`_resolve_name`/`_find_name`, ~20ms/call)
+whenever a name isn't already a flat symbol. Instrumenting it directly
+showed 74% of those calls (321 of 435) were for-loop index names (`section`,
+`node`, from `for section in 2:n_level_nodes loop ... end for` in
+`Deltares.ChannelFlow.Hydraulic.Branches.Internal.PartialHomotopic`) —
+names that can never be a flat symbol or a global constant (a for-index is
+local to its loop body and shadows any outer declaration of the same name,
+MLS 11.2.2), so every one of those calls was guaranteed to fail. At ~20ms
+each, ≈6.2s of the 18.2s total (≈34%) was pure waste.
+
+**Fix** (`tree: Skip name resolution for known for-loop indices`): thread a
+`skip_names` set of enclosing for-loop indices down through
+`_inline_equation_constants`/`_inline_equation_side`/`_rewrite_cref_in_place`/
+`_rewrite_expression_crefs`, populated once per `ForEquation` from its own
+`indices`, checked alongside the existing "already a flat symbol"
+short-circuit. Output is provably unchanged (these refs were always left
+alone — `_rewrite_cref_in_place` already caught the failed resolution and
+left them as-is; only the wasted attempt is skipped now), confirmed by a
+minimal for-loop + global-constant repro, the full pymoca test suite (446
+passed, 0 failed), and re-running `compare.py` — numeric results are
+byte-identical to before the fix.
+
+Re-measured with the same warm-cache methodology (fresh cache, two passes):
+
+| Example (script) | 0.9.2 (s) | before fix, warm (s) | after fix, warm (s) | improvement |
+| --- | ---: | ---: | ---: | ---: |
+| cascading_channels__example | 2.675 | 8.773 | 4.731 | -46% |
+| channel_pulse__example | 1.768 | 4.539 | 3.609 | -20% |
+| channel_wave_damping__example_local_control | 3.436 | 10.355 | 6.342 | -39% |
+| channel_wave_damping__example_optimization | 2.970 | 11.115 | 7.423 | -33% |
+
+(warm run 2 in each case; the other 12 examples, which have little or no
+`for`-loop equation content, were unaffected within run-to-run noise.) The
+gap to 0.9.2 narrows substantially but does not fully close — the remaining
+difference is real flattening/instantiation work (`_instantiate_class`/
+`_create_partial_instance`, called 40K-100K+ times depending on model size),
+architectural to the base `fix-inherited-symbol-scope-pr` branch's
+instantiation design and out of scope here.
+
 ## Bottom line
 
 Ten atomic, independently-verified fixes took the branch from 3/18 to 18/18
@@ -295,7 +346,10 @@ are conclusively root-caused to an upstream `Deltares.ChannelFlow` library
 type mismatch (`Distance` instead of `Length` on signed quantities), verified
 by a working experimental patch that reproduces the 0.9.2 reference results —
 not a pymoca defect, so no pymoca-side fix was made; see "Remaining issue A"
-for the recommendation.
+for the recommendation. A separate, profiling-driven performance fix (for-loop
+indices were being needlessly name-resolved) cut warm-cache compile time by
+20-46% on the suite's four largest, most `for`-loop-heavy models; see
+"Compile time" above.
 
 ---
 ## Generated data (18/18 run, `pr8fix` = branch tip after all ten fixes)

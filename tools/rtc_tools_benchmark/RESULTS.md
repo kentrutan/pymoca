@@ -271,7 +271,8 @@ Two things worth calling out:
   `channel_pulse`, and both `channel_wave_damping` scripts (4.5-11s warm vs
   ~2-3.5s for 0.9.2). These are the largest, most structurally complex
   models in the suite (most symbols/equations after flattening, per the
-  "Model structure comparison" table above); their residual time is real
+  "Model structure comparison" table in the generated-data appendix below);
+  their residual time is real
   flattening/instantiation work over that structure, which a parse cache
   can't shortcut — it only removes redundant *re-parsing* of unchanged
   library source text.

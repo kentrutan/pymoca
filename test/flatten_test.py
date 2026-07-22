@@ -322,6 +322,28 @@ def test_evaluate_parameters_folds_expressions():
     assert isinstance(q, ast.Primary) and q.value == 6
 
 
+def test_flattening_typed_var_from_package_constant():
+    """Flatten a component of a derived type initialized from a package constant"""
+    txt = """
+        package Package
+            type Length = Real;
+            constant Real KM_TO_M = 1000.0;
+            model Test
+                parameter Real distance_km = 5.0;
+                Package.Length distance_m = Package.KM_TO_M * distance_km;
+            end Test;
+        end Package;
+    """
+    ast_tree = parser.parse(txt)
+    flat = tree.flatten_class(ast_tree, "Package.Test")
+    assert set(flat.symbols) == {"distance_km", "distance_m"}
+    eq = flat.equations[0]
+    assert isinstance(eq, ast.Equation)
+    assert eq.left.name == "distance_m"
+    assert eq.right.operator == "*"
+    assert eq.right.operands[0].name == "Package.KM_TO_M"
+
+
 def test_extends_order():
     flat_tree = parse_and_flatten_model("ExtendsOrder.mo", "P.M")
 

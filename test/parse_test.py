@@ -891,6 +891,25 @@ end F;
     assert [ref.name for ref in stmt.left] == ["a", "b", "c"]
 
 
+def test_parse_function_call_statement():
+    """noop(x); — a bare function call is a statement (MLS v3.5 section B.2.6)."""
+    txt = """
+function F
+  input Real x;
+algorithm
+  noop(x);
+end F;
+"""
+    tree_ = parser.parse(txt)
+    f = tree_.classes["F"]
+    stmt = f.statements[0]
+    assert isinstance(stmt, ast.AssignmentStatement)
+    assert stmt.left == []
+    assert isinstance(stmt.right, ast.Expression)
+    assert stmt.right.operator.name == "noop"
+    assert [op.name for op in stmt.right.operands] == ["x"]
+
+
 def _sym_value_expr(sym):
     """Extract the initialiser expression from a symbol's class_modification.
 

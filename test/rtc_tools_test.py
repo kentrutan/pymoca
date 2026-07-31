@@ -257,28 +257,36 @@ RTC_TOOLS_SMOKE_CASES = frozenset(
 
 # Reasons shared by several cases. A fix commit that does not clear a case
 # still moves it on to whatever error it hits next.
-_NO_MODELICAPATH = (
-    "MODELICAPATH roots are not searched during compile, so a model that extends an MSL "
-    "class does not resolve"
+_DROPPED_CAUSALITY = (
+    "input/output prefixes are dropped for alias-typed variables, so the declared inputs and "
+    "outputs flatten to alg_states"
+)
+_LOST_ARRAY_DIMS = (
+    "array dimensions are lost when a derived type collapses to its builtin leaf, so an "
+    "array-typed signal flattens to a scalar"
+)
+_ONES_NONE = (
+    "a constant array size reached through composite name lookup stays unresolved, so the "
+    "generated ones() call gets None"
 )
 
-# Every case but the one model that touches no MSL class fails here.
+# MODELICAPATH now resolves; the models get far enough to expose the next defects.
 FLATTEN_XFAIL: dict[str, str] = {
-    "basic__example": _NO_MODELICAPATH,
-    "cascading_channels__example": _NO_MODELICAPATH,
-    "channel_pulse__example": _NO_MODELICAPATH,
-    "channel_wave_damping__example_local_control": _NO_MODELICAPATH,
-    "channel_wave_damping__example_optimization": _NO_MODELICAPATH,
-    "ensemble__example": _NO_MODELICAPATH,
-    "fallback_option__example": _NO_MODELICAPATH,
-    "fallback_option__example_with_gp": _NO_MODELICAPATH,
-    "goal_programming__example": _NO_MODELICAPATH,
-    "integrator_delay__example": _NO_MODELICAPATH,
-    "lookup_table__example": _NO_MODELICAPATH,
-    "mixed_integer__example": _NO_MODELICAPATH,
-    "pumped_hydropower_system__example": _NO_MODELICAPATH,
-    "simulation__example": _NO_MODELICAPATH,
-    "single_reservoir__single_reservoir": _NO_MODELICAPATH,
+    "basic__example": _DROPPED_CAUSALITY,
+    "cascading_channels__example": _LOST_ARRAY_DIMS,
+    "channel_pulse__example": _LOST_ARRAY_DIMS,
+    "channel_wave_damping__example_local_control": _LOST_ARRAY_DIMS,
+    "channel_wave_damping__example_optimization": _LOST_ARRAY_DIMS,
+    "ensemble__example": _DROPPED_CAUSALITY,
+    "fallback_option__example": _DROPPED_CAUSALITY,
+    "fallback_option__example_with_gp": _DROPPED_CAUSALITY,
+    "goal_programming__example": _ONES_NONE,
+    "integrator_delay__example": _DROPPED_CAUSALITY,
+    "lookup_table__example": _DROPPED_CAUSALITY,
+    "mixed_integer__example": _ONES_NONE,
+    "pumped_hydropower_system__example": _DROPPED_CAUSALITY,
+    "simulation__example": _DROPPED_CAUSALITY,
+    "single_reservoir__single_reservoir": _DROPPED_CAUSALITY,
 }
 
 # Provisional: seeded from an out-of-tree benchmark of these examples against

@@ -25,6 +25,7 @@ from pymoca.backends.casadi.model import (
     StringVariable,
     Variable,
 )
+from pymoca.tree import ModelicaSemanticError
 
 import pytest
 
@@ -3185,6 +3186,29 @@ def test_resolve_parameter_values_lists():
     ref_model.alg_states[1].nominal = metadata_values[3]
 
     assert_model_equivalent(ref_model, casadi_model)
+
+
+def test_modelicapath_resolves_library(monkeypatch):
+    """MODELICAPATH roots resolve classes even when library_folders is empty.
+
+    RTC-Tools drives pymoca this way, extending Modelica Standard Library
+    classes (e.g. Modelica.Icons.Package) without listing the MSL in
+    library_folders.
+    """
+    with tempfile.TemporaryDirectory() as model_dir, tempfile.TemporaryDirectory() as lib_dir:
+        os.makedirs(os.path.join(lib_dir, "Lib"))
+        with open(os.path.join(lib_dir, "Lib", "package.mo"), "w") as f:
+            f.write("package Lib\n  model Base\n    parameter Real x = 1.0;\n  end Base;\nend Lib;\n")
+        with open(os.path.join(model_dir, "UsesLib.mo"), "w") as f:
+            f.write("model UsesLib\n  extends Lib.Base;\nend UsesLib;\n")
+
+        monkeypatch.delenv("MODELICAPATH", raising=False)
+        with pytest.raises(ModelicaSemanticError, match="not found in scope"):
+            transfer_model(model_dir, "UsesLib", {"library_folders": [], "cache": False})
+
+        monkeypatch.setenv("MODELICAPATH", lib_dir)
+        model = transfer_model(model_dir, "UsesLib", {"library_folders": [], "cache": False})
+        assert [p.symbol.name() for p in model.parameters] == ["x"]
 
 
 if __name__ == "__main__":
